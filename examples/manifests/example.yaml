@@ -1,0 +1,15 @@
+name: my-runner
+provider: aws
+region: us-east-1
+instanceType: c5.xlarge
+# Update baseImage to the AMI ID for your region (e.g. Amazon Linux 2023 or Ubuntu 22.04)
+baseImage: ami-0abcdef1234567890
+# Optional: restrict to specific security groups and subnet
+# securityGroupIDs:
+#   - sg-0123456789abcdef0
+# subnetID: subnet-0123456789abcdef0
+reclaim:
+  ttl: 2h
+tags:
+  env: ci
+  team: platform

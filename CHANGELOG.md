@@ -4,6 +4,29 @@ All notable changes to this project will be documented here.
 
 ---
 
+## [0.0.2] — 2026-05-02
+
+### Added
+- `runlease up` quick mode: launch without a manifest using flags (`--provider`, `--region`, `--size`, `--image`, `--relay`, `--ttl`, `--name`) or config defaults
+- `runlease manifest init` — interactive wizard that generates a manifest YAML with provider-specific hints
+- `pkg/config` — `~/.runlease/config.yaml` with `Load`, `Save`, and dot-notation `Set`
+- `runlease configure` — interactive setup wizard for provider, region, size, TTL, relay defaults
+- `runlease config show` / `runlease config set <key> <value>` — non-interactive config management
+- `publicIp` manifest field (default `true`); Cloud NAT note shown when launching GCP instance without public IP
+- Relay `GET /ready` endpoint: non-consuming HTTP poll so the client waits before claiming the WebSocket slot
+- Get-started guide in `runlease` root command long-help
+
+### Fixed
+- `pkg/credential`: host key generated in OpenSSH format (`-----BEGIN OPENSSH PRIVATE KEY-----`) — PKCS#8 format was rejected by sshd
+- `pkg/relay/auth.go`: Google ID token auth now accepts personal Gmail accounts (gcloud client ID audience fallback)
+- `pkg/provider/gcp`: project ID auto-detected from `GOOGLE_CLOUD_PROJECT`, `GCLOUD_PROJECT`, or `gcloud config get-value project` — env var no longer required
+- `cmd/runlease/up.go`: SSH poller retries on "host key mismatch" to handle the race where sshd starts before the startup script injects the host key
+- `runlease configure`: Ctrl+C now exits cleanly — goroutine calls `os.Exit(0)` on SIGINT since Go retries EINTR on blocking reads
+- `pkg/relay/server.go`: coordinator now loops after a session ends — resets `instanceClaimed`/`instanceReady` so the agent can reconnect and `runlease connect` works on the same instance indefinitely
+- `cmd/runlease-agent`: increased "waiting for paired" read deadline from 60 s to 2 h to prevent premature reconnects while idle
+- Auto-generated instance names now use prefix `rl-spot-` instead of `{provider}-spot-`
+- `.gitignore`: anchor binary patterns with `/` so `cmd/runlease-*` source directories are not excluded
+
 ## [0.0.1] — 2026-05-02
 
 ### Added

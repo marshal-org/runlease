@@ -247,68 +247,85 @@ func (s *Server) handleClient(conn net.Conn, token string) {
 
 func (s *Server) startCoordinator(token string, sl *slot) {
 	go func() {
-		defer func() {
+		defer s.removeSlot(token)
+
+		ctx, cancel := context.WithDeadline(context.Background(), sl.expiresAt)
+		defer cancel()
+
+		for {
+			// Wait for instance to (re)connect.
+			var instanceConn net.Conn
+			select {
+			case instanceConn = <-sl.instanceCh:
+			case <-ctx.Done():
+				drainClose(sl.instanceCh)
+				drainClose(sl.clientCh)
+				return
+			}
+
+			if err := writeMsg(instanceConn, wireMsg{Status: "registered"}); err != nil {
+				instanceConn.Close()
+				sl.instanceClaimed.Store(false)
+				continue
+			}
+			sl.instanceReady.Store(true)
+			s.log.Info("instance registered", "token", token[:8]+"…")
+
+			// Wait for a client to arrive.
+			idle := time.NewTimer(instanceIdleLimit)
+			var clientConn net.Conn
+			select {
+			case clientConn = <-sl.clientCh:
+				idle.Stop()
+			case <-idle.C:
+				s.log.Info("instance idle timeout", "token", token[:8]+"…")
+				instanceConn.Close()
+				sl.instanceReady.Store(false)
+				sl.instanceClaimed.Store(false)
+				return
+			case <-ctx.Done():
+				idle.Stop()
+				instanceConn.Close()
+				drainClose(sl.clientCh)
+				return
+			}
+
+			s.log.Info("client arrived, pairing", "token", token[:8]+"…")
+
+			if err := writeMsg(instanceConn, wireMsg{Status: "paired"}); err != nil {
+				instanceConn.Close()
+				clientConn.Close()
+				sl.instanceReady.Store(false)
+				sl.instanceClaimed.Store(false)
+				continue
+			}
+			instanceConn.SetDeadline(time.Now().Add(15 * time.Second)) //nolint:errcheck
+			ack, err := readMsg(instanceConn)
+			instanceConn.SetDeadline(time.Time{}) //nolint:errcheck
+			if err != nil || ack.Status != "ready" {
+				s.log.Warn("instance did not ack pairing", "token", token[:8]+"…", "err", err)
+				instanceConn.Close()
+				clientConn.Close()
+				sl.instanceReady.Store(false)
+				sl.instanceClaimed.Store(false)
+				continue
+			}
+
+			if err := writeMsg(clientConn, wireMsg{Status: "connected"}); err != nil {
+				instanceConn.Close()
+				clientConn.Close()
+				sl.instanceReady.Store(false)
+				sl.instanceClaimed.Store(false)
+				continue
+			}
+
+			bridge(instanceConn, clientConn)
+			s.log.Info("session closed, ready for reconnection", "token", token[:8]+"…")
+
+			// Reset so the agent can reconnect and the next client can pair.
 			sl.instanceReady.Store(false)
-			s.removeSlot(token)
-		}()
-
-		expiry := time.NewTimer(time.Until(sl.expiresAt))
-		defer expiry.Stop()
-
-		var instanceConn net.Conn
-		select {
-		case instanceConn = <-sl.instanceCh:
-		case <-expiry.C:
-			drainClose(sl.instanceCh)
-			return
+			sl.instanceClaimed.Store(false)
 		}
-
-		if err := writeMsg(instanceConn, wireMsg{Status: "registered"}); err != nil {
-			instanceConn.Close()
-			drainClose(sl.clientCh)
-			return
-		}
-		// Mark instance as ready so /ready HTTP polls can return 200.
-		sl.instanceReady.Store(true)
-		s.log.Info("instance registered", "token", token[:8]+"…")
-
-		idle := time.NewTimer(instanceIdleLimit)
-		defer idle.Stop()
-
-		var clientConn net.Conn
-		select {
-		case clientConn = <-sl.clientCh:
-		case <-idle.C:
-			s.log.Info("instance idle timeout", "token", token[:8]+"…")
-			instanceConn.Close()
-			return
-		}
-
-		s.log.Info("client arrived, pairing", "token", token[:8]+"…")
-
-		if err := writeMsg(instanceConn, wireMsg{Status: "paired"}); err != nil {
-			instanceConn.Close()
-			clientConn.Close()
-			return
-		}
-		instanceConn.SetDeadline(time.Now().Add(15 * time.Second)) //nolint:errcheck
-		ack, err := readMsg(instanceConn)
-		instanceConn.SetDeadline(time.Time{}) //nolint:errcheck
-		if err != nil || ack.Status != "ready" {
-			s.log.Warn("instance did not ack pairing", "token", token[:8]+"…", "err", err)
-			instanceConn.Close()
-			clientConn.Close()
-			return
-		}
-
-		if err := writeMsg(clientConn, wireMsg{Status: "connected"}); err != nil {
-			instanceConn.Close()
-			clientConn.Close()
-			return
-		}
-
-		bridge(instanceConn, clientConn)
-		s.log.Info("session closed", "token", token[:8]+"…")
 	}()
 }
 

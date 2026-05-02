@@ -1,7 +1,7 @@
-# Binaries
-runlease
-runlease-agent
-runlease-relay
+# Binaries (root-level only, so cmd/ source dirs are not excluded)
+/runlease
+/runlease-agent
+/runlease-relay
 *.exe
 
 # Build output

@@ -126,12 +126,21 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	var ttlSeconds int
+	if m.Reclaim.TTL != "" {
+		if d, err := m.Reclaim.TTLDuration(); err == nil {
+			ttlSeconds = int(d.Seconds())
+		}
+	}
+
 	ud, err := userdata.Build(userdata.Params{
 		PublicKeySSH:      cred.PublicKeySSH,
 		HostPrivateKeyPEM: cred.HostPrivateKeyPEM,
 		HostPublicKeySSH:  cred.HostPublicKeySSH,
 		RelayAddr:         m.Relay.Addr,
 		RelayToken:        relayToken,
+		Provider:          m.Provider,
+		TTLSeconds:        ttlSeconds,
 	})
 	if err != nil {
 		return fmt.Errorf("building user-data: %w", err)

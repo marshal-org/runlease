@@ -141,3 +141,70 @@ func TestBuild_noRelaySection(t *testing.T) {
 		}
 	}
 }
+
+func TestBuild_gcpTTLBlock(t *testing.T) {
+	p := fullParams()
+	p.Provider = "gcp"
+	p.TTLSeconds = 7200
+
+	out, err := Build(p)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, want := range []string{
+		"systemd-run --on-active=7200",
+		"/usr/local/bin/runlease-terminate",
+		"metadata.google.internal",
+		"compute.googleapis.com",
+		"runlease-terminate",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("GCP TTL output missing %q", want)
+		}
+	}
+	if strings.Contains(out, "shutdown -h now") {
+		t.Error("GCP TTL output should not contain AWS shutdown command")
+	}
+}
+
+func TestBuild_awsTTLBlock(t *testing.T) {
+	p := fullParams()
+	p.Provider = "aws"
+	p.TTLSeconds = 3600
+
+	out, err := Build(p)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, want := range []string{
+		"systemd-run --on-active=3600",
+		"/usr/local/bin/runlease-terminate",
+		"shutdown -h now",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("AWS TTL output missing %q", want)
+		}
+	}
+	if strings.Contains(out, "metadata.google.internal") {
+		t.Error("AWS TTL output should not contain GCP metadata URL")
+	}
+}
+
+func TestBuild_noTTLBlock(t *testing.T) {
+	p := fullParams()
+	p.Provider = "gcp"
+	p.TTLSeconds = 0
+
+	out, err := Build(p)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, absent := range []string{
+		"systemd-run --on-active",
+		"runlease-terminate",
+	} {
+		if strings.Contains(out, absent) {
+			t.Errorf("zero-TTL output should not contain %q", absent)
+		}
+	}
+}

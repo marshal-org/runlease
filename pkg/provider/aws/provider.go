@@ -52,6 +52,9 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 		InstanceMarketOptions: &types.InstanceMarketOptionsRequest{
 			MarketType: types.MarketTypeSpot,
 		},
+		// Terminate (not stop) when the OS shuts down, so the TTL-triggered
+		// shutdown -h in the startup script terminates the instance.
+		InstanceInitiatedShutdownBehavior: types.ShutdownBehaviorTerminate,
 		TagSpecifications: []types.TagSpecification{
 			{ResourceType: types.ResourceTypeInstance, Tags: tags},
 		},

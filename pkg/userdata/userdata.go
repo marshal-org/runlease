@@ -10,6 +10,35 @@ import (
 
 const script = `#!/bin/bash
 set -euo pipefail
+{{- if .TTLSeconds }}
+
+# ── self-termination after TTL ────────────────────────────────────────────────
+{{- if eq .Provider "gcp" }}
+cat > /usr/local/bin/runlease-terminate << 'TERM_EOF'
+#!/bin/bash
+set -e
+TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
+  http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+PROJECT=$(curl -sf -H "Metadata-Flavor: Google" \
+  http://metadata.google.internal/computeMetadata/v1/project/project-id)
+ZONE=$(curl -sf -H "Metadata-Flavor: Google" \
+  http://metadata.google.internal/computeMetadata/v1/instance/zone | cut -d/ -f4)
+NAME=$(curl -sf -H "Metadata-Flavor: Google" \
+  http://metadata.google.internal/computeMetadata/v1/instance/name)
+curl -sf -X DELETE \
+  -H "Authorization: Bearer $TOKEN" \
+  "https://compute.googleapis.com/compute/v1/projects/$PROJECT/zones/$ZONE/instances/$NAME"
+TERM_EOF
+{{- else if eq .Provider "aws" }}
+cat > /usr/local/bin/runlease-terminate << 'TERM_EOF'
+#!/bin/bash
+shutdown -h now
+TERM_EOF
+{{- end }}
+chmod +x /usr/local/bin/runlease-terminate
+systemd-run --on-active={{ .TTLSeconds }} /usr/local/bin/runlease-terminate
+{{- end }}
 
 # ── runlease-agent user ──────────────────────────────────────────────────────
 useradd -m -s /bin/bash runlease-agent
@@ -91,6 +120,10 @@ type Params struct {
 	// Optional relay fields; relay setup is skipped when RelayAddr is empty.
 	RelayAddr  string
 	RelayToken string
+	// Optional self-termination. When both are set, a systemd-run timer fires
+	// after TTLSeconds and deletes the instance via the cloud metadata API.
+	Provider   string // "gcp" or "aws"
+	TTLSeconds int    // 0 = no self-termination
 }
 
 type templateData struct {
@@ -100,6 +133,8 @@ type templateData struct {
 	RelayAddr        string
 	RelayToken       string
 	RelayAgentURL    string // derived: http://<RelayAddr>/agent
+	Provider         string
+	TTLSeconds       int
 }
 
 // relayHTTPBase converts a relay addr (host:port or ws[s]://...) to its HTTP
@@ -133,6 +168,8 @@ func Build(p Params) (string, error) {
 		RelayAddr:        p.RelayAddr,
 		RelayToken:       p.RelayToken,
 		RelayAgentURL:    agentURL,
+		Provider:         p.Provider,
+		TTLSeconds:       p.TTLSeconds,
 	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {

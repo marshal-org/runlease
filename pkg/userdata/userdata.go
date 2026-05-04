@@ -34,7 +34,7 @@ TERM_EOF
 cat > /usr/local/bin/runlease-terminate << 'TERM_EOF'
 #!/bin/bash
 [ "$EUID" -ne 0 ] && exec sudo "$0" "$@"
-shutdown -h now
+systemctl --force --force poweroff
 TERM_EOF
 {{- end }}
 chmod +x /usr/local/bin/runlease-terminate

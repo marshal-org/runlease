@@ -2,7 +2,7 @@ You are helping wrap up a development session before committing and pushing. Wor
 
 ## Step 1 — Automated checks
 
-Run `make wrap-up` and report the result. If it fails, stop and tell the user what failed. Do not proceed until it passes.
+Run `go build ./... && go test ./...` and report the result. If it fails, stop and tell the user what failed. Do not proceed until it passes.
 
 ## Step 2 — Understand what changed
 

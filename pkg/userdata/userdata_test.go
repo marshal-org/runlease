@@ -179,7 +179,7 @@ func TestBuild_awsTTLBlock(t *testing.T) {
 	for _, want := range []string{
 		"systemd-run --on-active=3600",
 		"/usr/local/bin/runlease-terminate",
-		"shutdown -h now",
+		"systemctl --force --force poweroff",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("AWS TTL output missing %q", want)

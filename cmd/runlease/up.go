@@ -26,6 +26,7 @@ import (
 	"github.com/runlease/runlease/pkg/manifest"
 	"github.com/runlease/runlease/pkg/provider"
 	awsprovider "github.com/runlease/runlease/pkg/provider/aws"
+	gcpprovider "github.com/runlease/runlease/pkg/provider/gcp"
 	"github.com/runlease/runlease/pkg/registry"
 	"github.com/runlease/runlease/pkg/relay"
 	"github.com/runlease/runlease/pkg/userdata"
@@ -38,10 +39,11 @@ var (
 	quickProvider string
 	quickRegion   string
 	quickSize     string
-	quickImage    string
-	quickRelay    string
-	quickTTL      string
-	quickName     string
+	quickImage         string
+	quickRelay         string
+	quickTTL           string
+	quickName          string
+	quickSelfTerminate bool
 )
 
 func init() {
@@ -55,6 +57,7 @@ func init() {
 	upCmd.Flags().StringVar(&quickRelay, "relay", "", "relay address, e.g. wss://relay.example.com (quick mode)")
 	upCmd.Flags().StringVar(&quickTTL, "ttl", "2h", "instance TTL (quick mode)")
 	upCmd.Flags().StringVarP(&quickName, "name", "n", "", "instance name (quick mode; auto-generated if empty)")
+	upCmd.Flags().BoolVar(&quickSelfTerminate, "self-terminate", true, "allow the instance to delete itself (required for TTL to work)")
 	rootCmd.AddCommand(upCmd)
 }
 
@@ -110,6 +113,11 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		m.BaseImage = ami
 		fmt.Fprintf(cmd.OutOrStdout(), "   └─ %s\n", ami)
 	}
+	if m.Provider == "gcp" && m.BaseImage == "" {
+		m.BaseImage = gcpprovider.DefaultImageFamily
+		fmt.Fprintf(cmd.OutOrStdout(), "🔍 Using default GCP image: Debian 12\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "   └─ %s\n", gcpprovider.DefaultImageFamily)
+	}
 
 	instanceType, err := resolveInstanceType(cmd.Context(), m)
 	if err != nil {
@@ -152,6 +160,7 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		RelayAddr:         m.Relay.Addr,
 		RelayToken:        relayToken,
 		Provider:          m.Provider,
+		SelfTermination:   m.Reclaim.SelfTermination,
 		TTLSeconds:        ttlSeconds,
 	})
 	if err != nil {
@@ -176,14 +185,15 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		InstanceType:        instanceType,
 		Region:              m.Region,
 		ImageID:             m.BaseImage,
-		SecurityGroupIDs:    m.SecurityGroupIDs,
-		SubnetID:            m.SubnetID,
+		SecurityGroupIDs:    m.AWS.SecurityGroupIDs,
+		SubnetID:            m.AWS.SubnetID,
 		UserData:            ud,
 		Tags:                m.Tags,
-		InstanceProfileARN:  m.InstanceProfile,
-		ServiceAccountEmail: m.ServiceAccount,
-		NetworkTags:         m.NetworkTags,
+		InstanceProfileARN:  m.AWS.InstanceProfile,
+		ServiceAccountEmail: m.GCP.ServiceAccount,
+		NetworkTags:         m.GCP.NetworkTags,
 		PublicIP:            m.WantsPublicIP(),
+		SelfTermination:     m.Reclaim.SelfTermination,
 	})
 	if err != nil {
 		return fmt.Errorf("requesting spot instance: %w", err)
@@ -440,7 +450,7 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 		Region:        region,
 		InstanceClass: size,
 		BaseImage:     image,
-		Reclaim:       manifest.ReclaimPolicy{TTL: ttl},
+		Reclaim:       manifest.ReclaimPolicy{TTL: ttl, SelfTermination: quickSelfTerminate},
 	}
 	if relayAddr != "" {
 		m.Relay = manifest.RelayConfig{Addr: relayAddr}

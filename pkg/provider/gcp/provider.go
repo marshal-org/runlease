@@ -19,6 +19,11 @@ import (
 	"github.com/runlease/runlease/pkg/provider"
 )
 
+// DefaultImageFamily is the GCP image resolved at instance creation when no
+// baseImage is specified in the manifest. GCP resolves the family to the latest
+// image at insert time, so no pre-launch API call is needed.
+const DefaultImageFamily = "projects/debian-cloud/global/images/family/debian-12"
+
 // Provider implements CloudProvider for GCP Compute Engine spot VMs.
 //
 // Authentication uses Application Default Credentials (ADC):
@@ -88,12 +93,18 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 		inst.Tags = &compute.Tags{Items: spec.NetworkTags}
 	}
 	if spec.ServiceAccountEmail != "" {
-		inst.ServiceAccounts = []*compute.ServiceAccount{
-			{
-				Email:  spec.ServiceAccountEmail,
-				Scopes: []string{"https://www.googleapis.com/auth/cloud-platform"},
-			},
-		}
+		inst.ServiceAccounts = []*compute.ServiceAccount{{
+			Email:  spec.ServiceAccountEmail,
+			Scopes: []string{"https://www.googleapis.com/auth/cloud-platform"},
+		}}
+	} else if spec.SelfTermination {
+		// Attach the default SA with compute scope so the terminate script can
+		// call the instances.delete API. Without this the metadata token has only
+		// logging/monitoring scopes and the delete call returns 403.
+		inst.ServiceAccounts = []*compute.ServiceAccount{{
+			Email:  "default",
+			Scopes: []string{"https://www.googleapis.com/auth/compute"},
+		}}
 	}
 	if len(spec.Tags) > 0 {
 		inst.Labels = gcpLabels(spec.Tags)
@@ -226,6 +237,7 @@ func generateInstanceName(manifestName string) string {
 		return '-'
 	}, manifestName)
 	sanitized = strings.Trim(sanitized, "-")
+	sanitized = strings.TrimPrefix(sanitized, "rl-")
 	if len(sanitized) > 40 {
 		sanitized = sanitized[:40]
 	}

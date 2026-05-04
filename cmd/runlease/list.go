@@ -41,8 +41,8 @@ func runList(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
-	fmt.Fprintln(w, "NAME\tPROVIDER\tID\tSTATE\tPUBLIC IP\tREGION\tAGE\tEXPIRES")
+	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 1, ' ', 0)
+	fmt.Fprintln(w, "NAME\tPROV\tID\tSTATE\tREGION\tAGE\tEXPIRES\tACCESS")
 	for _, e := range entries {
 		h := e.Handle
 		age := fmtAge(h.CreatedAt)
@@ -55,11 +55,29 @@ func runList(cmd *cobra.Command, _ []string) error {
 				expires = fmtDuration(remaining)
 			}
 		}
+		access := h.PublicIP
+		if e.RelayAddr != "" {
+			access = "relay"
+		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			h.ManifestName, h.Provider, h.ID, h.State,
-			h.PublicIP, h.Region, age, expires)
+			h.ManifestName, h.Provider, truncateID(string(h.ID)), h.State,
+			h.Region, age, expires, access)
 	}
-	return w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), "\nState is cached — run 'runlease sync' to refresh")
+	return nil
+}
+
+// truncateID shortens long cloud IDs (e.g. AWS "i-0988371fe8a766d47" → "i-0988371fe8…")
+// GCP instance names are already short enough to show in full.
+func truncateID(id string) string {
+	const max = 12
+	if len(id) <= max {
+		return id
+	}
+	return id[:max] + "~"
 }
 
 func fmtAge(t time.Time) string {

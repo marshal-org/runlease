@@ -4,6 +4,25 @@ All notable changes to this project will be documented here.
 
 ---
 
+## [0.0.4] — 2026-05-05
+
+### Added
+- `cmd/runlease/sync.go`: new `runlease sync` command — queries each provider for current instance status, removes terminated/stopped entries from the registry, and prints explicit errors for any failures
+- `cmd/runlease/list.go`: footnote after the table: `"State is cached — run 'runlease sync' to refresh"`
+- `cmd/runlease/up.go`: `--self-terminate` flag (default `true`) for quick mode; `SelfTermination` wired through to manifest, userdata, and provider spec
+- `pkg/manifest/manifest.go`: `ReclaimPolicy.SelfTermination bool` field (`selfTermination` in YAML)
+- `pkg/provider/interface.go`: `SelfTermination bool` added to `InstanceSpec`
+- `pkg/registry/registry.go`: `UpdateState(nameOrID, status)` method
+
+### Changed
+- `pkg/userdata/userdata.go`: `runlease-terminate` script is now gated on `SelfTermination: true` (was always installed); GCP default SA with compute scope is only attached when `SelfTermination` is set
+- `pkg/provider/gcp/provider.go`: `generateInstanceName` strips leading `rl-` from manifest name before prepending `rl-`, preventing `rl-rl-` double prefix
+
+### Fixed
+- `pkg/provider/aws/provider.go`: `Terminate()` treats `InvalidInstanceID.NotFound` as success (instance already gone)
+- `cmd/runlease/connect.go`: `close 1000` on first connect (agent mid-reconnect) falls back to `pollAndConnectViaRelay` instead of returning an error
+- `pkg/userdata/userdata.go` (GCP self-terminate): replaced `python3` JSON parsing with `grep -o`/`cut`; added `|| systemctl --force --force poweroff` fallback on failed DELETE curl; removed bare `set -e` that caused silent exits
+
 ## [0.0.3] — 2026-05-04
 
 ### Added

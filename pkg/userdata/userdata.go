@@ -12,15 +12,15 @@ const script = `#!/bin/bash
 set -euo pipefail
 
 # ── self-termination ──────────────────────────────────────────────────────────
+{{- if .SelfTermination }}
 {{- if eq .Provider "gcp" }}
 cat > /usr/local/bin/runlease-terminate << 'TERM_EOF'
 #!/bin/bash
 [ "$EUID" -ne 0 ] && exec sudo "$0" "$@"
 systemctl stop runlease-agent 2>/dev/null || true
-set -e
 TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
-  http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+  | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
 PROJECT=$(curl -sf -H "Metadata-Flavor: Google" \
   http://metadata.google.internal/computeMetadata/v1/project/project-id)
 ZONE=$(curl -sf -H "Metadata-Flavor: Google" \
@@ -29,7 +29,8 @@ NAME=$(curl -sf -H "Metadata-Flavor: Google" \
   http://metadata.google.internal/computeMetadata/v1/instance/name)
 curl -sf -X DELETE \
   -H "Authorization: Bearer $TOKEN" \
-  "https://compute.googleapis.com/compute/v1/projects/$PROJECT/zones/$ZONE/instances/$NAME"
+  "https://compute.googleapis.com/compute/v1/projects/$PROJECT/zones/$ZONE/instances/$NAME" \
+  || systemctl --force --force poweroff
 TERM_EOF
 {{- else if eq .Provider "aws" }}
 cat > /usr/local/bin/runlease-terminate << 'TERM_EOF'
@@ -45,6 +46,7 @@ echo "runlease-agent ALL=(ALL) NOPASSWD: /usr/local/bin/runlease-terminate" \
 chmod 440 /etc/sudoers.d/runlease-terminate
 {{- if .TTLSeconds }}
 systemd-run --on-active={{ .TTLSeconds }} /usr/local/bin/runlease-terminate
+{{- end }}
 {{- end }}
 
 # ── runlease-agent user ──────────────────────────────────────────────────────
@@ -127,10 +129,11 @@ type Params struct {
 	// Optional relay fields; relay setup is skipped when RelayAddr is empty.
 	RelayAddr  string
 	RelayToken string
-	// Optional self-termination. When both are set, a systemd-run timer fires
-	// after TTLSeconds and deletes the instance via the cloud metadata API.
-	Provider   string // "gcp" or "aws"
-	TTLSeconds int    // 0 = no self-termination
+	// Self-termination. When SelfTermination is true the runlease-terminate script
+	// is installed. When TTLSeconds > 0 a systemd-run timer fires it automatically.
+	Provider        string // "gcp" or "aws"
+	SelfTermination bool   // install terminate script; required for TTL to work
+	TTLSeconds      int    // 0 = no timer (script still installed if SelfTermination is true)
 }
 
 type templateData struct {
@@ -141,6 +144,7 @@ type templateData struct {
 	RelayToken       string
 	RelayAgentURL    string // derived: http://<RelayAddr>/agent
 	Provider         string
+	SelfTermination  bool
 	TTLSeconds       int
 }
 
@@ -176,6 +180,7 @@ func Build(p Params) (string, error) {
 		RelayToken:       p.RelayToken,
 		RelayAgentURL:    agentURL,
 		Provider:         p.Provider,
+		SelfTermination:  p.SelfTermination,
 		TTLSeconds:       p.TTLSeconds,
 	}
 	var buf bytes.Buffer

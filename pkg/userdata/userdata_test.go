@@ -146,6 +146,7 @@ func TestBuild_gcpTTLBlock(t *testing.T) {
 	p := fullParams()
 	p.Provider = "gcp"
 	p.TTLSeconds = 7200
+	p.SelfTermination = true
 
 	out, err := Build(p)
 	if err != nil {
@@ -171,6 +172,7 @@ func TestBuild_awsTTLBlock(t *testing.T) {
 	p := fullParams()
 	p.Provider = "aws"
 	p.TTLSeconds = 3600
+	p.SelfTermination = true
 
 	out, err := Build(p)
 	if err != nil {
@@ -194,12 +196,13 @@ func TestBuild_noTTLBlock(t *testing.T) {
 	p := fullParams()
 	p.Provider = "gcp"
 	p.TTLSeconds = 0
+	p.SelfTermination = true
 
 	out, err := Build(p)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	// terminate script is always installed even without TTL
+	// terminate script is always installed when SelfTermination is true
 	if !strings.Contains(out, "runlease-terminate") {
 		t.Error("terminate script should always be installed")
 	}

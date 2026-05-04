@@ -55,6 +55,17 @@ func (r *Registry) Get(nameOrID string) (*Entry, error) {
 	return r.data[key], nil
 }
 
+func (r *Registry) UpdateState(nameOrID string, state provider.InstanceStatus) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := r.findKey(nameOrID)
+	if key == "" {
+		return fmt.Errorf("instance %q not found", nameOrID)
+	}
+	r.data[key].Handle.State = state
+	return r.save()
+}
+
 func (r *Registry) Remove(nameOrID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

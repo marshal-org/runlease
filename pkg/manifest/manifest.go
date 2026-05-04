@@ -9,23 +9,33 @@ import (
 )
 
 type Manifest struct {
-	Name             string            `yaml:"name"`
-	Provider         string            `yaml:"provider"`
-	Region           string            `yaml:"region"`
-	InstanceClass    string            `yaml:"instanceClass"`
-	InstanceType     string            `yaml:"instanceType"`
-	BaseImage        string            `yaml:"baseImage"`
-	SecurityGroupIDs []string          `yaml:"securityGroupIDs"`
-	SubnetID         string            `yaml:"subnetID"`
-	InstanceProfile  string            `yaml:"instanceProfile"`
-	ServiceAccount   string            `yaml:"serviceAccount"`
-	NetworkTags      []string          `yaml:"networkTags"`
-	Relay            RelayConfig       `yaml:"relay"`
-	Reclaim          ReclaimPolicy     `yaml:"reclaim"`
-	Tags             map[string]string `yaml:"tags"`
+	Name          string            `yaml:"name"`
+	Provider      string            `yaml:"provider"`
+	Region        string            `yaml:"region"`
+	InstanceClass string            `yaml:"instanceClass"`
+	InstanceType  string            `yaml:"instanceType"`
+	BaseImage     string            `yaml:"baseImage"`
 	// PublicIP controls whether a public IP is assigned. Nil = auto: true when
 	// no relay is configured (direct SSH needs it), false when relay is set.
-	PublicIP *bool `yaml:"publicIp"`
+	PublicIP *bool             `yaml:"publicIp"`
+	Relay    RelayConfig       `yaml:"relay"`
+	Reclaim  ReclaimPolicy     `yaml:"reclaim"`
+	Tags     map[string]string `yaml:"tags"`
+	AWS      AWSConfig         `yaml:"aws"`
+	GCP      GCPConfig         `yaml:"gcp"`
+}
+
+// AWSConfig holds AWS-specific instance configuration.
+type AWSConfig struct {
+	SecurityGroupIDs []string `yaml:"securityGroupIDs"`
+	SubnetID         string   `yaml:"subnetID"`
+	InstanceProfile  string   `yaml:"instanceProfile"`
+}
+
+// GCPConfig holds GCP-specific instance configuration.
+type GCPConfig struct {
+	NetworkTags    []string `yaml:"networkTags"`
+	ServiceAccount string   `yaml:"serviceAccount"`
 }
 
 // WantsPublicIP returns the effective public IP setting (default true).
@@ -44,7 +54,8 @@ type RelayConfig struct {
 }
 
 type ReclaimPolicy struct {
-	TTL string `yaml:"ttl"`
+	TTL             string `yaml:"ttl"`
+	SelfTermination bool   `yaml:"selfTermination"`
 }
 
 func (r *ReclaimPolicy) TTLDuration() (time.Duration, error) {
@@ -85,7 +96,7 @@ func (m *Manifest) Validate() error {
 	if m.InstanceType != "" && m.InstanceClass != "" {
 		return fmt.Errorf("manifest.instanceType and manifest.instanceClass are mutually exclusive")
 	}
-	if m.BaseImage == "" && m.Provider != "aws" {
+	if m.BaseImage == "" && m.Provider != "aws" && m.Provider != "gcp" {
 		return fmt.Errorf("manifest.baseImage is required")
 	}
 	if m.Reclaim.TTL != "" {

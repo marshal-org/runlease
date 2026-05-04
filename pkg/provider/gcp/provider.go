@@ -96,7 +96,7 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 		}
 	}
 	if len(spec.Tags) > 0 {
-		inst.Labels = spec.Tags
+		inst.Labels = gcpLabels(spec.Tags)
 	}
 
 	op, err := p.svc.Instances.Insert(p.projectID, p.zone, inst).Context(ctx).Do()
@@ -251,13 +251,46 @@ func resolveProjectID(ctx context.Context) (string, error) {
 	if p := os.Getenv("GCLOUD_PROJECT"); p != "" {
 		return p, nil
 	}
+	if _, err := exec.LookPath("gcloud"); err != nil {
+		return "", fmt.Errorf("GCP project ID not set: export GOOGLE_CLOUD_PROJECT=<project-id>")
+	}
 	out, err := exec.CommandContext(ctx, "gcloud", "config", "get-value", "project").Output()
 	if err == nil {
 		if p := strings.TrimSpace(string(out)); p != "" && p != "(unset)" {
 			return p, nil
 		}
 	}
-	return "", fmt.Errorf("could not determine GCP project ID: set GOOGLE_CLOUD_PROJECT or run 'gcloud config set project <project-id>'")
+	return "", fmt.Errorf("GCP project not configured: run 'gcloud config set project <project-id>' or export GOOGLE_CLOUD_PROJECT=<project-id>")
+}
+
+// gcpLabels converts a generic tag map to GCP label format.
+// GCP label keys/values must match [a-z0-9_-]* and be ≤63 chars.
+func gcpLabels(tags map[string]string) map[string]string {
+	out := make(map[string]string, len(tags))
+	for k, v := range tags {
+		out[gcpSanitize(k)] = gcpSanitize(v)
+	}
+	return out
+}
+
+func gcpSanitize(s string) string {
+	s = strings.ToLower(s)
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('-')
+		}
+	}
+	v := strings.Trim(b.String(), "-")
+	if len(v) > 63 {
+		v = v[:63]
+	}
+	if v == "" {
+		return "unknown"
+	}
+	return v
 }
 
 func isNotFound(err error) bool {

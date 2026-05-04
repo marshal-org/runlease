@@ -4,6 +4,27 @@ All notable changes to this project will be documented here.
 
 ---
 
+## [0.0.3] — 2026-05-04
+
+### Added
+- `pkg/provider/aws`: `ResolveAL2023AMI` — auto-detects the latest Amazon Linux 2023 AMI for the target region via `DescribeImages`; `--image` is no longer required for AWS launches
+- `pkg/provider/aws`: `Name` tag added to instances so they appear labelled in the AWS console
+- `pkg/provider/gcp`: `gcpLabels` + `gcpSanitize` — sanitizes arbitrary tag values to valid GCP label format (`[a-z0-9_-]`, ≤63 chars) before setting `inst.Labels`
+- `cmd/runlease/up.go`: `mergeAutoTags` — automatically injects `runlease-managed=true`, `runlease-created-by=<user>`, and `runlease-expires-at=<RFC3339>` (when TTL set); user-defined tags take precedence
+- `cmd/runlease/up.go`: post-launch termination instructions block (manual `runlease down`, on-instance `runlease-terminate`, and TTL countdown)
+- `cmd/runlease/up.go`: emoji icons throughout launch output
+- `cmd/runlease/down.go`: 0-arg invocation — auto-selects when one instance running; shows pick-list when multiple; interactive `[y/N]` confirmation prompt; `-y/--yes` flag to skip
+- `cmd/runlease/connect.go`: auto-reregisters relay token when relay restarted (slot missing → "unauthorized" → re-register + poll)
+- `cmd/runlease/config.go`: post-configure output now shows YAML block between separators, launch examples, relay tip, and `runlease manifest init` pointer for advanced options
+- `cmd/runlease/manifest.go`: AWS `baseImage` prompt notes auto-detection; empty baseImage renders as a comment in generated YAML
+- `pkg/userdata/userdata.go`: `runlease-terminate` script always installed (not gated on TTL); both GCP and AWS scripts are self-elevating (`[ "$EUID" -ne 0 ] && exec sudo "$0" "$@"`); `systemd-run` timer is conditional on `TTLSeconds > 0`
+
+### Fixed
+- `pkg/provider/gcp`: `resolveProjectID` uses `exec.LookPath("gcloud")` — distinct "not installed" vs "project not set" error messages
+- `pkg/provider/gcp`, `cmd/runlease/up.go` (`googleIDToken`): graceful handling when `gcloud` or `aws` CLI is absent
+- `pkg/manifest/manifest.go`: AWS manifests no longer require `baseImage` in validation (auto-detected at launch)
+- `pkg/manifest/manifest_test.go`: "no baseImage" negative test now targets GCP provider to remain a valid failure case
+
 ## [0.0.2] — 2026-05-02
 
 ### Added

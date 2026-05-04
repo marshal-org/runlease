@@ -62,7 +62,7 @@ func TestValidate_missingFields(t *testing.T) {
 		{"no provider", func(m *Manifest) { m.Provider = "" }, "manifest.provider is required"},
 		{"no region", func(m *Manifest) { m.Region = "" }, "manifest.region is required"},
 		{"no instance selector", func(m *Manifest) { m.InstanceType = "" }, "one of manifest.instanceType or manifest.instanceClass is required"},
-		{"no baseImage", func(m *Manifest) { m.BaseImage = "" }, "manifest.baseImage is required"},
+		{"no baseImage (gcp)", func(m *Manifest) { m.Provider = "gcp"; m.BaseImage = "" }, "manifest.baseImage is required"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

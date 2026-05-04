@@ -85,7 +85,7 @@ func (m *Manifest) Validate() error {
 	if m.InstanceType != "" && m.InstanceClass != "" {
 		return fmt.Errorf("manifest.instanceType and manifest.instanceClass are mutually exclusive")
 	}
-	if m.BaseImage == "" {
+	if m.BaseImage == "" && m.Provider != "aws" {
 		return fmt.Errorf("manifest.baseImage is required")
 	}
 	if m.Reclaim.TTL != "" {

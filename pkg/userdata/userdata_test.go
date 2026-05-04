@@ -199,12 +199,12 @@ func TestBuild_noTTLBlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	for _, absent := range []string{
-		"systemd-run --on-active",
-		"runlease-terminate",
-	} {
-		if strings.Contains(out, absent) {
-			t.Errorf("zero-TTL output should not contain %q", absent)
-		}
+	// terminate script is always installed even without TTL
+	if !strings.Contains(out, "runlease-terminate") {
+		t.Error("terminate script should always be installed")
+	}
+	// but the systemd-run timer should not be scheduled
+	if strings.Contains(out, "systemd-run --on-active") {
+		t.Error("zero-TTL output should not schedule a systemd-run timer")
 	}
 }

@@ -35,7 +35,11 @@ const manifestTemplate = `name: {{ .Name }}
 provider: {{ .Provider }}
 region: {{ .Region }}
 instanceClass: {{ .InstanceClass }}
+{{- if .BaseImage }}
 baseImage: {{ .BaseImage }}
+{{- else }}
+# baseImage: (auto-detected at launch)
+{{- end }}
 reclaim:
   ttl: {{ .TTL }}
 {{- if .RelayAddr }}
@@ -125,9 +129,8 @@ func runManifestInit(cmd *cobra.Command, _ []string) error {
 	}[prov]
 	var imagePrompt string
 	if prov == "aws" {
-		fmt.Fprintf(out, "\n  AWS: AMI IDs are region-specific. Find the latest Amazon Linux 2023 AMI with:\n")
-		fmt.Fprintf(out, "    aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 --region %s --query Parameter.Value --output text\n", region)
-		imagePrompt = "Base image (AMI ID)"
+		fmt.Fprintf(out, "\n  AWS: leave blank to auto-detect the latest Amazon Linux 2023 AMI at launch time.\n")
+		imagePrompt = "Base image (AMI ID, or Enter to auto-detect)"
 	} else {
 		imagePrompt = "Base image"
 	}

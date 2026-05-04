@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"sort"
 	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
@@ -171,8 +172,40 @@ func mapStatus(state *types.InstanceState) provider.InstanceStatus {
 	}
 }
 
+// ResolveAL2023AMI returns the latest Amazon Linux 2023 x86_64 AMI ID for the
+// given region by querying DescribeImages. No special IAM permissions required
+// beyond the standard EC2 read access already needed for provisioning.
+func ResolveAL2023AMI(ctx context.Context, region string) (string, error) {
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	if err != nil {
+		return "", fmt.Errorf("loading AWS config: %w", err)
+	}
+	client := ec2.NewFromConfig(cfg)
+	out, err := client.DescribeImages(ctx, &ec2.DescribeImagesInput{
+		Owners: []string{"amazon"},
+		Filters: []types.Filter{
+			{Name: awssdk.String("name"), Values: []string{"al2023-ami-*-x86_64"}},
+			{Name: awssdk.String("state"), Values: []string{"available"}},
+			{Name: awssdk.String("architecture"), Values: []string{"x86_64"}},
+			{Name: awssdk.String("virtualization-type"), Values: []string{"hvm"}},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("DescribeImages: %w", err)
+	}
+	if len(out.Images) == 0 {
+		return "", fmt.Errorf("no Amazon Linux 2023 AMI found in %s", region)
+	}
+	sort.Slice(out.Images, func(i, j int) bool {
+		return awssdk.ToString(out.Images[i].CreationDate) > awssdk.ToString(out.Images[j].CreationDate)
+	})
+	return awssdk.ToString(out.Images[0].ImageId), nil
+}
+
 func buildTags(name string, extra map[string]string) []types.Tag {
 	tags := []types.Tag{
+		// Name appears as the display name in the AWS console.
+		{Key: awssdk.String("Name"), Value: awssdk.String(name)},
 		{Key: awssdk.String("runlease:name"), Value: awssdk.String(name)},
 	}
 	for k, v := range extra {

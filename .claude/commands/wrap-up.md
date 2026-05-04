@@ -2,7 +2,14 @@ You are helping wrap up a development session before committing and pushing. Wor
 
 ## Step 1 — Automated checks
 
-Run `go build ./... && go test ./...` and report the result. If it fails, stop and tell the user what failed. Do not proceed until it passes.
+Run the following and report the result. If anything fails, stop and tell the user. Do not proceed until it passes.
+
+```
+go build ./... && go test ./... && \
+go build -o runlease ./cmd/runlease/ && \
+go build -o runlease-agent ./cmd/runlease-agent/ && \
+go build -o runlease-relay ./cmd/runlease-relay/
+```
 
 ## Step 2 — Understand what changed
 

@@ -16,6 +16,7 @@ set -euo pipefail
 cat > /usr/local/bin/runlease-terminate << 'TERM_EOF'
 #!/bin/bash
 [ "$EUID" -ne 0 ] && exec sudo "$0" "$@"
+systemctl stop runlease-agent 2>/dev/null || true
 set -e
 TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
   http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token \
@@ -34,6 +35,7 @@ TERM_EOF
 cat > /usr/local/bin/runlease-terminate << 'TERM_EOF'
 #!/bin/bash
 [ "$EUID" -ne 0 ] && exec sudo "$0" "$@"
+systemctl stop runlease-agent 2>/dev/null || true
 systemctl --force --force poweroff
 TERM_EOF
 {{- end }}

@@ -30,26 +30,9 @@ func runDown(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var nameOrID string
-	if len(args) == 0 {
-		entries := reg.List()
-		switch len(entries) {
-		case 0:
-			fmt.Fprintln(cmd.OutOrStdout(), "No running instances.")
-			return nil
-		case 1:
-			nameOrID = entries[0].Handle.ManifestName
-		default:
-			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "Multiple instances running — specify one:\n\n")
-			for _, e := range entries {
-				fmt.Fprintf(out, "  runlease down %s\n", e.Handle.ManifestName)
-			}
-			fmt.Fprintln(out)
-			return nil
-		}
-	} else {
-		nameOrID = args[0]
+	nameOrID, err := resolveInstance(cmd, reg, args, "down")
+	if err != nil || nameOrID == "" {
+		return err
 	}
 
 	entry, err := reg.Get(nameOrID)

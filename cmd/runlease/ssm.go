@@ -13,7 +13,7 @@ func init() {
 }
 
 var ssmCmd = &cobra.Command{
-	Use:   "ssm <name|id>",
+	Use:   "ssm [name|id]",
 	Short: "Open an SSM Session Manager session to a running instance",
 	Long: `Open an interactive session via AWS SSM Session Manager.
 
@@ -21,7 +21,7 @@ Requires:
   - The instance was launched with an IAM instance profile that has the
     AmazonSSMManagedInstanceCore policy attached (set instanceProfile in manifest).
   - The AWS CLI is installed and configured with ssm:StartSession permission.`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: runSSMSession,
 }
 
@@ -30,7 +30,11 @@ func runSSMSession(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	entry, err := reg.Get(args[0])
+	nameOrID, err := resolveInstance(cmd, reg, args, "ssm")
+	if err != nil || nameOrID == "" {
+		return err
+	}
+	entry, err := reg.Get(nameOrID)
 	if err != nil {
 		return err
 	}

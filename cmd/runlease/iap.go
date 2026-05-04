@@ -18,7 +18,7 @@ func init() {
 }
 
 var iapCmd = &cobra.Command{
-	Use:   "iap <name|id>",
+	Use:   "iap [name|id]",
 	Short: "Open an SSH session to a GCP instance via IAP TCP tunnel",
 	Long: `Open an interactive SSH session via GCP Identity-Aware Proxy TCP tunneling.
 
@@ -27,7 +27,7 @@ Requires:
   - The instance was launched on GCP (provider: gcp)
   - Your account has the roles/iap.tunnelResourceAccessor IAM role
   - The instance does NOT need a public IP or open firewall rules`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: runIAPSession,
 }
 
@@ -36,7 +36,11 @@ func runIAPSession(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	entry, err := reg.Get(args[0])
+	nameOrID, err := resolveInstance(cmd, reg, args, "iap")
+	if err != nil || nameOrID == "" {
+		return err
+	}
+	entry, err := reg.Get(nameOrID)
 	if err != nil {
 		return err
 	}

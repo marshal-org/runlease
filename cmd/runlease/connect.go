@@ -14,9 +14,9 @@ func init() {
 }
 
 var connectCmd = &cobra.Command{
-	Use:   "connect <name|id>",
+	Use:   "connect [name|id]",
 	Short: "Open an SSH session through the runlease relay (no public IP required)",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MaximumNArgs(1),
 	RunE:  runConnect,
 }
 
@@ -25,7 +25,11 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	entry, err := reg.Get(args[0])
+	nameOrID, err := resolveInstance(cmd, reg, args, "connect")
+	if err != nil || nameOrID == "" {
+		return err
+	}
+	entry, err := reg.Get(nameOrID)
 	if err != nil {
 		return err
 	}

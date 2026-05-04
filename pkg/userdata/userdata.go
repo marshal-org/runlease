@@ -10,12 +10,12 @@ import (
 
 const script = `#!/bin/bash
 set -euo pipefail
-{{- if .TTLSeconds }}
 
-# ── self-termination after TTL ────────────────────────────────────────────────
+# ── self-termination ──────────────────────────────────────────────────────────
 {{- if eq .Provider "gcp" }}
 cat > /usr/local/bin/runlease-terminate << 'TERM_EOF'
 #!/bin/bash
+[ "$EUID" -ne 0 ] && exec sudo "$0" "$@"
 set -e
 TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
   http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token \
@@ -33,10 +33,15 @@ TERM_EOF
 {{- else if eq .Provider "aws" }}
 cat > /usr/local/bin/runlease-terminate << 'TERM_EOF'
 #!/bin/bash
+[ "$EUID" -ne 0 ] && exec sudo "$0" "$@"
 shutdown -h now
 TERM_EOF
 {{- end }}
 chmod +x /usr/local/bin/runlease-terminate
+echo "runlease-agent ALL=(ALL) NOPASSWD: /usr/local/bin/runlease-terminate" \
+  > /etc/sudoers.d/runlease-terminate
+chmod 440 /etc/sudoers.d/runlease-terminate
+{{- if .TTLSeconds }}
 systemd-run --on-active={{ .TTLSeconds }} /usr/local/bin/runlease-terminate
 {{- end }}
 

@@ -115,9 +115,28 @@ var configureCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintf(out, "\n✓ Saved to %s\n\n", path)
-		out2, _ := yaml.Marshal(cfg)
-		fmt.Fprintf(out, "%s", out2)
+		cfgYAML, _ := yaml.Marshal(cfg)
+		fmt.Fprintf(out, "\n✅ Configuration saved → %s\n", path)
+		fmt.Fprintf(out, "──────────────────────────────────────\n")
+		fmt.Fprintf(out, "%s", cfgYAML)
+		fmt.Fprintf(out, "──────────────────────────────────────\n\n")
+
+		fmt.Fprintf(out, "🚀 Ready to launch your first instance:\n\n")
+		if cfg.Relay.Addr != "" {
+			fmt.Fprintf(out, "   runlease up\n\n")
+			fmt.Fprintf(out, "   # override anything on the fly:\n")
+			fmt.Fprintf(out, "   runlease up --size compute.medium --ttl 4h\n\n")
+			fmt.Fprintf(out, "📡 Relay configured — connect without a public IP:\n\n")
+			fmt.Fprintf(out, "   runlease connect <name>\n")
+		} else {
+			fmt.Fprintf(out, "   runlease up\n\n")
+			fmt.Fprintf(out, "💡 Tip: add a relay to connect without a public IP:\n\n")
+			fmt.Fprintf(out, "   runlease config set relay.addr wss://your-relay.example.com\n")
+		}
+		fmt.Fprintf(out, "\n📋 Need advanced options? (VPC, security groups, custom AMI, service accounts)\n\n")
+		fmt.Fprintf(out, "   runlease manifest init     — guided wizard with all available fields\n")
+		fmt.Fprintf(out, "   runlease up -m manifest.yaml\n")
+		fmt.Fprintln(out)
 		return nil
 	},
 }

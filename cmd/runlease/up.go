@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"os/user"
 	"strings"
 	"syscall"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/runlease/runlease/pkg/instanceclass"
 	"github.com/runlease/runlease/pkg/manifest"
 	"github.com/runlease/runlease/pkg/provider"
+	awsprovider "github.com/runlease/runlease/pkg/provider/aws"
 	"github.com/runlease/runlease/pkg/registry"
 	"github.com/runlease/runlease/pkg/relay"
 	"github.com/runlease/runlease/pkg/userdata"
@@ -99,6 +101,16 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	if m.Provider == "aws" && m.BaseImage == "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "🔍 Resolving latest Amazon Linux 2023 AMI for %s...\n", m.Region)
+		ami, err := awsprovider.ResolveAL2023AMI(cmd.Context(), m.Region)
+		if err != nil {
+			return fmt.Errorf("auto-resolving AMI: %w", err)
+		}
+		m.BaseImage = ami
+		fmt.Fprintf(cmd.OutOrStdout(), "   └─ %s\n", ami)
+	}
+
 	instanceType, err := resolveInstanceType(cmd.Context(), m)
 	if err != nil {
 		return err
@@ -120,7 +132,7 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		// Pre-register the token with the relay before the instance boots.
 		// This makes the CLI the authority: the relay rejects any connection
 		// that presents a token the CLI has not explicitly registered.
-		fmt.Fprintf(cmd.OutOrStdout(), "Pre-registering relay slot...\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "📡 Pre-registering relay slot...\n")
 		if err := registerRelayToken(cmd.Context(), m.Relay.Addr, relayToken); err != nil {
 			return fmt.Errorf("relay registration: %w", err)
 		}
@@ -152,10 +164,13 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("initializing provider: %w", err)
 	}
 
+	// Merge auto-tags (user tags take precedence on conflict).
+	m.Tags = mergeAutoTags(m.Tags, m.Name, ttlSeconds)
+
 	if !m.WantsPublicIP() && provider.ProviderType(m.Provider) == provider.ProviderGCP {
-		fmt.Fprintf(cmd.OutOrStdout(), "Note: launching without a public IP — ensure Cloud NAT is configured on the subnet so the instance can reach the relay.\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "⚠️  Launching without a public IP — ensure Cloud NAT is configured so the instance can reach the relay.\n")
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Requesting spot instance (%s in %s)...\n", instanceType, m.Region)
+	fmt.Fprintf(cmd.OutOrStdout(), "⚡ Requesting spot instance (%s in %s)...\n", instanceType, m.Region)
 	handle, err := p.RequestSpot(ctx, provider.InstanceSpec{
 		ManifestName:        m.Name,
 		InstanceType:        instanceType,
@@ -173,7 +188,7 @@ func runUp(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("requesting spot instance: %w", err)
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Instance %s requested. Waiting for running state...\n", handle.ID)
+	fmt.Fprintf(cmd.OutOrStdout(), "   └─ %s — waiting for running state...\n", handle.ID)
 
 	// Save credential before waiting so we can delete it if the wait fails.
 	credDir := defaultCredDir()
@@ -219,24 +234,33 @@ func runUp(cmd *cobra.Command, _ []string) error {
 	}
 
 	out := cmd.OutOrStdout()
-	fmt.Fprintln(out, "\nInstance ready!")
-	fmt.Fprintf(out, "  Name:      %s\n", m.Name)
-	fmt.Fprintf(out, "  ID:        %s\n", running.ID)
-	fmt.Fprintf(out, "  Public IP: %s\n", running.PublicIP)
+	fmt.Fprintf(out, "\n✅ Instance ready!\n")
+	fmt.Fprintf(out, "   Name:      %s\n", m.Name)
+	fmt.Fprintf(out, "   ID:        %s\n", running.ID)
+	if running.PublicIP != "" {
+		fmt.Fprintf(out, "   Public IP: %s\n", running.PublicIP)
+	}
 	if running.ExpiresAt != nil {
-		fmt.Fprintf(out, "  Expires:   %s (%s)\n", running.ExpiresAt.Format(time.RFC3339), time.Until(*running.ExpiresAt).Round(time.Second))
+		fmt.Fprintf(out, "   Expires:   %s (%s)\n", running.ExpiresAt.Format(time.RFC3339), time.Until(*running.ExpiresAt).Round(time.Second))
 	}
 	if m.Relay.Addr != "" {
-		fmt.Fprintf(out, "\nConnect via relay: runlease connect %s\n", m.Name)
+		fmt.Fprintf(out, "\n🔌 Connect via relay:\n\n   runlease connect %s\n", m.Name)
 	} else {
-		fmt.Fprintf(out, "\nConnect: runlease ssh %s\n", m.Name)
+		fmt.Fprintf(out, "\n🔌 Connect:\n\n   runlease ssh %s\n", m.Name)
 		if running.PublicIP == "" {
-			fmt.Fprintf(out, "  Note: no public IP assigned. Add 'relay.addr' to your manifest for relay-based access,\n")
-			fmt.Fprintf(out, "  or set 'publicIp: true' for direct SSH.\n")
+			fmt.Fprintf(out, "\n💡 No public IP assigned — add 'relay.addr' to your manifest for relay-based access,\n")
+			fmt.Fprintf(out, "   or set 'publicIp: true' for direct SSH.\n")
 		} else {
-			fmt.Fprintf(out, "  Tip: add 'relay.addr: wss://relay.snapmatch.ai' to your manifest to connect\n")
-			fmt.Fprintf(out, "  without a public IP next time (relay tunnels SSH through the relay server).\n")
+			fmt.Fprintf(out, "\n💡 Tip: add a relay to connect without a public IP next time:\n")
+			fmt.Fprintf(out, "   runlease config set relay.addr wss://relay.snapmatch.ai\n")
 		}
+	}
+
+	fmt.Fprintf(out, "\n🛑 To terminate:\n")
+	fmt.Fprintf(out, "   runlease down %s\n", m.Name)
+	fmt.Fprintf(out, "   # or from inside the instance: sudo /usr/local/bin/runlease-terminate\n")
+	if running.ExpiresAt != nil {
+		fmt.Fprintf(out, "   # or wait — auto-terminates in %s\n", time.Until(*running.ExpiresAt).Round(time.Second))
 	}
 
 	if detach {
@@ -268,7 +292,7 @@ func pollAndConnect(cmd *cobra.Command, publicIP, name string, cred *credential.
 		}
 	}()
 
-	fmt.Fprintf(out, "\nWaiting for SSH to become ready (Ctrl+C to stop waiting)...\n")
+	fmt.Fprintf(out, "\n⏳ Waiting for SSH to become ready (Ctrl+C to stop)...\n")
 	for {
 		d := &net.Dialer{Timeout: 5 * time.Second}
 		conn, err := d.DialContext(pollCtx, "tcp", publicIP+":22")
@@ -277,7 +301,7 @@ func pollAndConnect(cmd *cobra.Command, publicIP, name string, cred *credential.
 			sshErr := sshSession(publicIP, cred)
 			if sshErr != nil && strings.Contains(sshErr.Error(), "host key mismatch") {
 				// sshd is up but the startup script hasn't injected our key yet.
-				fmt.Fprintf(out, "sshd up but startup script not done yet, retrying in %s...\n", sshPollInterval)
+				fmt.Fprintf(out, "🔄 sshd up, startup script still running — retrying in %s...\n", sshPollInterval)
 			} else {
 				return sshErr
 			}
@@ -290,7 +314,7 @@ func pollAndConnect(cmd *cobra.Command, publicIP, name string, cred *credential.
 		default:
 		}
 
-		fmt.Fprintf(out, "Not ready yet, retrying in %s...\n", sshPollInterval)
+		fmt.Fprintf(out, "⏳ Not ready yet, retrying in %s...\n", sshPollInterval)
 		select {
 		case <-time.After(sshPollInterval):
 		case <-pollCtx.Done():
@@ -319,7 +343,7 @@ func pollAndConnectViaRelay(cmd *cobra.Command, relayAddr, token, name string, c
 		}
 	}()
 
-	fmt.Fprintf(out, "\nWaiting for relay agent to register — usually takes ~30s (Ctrl+C to stop waiting)...\n")
+	fmt.Fprintf(out, "\n⏳ Waiting for relay agent to register — usually takes ~30s (Ctrl+C to stop)...\n")
 	for {
 		// Poll via HTTP — doesn't consume the client slot.
 		req, _ := http.NewRequestWithContext(pollCtx, "GET", readyURL, nil)
@@ -329,7 +353,7 @@ func pollAndConnectViaRelay(cmd *cobra.Command, relayAddr, token, name string, c
 			ready := resp.StatusCode == http.StatusOK
 			resp.Body.Close()
 			if ready {
-				fmt.Fprintf(out, "Agent connected. Opening SSH session...\n")
+				fmt.Fprintf(out, "🔗 Agent connected — opening SSH session...\n")
 				conn, err := dialRelay(relayAddr, token)
 				if err != nil {
 					return fmt.Errorf("relay: %w", err)
@@ -345,7 +369,7 @@ func pollAndConnectViaRelay(cmd *cobra.Command, relayAddr, token, name string, c
 		default:
 		}
 
-		fmt.Fprintf(out, "Agent not ready yet, retrying in %s...\n", sshPollInterval)
+		fmt.Fprintf(out, "⏳ Agent not ready yet, retrying in %s...\n", sshPollInterval)
 		select {
 		case <-time.After(sshPollInterval):
 		case <-pollCtx.Done():
@@ -399,7 +423,7 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 		case "gcp":
 			image = "projects/debian-cloud/global/images/family/debian-12"
 		case "aws":
-			return nil, fmt.Errorf("--image is required for AWS (AMI IDs are region-specific)\n  Find the latest Amazon Linux 2023 AMI for %s in the AWS console or with:\n  aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 --region %s --query Parameter.Value --output text", region, region)
+			// resolved later in runUp via DescribeImages
 		default:
 			return nil, fmt.Errorf("unknown provider %q — supported: aws, gcp", quickProvider)
 		}
@@ -473,6 +497,13 @@ func googleIDToken(ctx context.Context, audience string) (string, error) {
 			return tok.AccessToken, nil
 		}
 	}
+
+	// Check whether gcloud is installed before calling it, so callers get a
+	// clear "not installed" message rather than a confusing auth error.
+	if _, err := exec.LookPath("gcloud"); err != nil {
+		return "", fmt.Errorf("no Google credentials available: set GOOGLE_APPLICATION_CREDENTIALS or install gcloud and run 'gcloud auth application-default login'")
+	}
+
 	out, err := exec.CommandContext(ctx, "gcloud", "auth", "print-identity-token",
 		"--audiences="+audience).Output()
 	if err == nil {
@@ -481,7 +512,7 @@ func googleIDToken(ctx context.Context, audience string) (string, error) {
 	// Personal accounts can't use --audiences; fall back to the default gcloud token.
 	out, err = exec.CommandContext(ctx, "gcloud", "auth", "print-identity-token").Output()
 	if err != nil {
-		return "", fmt.Errorf("no Google credentials available (run 'gcloud auth login')")
+		return "", fmt.Errorf("not authenticated with gcloud: run 'gcloud auth login'")
 	}
 	return strings.TrimSpace(string(out)), nil
 }
@@ -558,4 +589,32 @@ func resolveInstanceType(ctx context.Context, m *manifest.Manifest) (string, err
 	}
 	_ = ctx // reserved for price-aware selection in M2
 	return candidates[0], nil
+}
+
+// mergeAutoTags returns a new tag map with runlease system tags pre-populated.
+// Any key already set by the user is left unchanged.
+func mergeAutoTags(userTags map[string]string, name string, ttlSeconds int) map[string]string {
+	tags := map[string]string{
+		"runlease-managed":    "true",
+		"runlease-created-by": currentUsername(),
+	}
+	if ttlSeconds > 0 {
+		tags["runlease-expires-at"] = time.Now().UTC().Add(time.Duration(ttlSeconds) * time.Second).Format(time.RFC3339)
+	}
+	for k, v := range userTags {
+		tags[k] = v
+	}
+	return tags
+}
+
+func currentUsername() string {
+	if u, err := user.Current(); err == nil {
+		name := u.Username
+		// Windows may return "DOMAIN\user"
+		if idx := strings.LastIndex(name, "\\"); idx >= 0 {
+			name = name[idx+1:]
+		}
+		return name
+	}
+	return "unknown"
 }

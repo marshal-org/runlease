@@ -19,9 +19,9 @@ func init() {
 }
 
 var sshCmd = &cobra.Command{
-	Use:   "ssh <name|id>",
+	Use:   "ssh [name|id]",
 	Short: "Open an interactive SSH session to a running instance",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MaximumNArgs(1),
 	RunE:  runSSH,
 }
 
@@ -30,7 +30,11 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	entry, err := reg.Get(args[0])
+	nameOrID, err := resolveInstance(cmd, reg, args, "ssh")
+	if err != nil || nameOrID == "" {
+		return err
+	}
+	entry, err := reg.Get(nameOrID)
 	if err != nil {
 		return err
 	}

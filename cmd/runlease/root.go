@@ -63,6 +63,32 @@ func loadRegistry() (*registry.Registry, error) {
 	return registry.Load(defaultRegistryPath())
 }
 
+// resolveInstance returns the instance name/ID to operate on.
+// If args has one element it is used directly. If args is empty, auto-selects
+// when exactly one instance is running; prints a pick-list for multiple.
+// Returns ("", nil) when the caller should return nil (message already printed).
+func resolveInstance(cmd *cobra.Command, reg *registry.Registry, args []string, verb string) (string, error) {
+	if len(args) == 1 {
+		return args[0], nil
+	}
+	entries := reg.List()
+	switch len(entries) {
+	case 0:
+		fmt.Fprintln(cmd.OutOrStdout(), "No running instances.")
+		return "", nil
+	case 1:
+		return entries[0].Handle.ManifestName, nil
+	default:
+		out := cmd.OutOrStdout()
+		fmt.Fprintf(out, "Multiple instances running — specify one:\n\n")
+		for _, e := range entries {
+			fmt.Fprintf(out, "  runlease %s %s\n", verb, e.Handle.ManifestName)
+		}
+		fmt.Fprintln(out)
+		return "", nil
+	}
+}
+
 // newProvider is the central dispatch used by all commands and the lifecycle manager.
 func newProvider(ctx context.Context, pt provider.ProviderType, region string) (provider.CloudProvider, error) {
 	switch pt {

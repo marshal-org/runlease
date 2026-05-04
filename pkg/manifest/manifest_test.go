@@ -62,7 +62,6 @@ func TestValidate_missingFields(t *testing.T) {
 		{"no provider", func(m *Manifest) { m.Provider = "" }, "manifest.provider is required"},
 		{"no region", func(m *Manifest) { m.Region = "" }, "manifest.region is required"},
 		{"no instance selector", func(m *Manifest) { m.InstanceType = "" }, "one of manifest.instanceType or manifest.instanceClass is required"},
-		{"no baseImage (gcp)", func(m *Manifest) { m.Provider = "gcp"; m.BaseImage = "" }, "manifest.baseImage is required"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -137,10 +136,11 @@ provider: gcp
 region: us-central1-a
 instanceType: n2-standard-4
 baseImage: projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts-amd64
-serviceAccount: deployer@project.iam.gserviceaccount.com
-networkTags:
-  - allow-ssh
-  - runlease
+gcp:
+  serviceAccount: deployer@project.iam.gserviceaccount.com
+  networkTags:
+    - allow-ssh
+    - runlease
 relay:
   addr: relay.example.com:7777
 `
@@ -154,11 +154,11 @@ func TestLoad_gcpFields(t *testing.T) {
 	if m.Provider != "gcp" {
 		t.Errorf("provider = %q, want gcp", m.Provider)
 	}
-	if m.ServiceAccount != "deployer@project.iam.gserviceaccount.com" {
-		t.Errorf("serviceAccount = %q", m.ServiceAccount)
+	if m.GCP.ServiceAccount != "deployer@project.iam.gserviceaccount.com" {
+		t.Errorf("gcp.serviceAccount = %q", m.GCP.ServiceAccount)
 	}
-	if len(m.NetworkTags) != 2 || m.NetworkTags[0] != "allow-ssh" {
-		t.Errorf("networkTags = %v", m.NetworkTags)
+	if len(m.GCP.NetworkTags) != 2 || m.GCP.NetworkTags[0] != "allow-ssh" {
+		t.Errorf("gcp.networkTags = %v", m.GCP.NetworkTags)
 	}
 	if m.Relay.Addr != "relay.example.com:7777" {
 		t.Errorf("relay.addr = %q", m.Relay.Addr)

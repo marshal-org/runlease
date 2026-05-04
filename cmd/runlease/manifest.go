@@ -52,15 +52,17 @@ relay:
 #   env: dev
 #   team: platform
 {{- if eq .Provider "aws" }}
-# securityGroupIDs:
-#   - sg-xxxxx
-# subnetID: subnet-xxxxx
-# instanceProfile: arn:aws:iam::123456789012:instance-profile/my-profile
+# aws:
+#   securityGroupIDs:
+#     - sg-xxxxx
+#   subnetID: subnet-xxxxx
+#   instanceProfile: arn:aws:iam::123456789012:instance-profile/my-profile
 {{- end }}
 {{- if eq .Provider "gcp" }}
-# serviceAccount: my-sa@my-project.iam.gserviceaccount.com
-# networkTags:
-#   - allow-ssh
+# gcp:
+#   serviceAccount: my-sa@my-project.iam.gserviceaccount.com
+#   networkTags:
+#     - allow-ssh
 {{- end }}
 `
 

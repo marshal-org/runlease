@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/smithy-go"
 
 	"github.com/runlease/runlease/pkg/provider"
 )
@@ -97,6 +99,10 @@ func (p *Provider) Terminate(ctx context.Context, id provider.InstanceID) error 
 		InstanceIds: []string{string(id)},
 	})
 	if err != nil {
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) && apiErr.ErrorCode() == "InvalidInstanceID.NotFound" {
+			return nil // already gone
+		}
 		return fmt.Errorf("TerminateInstances: %w", err)
 	}
 	return nil

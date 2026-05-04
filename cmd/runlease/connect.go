@@ -52,17 +52,22 @@ func runConnect(cmd *cobra.Command, args []string) error {
 
 	conn, err := dialRelay(entry.RelayAddr, entry.RelayToken)
 	if err != nil {
-		// Slot missing (relay restarted or first connect after a long gap).
-		// Re-register the token and wait for the agent to reconnect.
-		if !strings.Contains(err.Error(), "unauthorized") {
-			return fmt.Errorf("relay: %w", err)
+		if strings.Contains(err.Error(), "unauthorized") {
+			// Slot missing — relay restarted or first connect after a long gap.
+			fmt.Fprintf(out, "⚠️  Relay slot missing (relay may have restarted) — re-registering...\n")
+			if rerr := registerRelayToken(cmd.Context(), entry.RelayAddr, entry.RelayToken); rerr != nil {
+				return fmt.Errorf("relay: %w", err)
+			}
+			return pollAndConnectViaRelay(cmd, entry.RelayAddr, entry.RelayToken,
+				entry.Handle.ManifestName, cred)
 		}
-		fmt.Fprintf(out, "⚠️  Relay slot missing (relay may have restarted) — re-registering...\n")
-		if rerr := registerRelayToken(cmd.Context(), entry.RelayAddr, entry.RelayToken); rerr != nil {
-			return fmt.Errorf("relay: %w", err) // return original error if re-register fails
+		if strings.Contains(err.Error(), "close 1000") {
+			// Relay dropped the connection cleanly — agent is mid-reconnect (5s delay).
+			fmt.Fprintf(out, "⚠️  Agent reconnecting — waiting...\n")
+			return pollAndConnectViaRelay(cmd, entry.RelayAddr, entry.RelayToken,
+				entry.Handle.ManifestName, cred)
 		}
-		return pollAndConnectViaRelay(cmd, entry.RelayAddr, entry.RelayToken,
-			entry.Handle.ManifestName, cred)
+		return fmt.Errorf("relay: %w", err)
 	}
 	return sshOverConn(conn, entry.RelayAddr, cred)
 }

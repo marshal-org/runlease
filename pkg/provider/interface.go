@@ -34,6 +34,7 @@ type InstanceSpec struct {
 	ServiceAccountEmail string           // GCP only: service account email (enables IAP etc.)
 	NetworkTags        []string          // GCP only: network tags for firewall rule matching
 	PublicIP           bool              // assign a public IP; default false (relay mode) or true (direct SSH)
+	SelfTermination    bool              // install runlease-terminate and grant compute-delete scope (GCP)
 }
 
 type InstanceHandle struct {

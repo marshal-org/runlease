@@ -45,14 +45,14 @@ func runList(cmd *cobra.Command, _ []string) error {
 	fmt.Fprintln(w, "NAME\tPROVIDER\tID\tSTATE\tPUBLIC IP\tREGION\tAGE\tEXPIRES")
 	for _, e := range entries {
 		h := e.Handle
-		age := time.Since(h.CreatedAt).Round(time.Second)
+		age := fmtAge(h.CreatedAt)
 		expires := "-"
 		if h.ExpiresAt != nil {
 			remaining := time.Until(*h.ExpiresAt).Round(time.Second)
 			if remaining < 0 {
 				expires = "expired"
 			} else {
-				expires = remaining.String()
+				expires = fmtDuration(remaining)
 			}
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
@@ -60,6 +60,42 @@ func runList(cmd *cobra.Command, _ []string) error {
 			h.PublicIP, h.Region, age, expires)
 	}
 	return w.Flush()
+}
+
+func fmtAge(t time.Time) string {
+	if t.IsZero() {
+		return "-"
+	}
+	return fmtDuration(time.Since(t))
+}
+
+func fmtDuration(d time.Duration) string {
+	d = d.Round(time.Second)
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		m := int(d.Minutes())
+		s := int(d.Seconds()) % 60
+		if s == 0 {
+			return fmt.Sprintf("%dm", m)
+		}
+		return fmt.Sprintf("%dm%ds", m, s)
+	}
+	if d < 24*time.Hour {
+		h := int(d.Hours())
+		m := int(d.Minutes()) % 60
+		if m == 0 {
+			return fmt.Sprintf("%dh", h)
+		}
+		return fmt.Sprintf("%dh%dm", h, m)
+	}
+	days := int(d.Hours()) / 24
+	h := int(d.Hours()) % 24
+	if h == 0 {
+		return fmt.Sprintf("%dd", days)
+	}
+	return fmt.Sprintf("%dd%dh", days, h)
 }
 
 func parseLabels(raw []string) (map[string]string, error) {

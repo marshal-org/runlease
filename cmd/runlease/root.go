@@ -15,6 +15,16 @@ import (
 	"github.com/runlease/runlease/pkg/registry"
 )
 
+var version = "dev"
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print version",
+	Run:   func(cmd *cobra.Command, _ []string) { fmt.Fprintln(cmd.OutOrStdout(), version) },
+}
+
+func init() { rootCmd.AddCommand(versionCmd) }
+
 var rootCmd = &cobra.Command{
 	Use:          "runlease",
 	Short:        "Ephemeral spot instance manager",

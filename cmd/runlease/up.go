@@ -39,11 +39,13 @@ var (
 	quickProvider string
 	quickRegion   string
 	quickSize     string
-	quickImage         string
-	quickRelay         string
-	quickTTL           string
-	quickName          string
-	quickSelfTerminate bool
+	quickImage          string
+	quickRelay          string
+	quickTTL            string
+	quickName           string
+	quickSelfTerminate  bool
+	quickServiceAccount string
+	quickInstanceProfile string
 )
 
 func init() {
@@ -58,6 +60,8 @@ func init() {
 	upCmd.Flags().StringVar(&quickTTL, "ttl", "2h", "instance TTL (quick mode)")
 	upCmd.Flags().StringVarP(&quickName, "name", "n", "", "instance name (quick mode; auto-generated if empty)")
 	upCmd.Flags().BoolVar(&quickSelfTerminate, "self-terminate", true, "allow the instance to delete itself (required for TTL to work)")
+	upCmd.Flags().StringVar(&quickServiceAccount, "service-account", "", "GCP service account email to attach (quick mode)")
+	upCmd.Flags().StringVar(&quickInstanceProfile, "instance-profile", "", "AWS IAM instance profile ARN to attach (quick mode)")
 	rootCmd.AddCommand(upCmd)
 }
 
@@ -451,6 +455,8 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 		InstanceClass: size,
 		BaseImage:     image,
 		Reclaim:       manifest.ReclaimPolicy{TTL: ttl, SelfTermination: quickSelfTerminate},
+		GCP:           manifest.GCPConfig{ServiceAccount: quickServiceAccount},
+		AWS:           manifest.AWSConfig{InstanceProfile: quickInstanceProfile},
 	}
 	if relayAddr != "" {
 		m.Relay = manifest.RelayConfig{Addr: relayAddr}

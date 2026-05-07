@@ -4,6 +4,11 @@ All notable changes to this project will be documented here.
 
 ---
 
+## [0.0.5] — 2026-05-08
+
+### Added
+- `cmd/runlease/root.go`: `RUNLEASE_HOME` env var — overrides the base directory for all runlease state (`config.yaml`, `registry.json`, `master.key`, `credentials/`); defaults to `~/.runlease` when unset
+
 ## [0.0.4] — 2026-05-05
 
 ### Added

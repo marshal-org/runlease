@@ -48,25 +48,18 @@ Manifest helpers:
   runlease catalog             list available instance classes`,
 }
 
-func defaultCredDir() string {
+func runleaseHome() string {
+	if h := os.Getenv("RUNLEASE_HOME"); h != "" {
+		return h
+	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".runlease", "credentials")
+	return filepath.Join(home, ".runlease")
 }
 
-func defaultRegistryPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".runlease", "registry.json")
-}
-
-func defaultMasterKeyPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".runlease", "master.key")
-}
-
-func defaultConfigPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".runlease", "config.yaml")
-}
+func defaultCredDir() string        { return filepath.Join(runleaseHome(), "credentials") }
+func defaultRegistryPath() string   { return filepath.Join(runleaseHome(), "registry.json") }
+func defaultMasterKeyPath() string  { return filepath.Join(runleaseHome(), "master.key") }
+func defaultConfigPath() string     { return filepath.Join(runleaseHome(), "config.yaml") }
 
 
 func loadRegistry() (*registry.Registry, error) {

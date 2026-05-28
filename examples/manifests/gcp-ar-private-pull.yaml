@@ -39,14 +39,23 @@ setup:
       BIN_DIR=/usr/local/lib/kubelet/credential-providers
       mkdir -p "$BIN_DIR"
 
-      # Build auth-provider-gcp from source. The upstream repo's go.mod has
-      # 'replace' directives, so `go install …@latest` refuses to honor them
-      # — clone the repo and `go build` from inside it (where it IS the main
-      # module). Upstream doesn't publish a usable standalone release tarball;
-      # GKE bundles it on its own nodes rather than publishing externally.
+      # Build auth-provider-gcp from source. Two upstream quirks make this
+      # uglier than it should be:
+      #   1. cloud-provider-gcp's go.mod uses 'replace' directives, so
+      #      `go install …@latest` refuses to honor them — we clone the repo
+      #      and `go build` from inside it (where it IS the main module).
+      #   2. cloud-provider-gcp's go.work requires Go ≥ 1.26.x; Debian 12's
+      #      golang-go package is too old, so we install Go from go.dev.
+      #   Upstream doesn't publish a usable standalone release tarball, and
+      #   GKE bundles it on its own nodes rather than publishing externally.
       apt-get update
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        ca-certificates curl git golang-go
+        ca-certificates curl git
+
+      GO_VERSION=$(curl -sfL https://go.dev/VERSION?m=text | head -1)
+      curl -sfL "https://go.dev/dl/${GO_VERSION}.linux-amd64.tar.gz" \
+        | tar -xzC /usr/local
+      export PATH=/usr/local/go/bin:$PATH
 
       src=$(mktemp -d)
       git clone --depth 1 https://github.com/kubernetes/cloud-provider-gcp.git "$src"

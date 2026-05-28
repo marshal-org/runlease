@@ -66,7 +66,10 @@ func waitForTunnel(ctx context.Context, m *manifest.Manifest, running *provider.
 	if m.Relay.Addr != "" {
 		readyURL := relayHTTPBase(m.Relay.Addr) + "/ready"
 		for {
-			req, _ := http.NewRequestWithContext(ctx, "GET", readyURL, nil)
+			req, err := http.NewRequestWithContext(ctx, "GET", readyURL, nil)
+			if err != nil {
+				return nil, "", fmt.Errorf("building ready request: %w", err)
+			}
 			req.Header.Set("X-Relay-Token", relayToken)
 			resp, err := http.DefaultClient.Do(req)
 			if err == nil {

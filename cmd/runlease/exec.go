@@ -131,6 +131,7 @@ func execOverConn(conn net.Conn, addr string, cred *credential.EphemeralCredenti
 	conn.SetDeadline(time.Now().Add(10 * time.Second)) //nolint:errcheck
 	c, chans, reqs, err := cryptossh.NewClientConn(conn, addr, config)
 	if err != nil {
+		conn.Close()
 		return err
 	}
 	conn.SetDeadline(time.Time{}) //nolint:errcheck

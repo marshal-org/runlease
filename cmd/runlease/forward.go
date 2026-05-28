@@ -127,17 +127,22 @@ func runForward(cmd *cobra.Command, args []string) error {
 }
 
 // runForwards starts listeners for every spec and blocks until ctx is done.
-// Errors from individual listeners are logged but do not tear down the others.
+// Errors from individual listeners are logged but do not tear down the others —
+// partial-success is more useful than total failure when e.g. one local port
+// is already bound. Returns an error only if every requested forward failed.
 func runForwards(ctx context.Context, out io.Writer, client *cryptossh.Client, specs []forwardSpec) error {
 	var wg sync.WaitGroup
+	active := 0
 	for _, s := range specs {
 		s := s
 		switch s.dir {
 		case dirLocal:
 			l, err := net.Listen("tcp", s.listenAddr())
 			if err != nil {
-				return fmt.Errorf("listen %s: %w", s.listenAddr(), err)
+				fmt.Fprintf(out, "⚠️  listen %s: %v (skipping)\n", s.listenAddr(), err)
+				continue
 			}
+			active++
 			fmt.Fprintf(out, "🔀 -L %s → %s (via SSH)\n", s.listenAddr(), s.targetAddr())
 			wg.Add(1)
 			go func() {
@@ -161,8 +166,10 @@ func runForwards(ctx context.Context, out io.Writer, client *cryptossh.Client, s
 		case dirRemote:
 			l, err := client.Listen("tcp", s.listenAddr())
 			if err != nil {
-				return fmt.Errorf("remote listen %s: %w", s.listenAddr(), err)
+				fmt.Fprintf(out, "⚠️  remote listen %s: %v (skipping)\n", s.listenAddr(), err)
+				continue
 			}
+			active++
 			fmt.Fprintf(out, "🔀 -R %s → %s (instance side)\n", s.listenAddr(), s.targetAddr())
 			wg.Add(1)
 			go func() {
@@ -184,6 +191,9 @@ func runForwards(ctx context.Context, out io.Writer, client *cryptossh.Client, s
 				})
 			}()
 		}
+	}
+	if active == 0 {
+		return fmt.Errorf("no forwards came up — all %d failed to bind", len(specs))
 	}
 	fmt.Fprintln(out, "Forwards active — press Ctrl+C to stop.")
 	<-ctx.Done()
@@ -217,8 +227,16 @@ func proxyConn(a, b net.Conn) {
 }
 
 // newSSHClient builds an *ssh.Client from an established net.Conn and the
-// instance credential. Shared by forward, push, pull.
-func newSSHClient(conn net.Conn, addr string, cred *credential.EphemeralCredential) (*cryptossh.Client, error) {
+// instance credential. Takes ownership of conn — closes it on any error path
+// so callers don't need to remember a redundant defer. Shared by forward,
+// push/pull, and attach.
+func newSSHClient(conn net.Conn, addr string, cred *credential.EphemeralCredential) (client *cryptossh.Client, err error) {
+	defer func() {
+		if err != nil {
+			conn.Close()
+		}
+	}()
+
 	signer, err := cryptossh.ParsePrivateKey(cred.PrivateKeyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("parsing agent private key: %w", err)

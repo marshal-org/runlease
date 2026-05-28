@@ -97,16 +97,26 @@ func runUp(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 	default:
-		// No manifest, no --provider flag — try config default.
-		cfg, _ := rlconfig.Load(defaultConfigPath())
-		if cfg != nil && cfg.Defaults.Provider != "" {
-			quickProvider = cfg.Defaults.Provider
-			m, err = buildQuickManifest()
+		// 1. Look for runlease.yaml walking up from cwd. This lets `runlease up`
+		//    "just work" inside a project directory the same way `git status` does.
+		if discovered, derr := discoverProjectManifest(); derr == nil && discovered != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "📄 Using discovered manifest: %s\n", discovered)
+			m, err = manifest.Load(discovered)
 			if err != nil {
 				return err
 			}
 		} else {
-			return fmt.Errorf("provide --manifest/-m <file>, --provider/-p <aws|gcp>, or set a default with: runlease configure")
+			// 2. Fall back to config default provider for quick mode.
+			cfg, _ := rlconfig.Load(defaultConfigPath())
+			if cfg != nil && cfg.Defaults.Provider != "" {
+				quickProvider = cfg.Defaults.Provider
+				m, err = buildQuickManifest()
+				if err != nil {
+					return err
+				}
+			} else {
+				return fmt.Errorf("provide --manifest/-m <file>, --provider/-p <aws|gcp>, or set a default with: runlease configure")
+			}
 		}
 	}
 

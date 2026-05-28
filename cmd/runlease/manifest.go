@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"text/template"
 
 	"github.com/spf13/cobra"
@@ -101,6 +103,19 @@ type manifestTemplateData struct {
 
 func runManifestNew(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()
+
+	// Exit cleanly on Ctrl+C — Go retries interrupted I/O, so the signal
+	// would otherwise be swallowed by the blocking scanner.Scan() call.
+	// (Same pattern as `runlease configure`.)
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		fmt.Fprintln(out, "\nCancelled.")
+		os.Exit(0)
+	}()
+	defer signal.Stop(sigCh)
+
 	scanner := bufio.NewScanner(cmd.InOrStdin())
 
 	ask := func(question, def string) string {

@@ -130,36 +130,49 @@ func tailSetup(ctx context.Context, client *cryptossh.Client, out io.Writer) err
 		return err
 	}
 
-	doneCh := make(chan error, 1)
+	// markerCh is signalled the moment the markerWriter sees the marker. Buffer
+	// of 1 so the writer never blocks even if we're not yet selecting on it.
+	markerCh := make(chan struct{}, 1)
+	copyDone := make(chan error, 1)
 	go func() {
-		w := &markerWriter{out: out, marker: []byte(setupDoneMarker)}
-		_, _ = io.Copy(w, stdout)
-		if w.matched {
-			doneCh <- nil
-			return
-		}
-		doneCh <- fmt.Errorf("tail stream ended before setup-done marker")
+		w := &markerWriter{out: out, marker: []byte(setupDoneMarker), signal: markerCh}
+		_, err := io.Copy(w, stdout)
+		copyDone <- err
+	}()
+
+	defer func() {
+		// Tear down the tail process so io.Copy returns and the goroutine exits.
+		// SIGTERM is more universally honored by tail than SIGINT on the SSH
+		// channel; we also close the session as a backup.
+		_ = session.Signal(cryptossh.SIGTERM)
+		_ = session.Close()
+		<-copyDone // wait for the goroutine to finish so we don't leak it
 	}()
 
 	select {
 	case <-ctx.Done():
-		_ = session.Signal(cryptossh.SIGINT)
-		_ = session.Close()
 		return ctx.Err()
-	case err := <-doneCh:
-		_ = session.Signal(cryptossh.SIGINT)
+	case <-markerCh:
 		fmt.Fprintln(out, "✅ setup completed.")
-		return err
+		return nil
+	case err := <-copyDone:
+		// Stream ended (sshd closed our channel, network drop, etc.) before we
+		// saw the marker. Surface a useful error rather than blocking forever.
+		if err != nil {
+			return fmt.Errorf("tail stream ended: %w", err)
+		}
+		return fmt.Errorf("tail stream ended before setup-done marker")
 	}
 }
 
-// markerWriter streams bytes to `out` and flips `matched` true once `marker`
-// is observed in the stream. After matching, further writes still pass through
-// but the caller is expected to close the underlying source.
+// markerWriter streams bytes to `out` and signals on `signal` (non-blocking)
+// the first time `marker` is observed in the stream. Writes continue to pass
+// through after matching; the caller is expected to tear down the source.
 type markerWriter struct {
 	out     io.Writer
 	marker  []byte
-	buf     []byte // tail bytes carried over to handle marker split across writes
+	signal  chan<- struct{} // optional — receives once when marker is first seen
+	buf     []byte          // tail bytes carried over to handle marker split across writes
 	matched bool
 }
 
@@ -173,6 +186,14 @@ func (w *markerWriter) Write(p []byte) (int, error) {
 	if bytes.Contains(combined, w.marker) {
 		w.matched = true
 		w.buf = nil
+		if w.signal != nil {
+			// Non-blocking send: buffer of 1 plus default case so a slow
+			// receiver never wedges the writer.
+			select {
+			case w.signal <- struct{}{}:
+			default:
+			}
+		}
 		return n, err
 	}
 	keep := len(w.marker) - 1

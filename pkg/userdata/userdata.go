@@ -142,6 +142,7 @@ RUNLEASE_SETUP_EOF
   chmod +x /var/lib/runlease/setup/{{ printf "%02d" $i }}{{ if $s.Name }}-{{ $s.Name }}{{ end }}.sh
   bash /var/lib/runlease/setup/{{ printf "%02d" $i }}{{ if $s.Name }}-{{ $s.Name }}{{ end }}.sh
 {{- end }}
+  echo "__RUNLEASE_SETUP_DONE__"
   touch /run/runlease-setup-done
 } 2>&1 | tee -a /var/log/runlease-setup.log
 {{- end }}

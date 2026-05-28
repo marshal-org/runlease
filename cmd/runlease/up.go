@@ -36,6 +36,7 @@ var (
 	manifestPath  string
 	upTimeout     time.Duration
 	detach        bool
+	attach        bool
 	quickProvider string
 	quickRegion   string
 	quickSize     string
@@ -52,6 +53,7 @@ func init() {
 	upCmd.Flags().StringVarP(&manifestPath, "manifest", "m", "", "path to manifest YAML")
 	upCmd.Flags().DurationVar(&upTimeout, "timeout", 5*time.Minute, "timeout waiting for instance to become ready")
 	upCmd.Flags().BoolVarP(&detach, "detach", "d", false, "exit after provisioning without waiting for SSH")
+	upCmd.Flags().BoolVar(&attach, "attach", false, "after provisioning, tail setup logs and apply manifest.forwards (blocks until Ctrl+C)")
 	upCmd.Flags().StringVarP(&quickProvider, "provider", "p", "", "provider: aws or gcp (quick mode — no manifest needed)")
 	upCmd.Flags().StringVarP(&quickRegion, "region", "r", "", "region/zone (quick mode; defaults: us-east-1 for aws, us-central1-a for gcp)")
 	upCmd.Flags().StringVarP(&quickSize, "size", "s", "compute.small", "instance class (quick mode)")
@@ -282,6 +284,9 @@ func runUp(cmd *cobra.Command, _ []string) error {
 
 	if detach {
 		return nil
+	}
+	if attach {
+		return runAttach(cmd, m, running, cred, relayToken)
 	}
 	if m.Relay.Addr != "" {
 		return pollAndConnectViaRelay(cmd, m.Relay.Addr, relayToken, m.Name, cred)

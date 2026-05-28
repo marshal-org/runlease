@@ -51,7 +51,22 @@ relay:
 # tags:
 #   env: dev
 #   team: platform
+#
+# sudo: passwordless           # NOPASSWD: ALL for runlease-agent (default: locked)
+#
+# setup:                       # scripts run as root after bootstrap; output
+#   - name: install            # streams to /var/log/runlease-setup.log; touched
+#     run: |                   # /run/runlease-setup-done on success
+#       curl -sfL https://get.k3s.io | sh -
+#   # - name: seed
+#   #   file: ./scripts/seed.sh  # local file inlined at launch time
+#
+# forwards:                    # auto-applied by 'runlease up --attach' and
+#   - name: app                # 'runlease forward --all <name>'
+#     local: 8080              # direction: local (default) or remote
+#     remote: 80               # host: localhost (default)
 {{- if eq .Provider "aws" }}
+#
 # aws:
 #   securityGroupIDs:
 #     - sg-xxxxx
@@ -59,6 +74,7 @@ relay:
 #   instanceProfile: arn:aws:iam::123456789012:instance-profile/my-profile
 {{- end }}
 {{- if eq .Provider "gcp" }}
+#
 # gcp:
 #   serviceAccount: my-sa@my-project.iam.gserviceaccount.com
 #   networkTags:

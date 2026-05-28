@@ -1,0 +1,112 @@
+# marshal-test-manifest.yaml
+#
+# Spot instance for testing Marshal end-to-end: k3s + private GCP Artifact
+# Registry pulls via kubelet's CredentialProvider plugin (no static tokens,
+# no expiration to manage). Marshal images at
+# us-central1-docker.pkg.dev/marshal-dev-495114/... pull just-in-time.
+#
+# Detailed walkthrough (one-time IAM setup, verification commands, deploy
+# steps, troubleshooting):  docs/runlease-spot-testing.md
+#
+# TL;DR:
+#   runlease up --attach -m marshal-test-manifest.yaml
+
+name: marshal-test
+provider: gcp
+region: us-central1-a
+instanceClass: compute.large
+baseImage: projects/debian-cloud/global/images/family/debian-12
+
+reclaim:
+  ttl: 2h
+  selfTermination: true
+
+relay:
+  addr: wss://relay.snapmatch.ai
+
+sudo: passwordless
+
+gcp:
+  # Must have roles/artifactregistry.reader on the AR repos to pull from.
+  serviceAccount: ar-puller@marshal-dev-495114.iam.gserviceaccount.com
+
+setup:
+  - name: install-auth-provider-gcp
+    run: |
+      set -euo pipefail
+
+      BIN_DIR=/usr/local/lib/kubelet/credential-providers
+      mkdir -p "$BIN_DIR"
+
+      # Build auth-provider-gcp from source. The upstream repo doesn't ship a
+      # stable standalone release tarball, and the release-asset URLs change
+      # across versions — building from source is the reliable path.
+      apt-get update
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates curl git golang-go
+
+      tmp=$(mktemp -d)
+      GOPATH="$tmp" GOBIN="$BIN_DIR" \
+        go install k8s.io/cloud-provider-gcp/cmd/auth-provider-gcp@latest
+      rm -rf "$tmp"
+      chmod +x "$BIN_DIR/auth-provider-gcp"
+      "$BIN_DIR/auth-provider-gcp" --help >/dev/null  # smoke test
+
+      # Tell kubelet which binary to invoke for which image patterns.
+      # 30m cache so we don't shell out on every Pod schedule.
+      mkdir -p /etc/kubernetes
+      cat > /etc/kubernetes/credential-providers.yaml <<'EOF'
+      apiVersion: kubelet.config.k8s.io/v1
+      kind: CredentialProviderConfig
+      providers:
+        - name: auth-provider-gcp
+          apiVersion: credentialprovider.kubelet.k8s.io/v1
+          matchImages:
+            - "*.pkg.dev"
+            - "*-docker.pkg.dev"
+            - "gcr.io"
+            - "*.gcr.io"
+          defaultCacheDuration: "30m"
+          args:
+            - get-credentials
+            - --v=3
+      EOF
+
+  - name: install-k3s
+    run: |
+      set -euo pipefail
+
+      curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server \
+        --write-kubeconfig-mode=644 \
+        --kubelet-arg=image-credential-provider-config=/etc/kubernetes/credential-providers.yaml \
+        --kubelet-arg=image-credential-provider-bin-dir=/usr/local/lib/kubelet/credential-providers" \
+        sh -
+
+      for i in $(seq 1 60); do
+        if k3s kubectl get nodes 2>/dev/null | grep -q ' Ready'; then
+          echo "k3s ready (${i}s)"
+          break
+        fi
+        sleep 1
+      done
+      k3s kubectl get nodes
+      ss -tlnp | grep -E ':(80|443|6443)\b' || true
+
+  - name: verify-credential-provider-wired
+    run: |
+      # Fail loud if kubelet didn't pick up the credential-provider flags —
+      # otherwise pulls from AR would silently fall back to anonymous.
+      pgrep -af kubelet | grep -E 'image-credential-provider-(config|bin-dir)' \
+        || (echo "ERROR: kubelet did not pick up the credential provider flags" && exit 1)
+      echo "Credential provider wired into kubelet."
+
+forwards:
+  - name: kube-api
+    local: 16443
+    remote: 6443
+  - name: http
+    local: 8080
+    remote: 80
+  - name: https
+    local: 8443
+    remote: 443

@@ -36,17 +36,23 @@ setup:
     run: |
       set -euo pipefail
 
-      # Pin a known release. Newer versions usually drop-in fine; update if
-      # you hit a CredentialProvider API mismatch with your k3s version.
-      # Releases: https://github.com/kubernetes/cloud-provider-gcp/releases
-      APG_VERSION=v0.0.2
       BIN_DIR=/usr/local/lib/kubelet/credential-providers
       mkdir -p "$BIN_DIR"
 
-      curl -sfL \
-        "https://github.com/kubernetes/cloud-provider-gcp/releases/download/auth-provider-gcp/${APG_VERSION}/auth-provider-gcp-linux-amd64-${APG_VERSION}.tar.gz" \
-        | tar -xz -C "$BIN_DIR" auth-provider-gcp
+      # Build auth-provider-gcp from source. The upstream repo doesn't ship a
+      # stable standalone release tarball with predictable asset URLs, and
+      # GKE bundles it on its nodes rather than publishing for external use.
+      # Building from source costs ~60-90s of boot time but Just Works.
+      apt-get update
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates curl git golang-go
+
+      tmp=$(mktemp -d)
+      GOPATH="$tmp" GOBIN="$BIN_DIR" \
+        go install k8s.io/cloud-provider-gcp/cmd/auth-provider-gcp@latest
+      rm -rf "$tmp"
       chmod +x "$BIN_DIR/auth-provider-gcp"
+      "$BIN_DIR/auth-provider-gcp" --help >/dev/null  # smoke test
 
       # CredentialProvider config: tells kubelet which binary to invoke for
       # which image patterns. Cache the credential for 30 min on the kubelet

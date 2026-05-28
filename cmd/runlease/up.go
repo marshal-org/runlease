@@ -245,6 +245,7 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		CredDir:    credDir,
 		RelayAddr:  m.Relay.Addr,
 		RelayToken: relayToken,
+		Forwards:   manifestToRegistryForwards(m.Forwards),
 	}); err != nil {
 		return fmt.Errorf("updating registry: %w", err)
 	}
@@ -623,6 +624,22 @@ func mergeAutoTags(userTags map[string]string, name string, ttlSeconds int) map[
 		tags[k] = v
 	}
 	return tags
+}
+
+// manifestToRegistryForwards copies manifest.Forwards into the registry's
+// independent ForwardSpec shape (avoids a registry → manifest import cycle).
+func manifestToRegistryForwards(in []manifest.ForwardSpec) []registry.ForwardSpec {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]registry.ForwardSpec, len(in))
+	for i, f := range in {
+		out[i] = registry.ForwardSpec{
+			Name: f.Name, Direction: f.Direction, Bind: f.Bind,
+			Local: f.Local, Remote: f.Remote, Host: f.Host,
+		}
+	}
+	return out
 }
 
 // toUserdataSteps converts manifest setup steps into the simpler shape the

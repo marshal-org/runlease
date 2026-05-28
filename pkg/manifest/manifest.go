@@ -33,6 +33,20 @@ type Manifest struct {
 	// completes. Each step is either an inline `run:` script or a `file:`
 	// pointing at a local file that will be inlined at launch time.
 	Setup []SetupStep `yaml:"setup"`
+	// Forwards is the declarative version of `runlease forward -L …`. Applied
+	// by `runlease up --attach` and by `runlease forward --all <name>`.
+	Forwards []ForwardSpec `yaml:"forwards"`
+}
+
+// ForwardSpec declares one port forward attached to the instance.
+// Direction is "local" (default, == ssh -L) or "remote" (== ssh -R).
+type ForwardSpec struct {
+	Name      string `yaml:"name"`
+	Direction string `yaml:"direction"` // "local" (default) or "remote"
+	Bind      string `yaml:"bind"`      // local listen address; "" → 127.0.0.1
+	Local     int    `yaml:"local"`     // local port (mandatory for direction=local)
+	Remote    int    `yaml:"remote"`    // remote port (mandatory for direction=local)
+	Host      string `yaml:"host"`      // remote host on the instance side; default "localhost"
 }
 
 // SetupStep is one entry in manifest.setup. Exactly one of Run or File must
@@ -173,6 +187,16 @@ func (m *Manifest) Validate() error {
 		}
 		if s.Run != "" && s.File != "" {
 			return fmt.Errorf("manifest.setup[%d]: `run` and `file` are mutually exclusive", i)
+		}
+	}
+	for i, f := range m.Forwards {
+		switch f.Direction {
+		case "", "local", "remote":
+		default:
+			return fmt.Errorf("manifest.forwards[%d].direction invalid: %q (allowed: local, remote)", i, f.Direction)
+		}
+		if f.Local <= 0 || f.Remote <= 0 {
+			return fmt.Errorf("manifest.forwards[%d]: both `local` and `remote` ports are required", i)
 		}
 	}
 	return nil

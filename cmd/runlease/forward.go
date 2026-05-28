@@ -17,6 +17,8 @@ import (
 	cryptossh "golang.org/x/crypto/ssh"
 
 	"github.com/runlease/runlease/pkg/credential"
+	"github.com/runlease/runlease/pkg/manifest"
+	"github.com/runlease/runlease/pkg/registry"
 )
 
 var (
@@ -76,13 +78,12 @@ func runForward(cmd *cobra.Command, args []string) error {
 	specs := append([]forwardSpec(nil), parseForwardSpecs(forwardLocal, dirLocal)...)
 	specs = append(specs, parseForwardSpecs(forwardRemote, dirRemote)...)
 	if forwardAll {
-		// Manifest forwards are applied via runlease up --attach (Phase 1.3).
-		// When invoked stand-alone, we don't know the manifest path, so --all
-		// is only effective when used through up --attach. Surface a hint.
-		fmt.Fprintln(cmd.OutOrStdout(),
-			"hint: --all is honored by 'runlease up --attach'; pass -L/-R here.")
+		specs = append(specs, registryForwardsToSpecs(entry.Forwards)...)
 	}
 	if len(specs) == 0 {
+		if forwardAll {
+			return fmt.Errorf("instance %s has no forwards declared (manifest.forwards) — pass -L/-R", entry.Handle.ManifestName)
+		}
 		return fmt.Errorf("no forwards given — pass -L/-R (see 'runlease forward --help')")
 	}
 
@@ -298,6 +299,40 @@ func parseForwardSpecs(raw []string, dir forwardDirection) []forwardSpec {
 		out = append(out, s)
 	}
 	return out
+}
+
+// manifestForwardSpec converts a declarative manifest.ForwardSpec into the
+// internal forwardSpec used by the listener machinery.
+func manifestForwardSpec(f manifest.ForwardSpec) forwardSpec {
+	return forwardSpecFromShared(f.Direction, f.Bind, f.Local, f.Remote, f.Host)
+}
+
+// registryForwardsToSpecs is the registry-side equivalent — used by
+// `runlease forward --all` which reads from the persisted entry rather than
+// the original manifest.
+func registryForwardsToSpecs(in []registry.ForwardSpec) []forwardSpec {
+	out := make([]forwardSpec, 0, len(in))
+	for _, f := range in {
+		out = append(out, forwardSpecFromShared(f.Direction, f.Bind, f.Local, f.Remote, f.Host))
+	}
+	return out
+}
+
+func forwardSpecFromShared(direction, bind string, local, remote int, host string) forwardSpec {
+	dir := dirLocal
+	if direction == "remote" {
+		dir = dirRemote
+	}
+	if host == "" {
+		host = "localhost"
+	}
+	return forwardSpec{
+		dir:        dir,
+		bind:       bind,
+		listenPort: local,
+		targetHost: host,
+		targetPort: remote,
+	}
 }
 
 func parseForwardSpec(raw string, dir forwardDirection) (forwardSpec, error) {

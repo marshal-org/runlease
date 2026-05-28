@@ -15,7 +15,17 @@ import (
 	"github.com/runlease/runlease/pkg/registry"
 )
 
-var version = "dev"
+var (
+	version    = "dev"
+	outputMode string
+)
+
+func init() {
+	rootCmd.PersistentFlags().StringVar(&outputMode, "output", "", "alternative output format: json")
+}
+
+// jsonOutput returns true when the user asked for --output json (case-insensitive).
+func jsonOutput() bool { return outputMode == "json" || outputMode == "JSON" }
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
@@ -44,7 +54,7 @@ Manage instances:
   runlease down <name>         terminate an instance
 
 Manifest helpers:
-  runlease manifest init       interactive manifest wizard
+  runlease manifest new        interactive manifest wizard (alias: init)
   runlease catalog             list available instance classes`,
 }
 

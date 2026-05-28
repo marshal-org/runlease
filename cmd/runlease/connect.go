@@ -50,6 +50,10 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(out, "🔌 Connecting to %s via relay (%s)...\n",
 		entry.Handle.ManifestName, entry.RelayAddr)
 
+	// Forwards declared at launch time are auto-applied so reconnecting
+	// gives the same setup as the original `runlease up`.
+	forwards := registryForwardsToSpecs(entry.Forwards)
+
 	conn, err := dialRelay(entry.RelayAddr, entry.RelayToken)
 	if err != nil {
 		if strings.Contains(err.Error(), "unauthorized") {
@@ -59,15 +63,15 @@ func runConnect(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("relay: %w", err)
 			}
 			return pollAndConnectViaRelay(cmd, entry.RelayAddr, entry.RelayToken,
-				entry.Handle.ManifestName, cred)
+				entry.Handle.ManifestName, cred, forwards)
 		}
 		if strings.Contains(err.Error(), "close 1000") {
 			// Relay dropped the connection cleanly — agent is mid-reconnect (5s delay).
 			fmt.Fprintf(out, "⚠️  Agent reconnecting — waiting...\n")
 			return pollAndConnectViaRelay(cmd, entry.RelayAddr, entry.RelayToken,
-				entry.Handle.ManifestName, cred)
+				entry.Handle.ManifestName, cred, forwards)
 		}
 		return fmt.Errorf("relay: %w", err)
 	}
-	return sshOverConn(conn, entry.RelayAddr, cred)
+	return sshShellWithForwards(conn, entry.RelayAddr, cred, forwards, out)
 }

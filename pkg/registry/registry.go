@@ -15,6 +15,21 @@ type Entry struct {
 	CredDir    string                  `json:"credDir"`
 	RelayAddr  string                  `json:"relayAddr,omitempty"`
 	RelayToken string                  `json:"relayToken,omitempty"`
+	// Forwards holds the manifest.Forwards list at the time of `up`, so
+	// `forward --all` and `up --attach` can recreate them without re-reading
+	// the manifest. Stored as opaque JSON to avoid a registry → manifest import.
+	Forwards []ForwardSpec `json:"forwards,omitempty"`
+}
+
+// ForwardSpec is a registry-side copy of manifest.ForwardSpec, kept here to
+// keep registry self-contained (no manifest import).
+type ForwardSpec struct {
+	Name      string `json:"name,omitempty"`
+	Direction string `json:"direction,omitempty"`
+	Bind      string `json:"bind,omitempty"`
+	Local     int    `json:"local"`
+	Remote    int    `json:"remote"`
+	Host      string `json:"host,omitempty"`
 }
 
 type Registry struct {

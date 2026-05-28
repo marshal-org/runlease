@@ -2,6 +2,8 @@ package manifest
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -162,6 +164,96 @@ func TestLoad_gcpFields(t *testing.T) {
 	}
 	if m.Relay.Addr != "relay.example.com:7777" {
 		t.Errorf("relay.addr = %q", m.Relay.Addr)
+	}
+}
+
+func TestSetup_inlineRun(t *testing.T) {
+	src := validYAML + `
+setup:
+  - name: install
+    run: |
+      echo hello
+`
+	f := writeTempFile(t, src)
+	m, err := Load(f)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(m.Setup) != 1 {
+		t.Fatalf("len(setup) = %d, want 1", len(m.Setup))
+	}
+	if m.Setup[0].Name != "install" {
+		t.Errorf("name = %q, want install", m.Setup[0].Name)
+	}
+	if !strings.Contains(m.Setup[0].Run, "echo hello") {
+		t.Errorf("run = %q, want to contain 'echo hello'", m.Setup[0].Run)
+	}
+}
+
+func TestSetup_fileResolvedRelative(t *testing.T) {
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "seed.sh")
+	if err := os.WriteFile(scriptPath, []byte("#!/bin/bash\necho seeded\n"), 0644); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+	manifestPath := filepath.Join(dir, "manifest.yaml")
+	if err := os.WriteFile(manifestPath, []byte(validYAML+"\nsetup:\n  - file: seed.sh\n"), 0644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	m, err := Load(manifestPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !strings.Contains(m.Setup[0].Run, "echo seeded") {
+		t.Errorf("file: was not inlined into run: got %q", m.Setup[0].Run)
+	}
+	if m.Setup[0].File != "" {
+		t.Errorf("File should be cleared after inlining, got %q", m.Setup[0].File)
+	}
+}
+
+func TestSetup_invalidMutualExclusion(t *testing.T) {
+	src := validYAML + `
+setup:
+  - run: "echo a"
+    file: nope.sh
+`
+	f := writeTempFile(t, src)
+	_, err := Load(f)
+	if err == nil {
+		t.Fatal("expected error when both run and file are set")
+	}
+}
+
+func TestSudoMode_defaultsAndValid(t *testing.T) {
+	cases := []struct {
+		mode    SudoMode
+		ok      bool
+		pwLess  bool
+	}{
+		{"", true, false},
+		{SudoLocked, true, false},
+		{SudoPasswordless, true, true},
+		{"yolo", false, false},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.mode), func(t *testing.T) {
+			m := &Manifest{
+				Name: "n", Provider: "aws", Region: "us-east-1",
+				InstanceType: "t3.micro", BaseImage: "ami-x",
+				Sudo: tc.mode,
+			}
+			err := m.Validate()
+			if tc.ok && err != nil {
+				t.Fatalf("Validate() = %v, want nil", err)
+			}
+			if !tc.ok && err == nil {
+				t.Fatal("Validate() = nil, want error")
+			}
+			if got := m.Sudo.IsPasswordless(); got != tc.pwLess {
+				t.Errorf("IsPasswordless() = %v, want %v", got, tc.pwLess)
+			}
+		})
 	}
 }
 

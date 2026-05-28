@@ -1,0 +1,176 @@
+# Manifest reference
+
+A runlease manifest is a YAML file that describes the spot instance you want to launch and what to do once it's up. Authoritative schema: [`pkg/manifest/manifest.go`](../pkg/manifest/manifest.go).
+
+The fastest way to get one is `runlease manifest new` (an interactive wizard). This page documents every field so you can hand-edit one or know what to uncomment in the wizard output.
+
+---
+
+## Minimal manifest
+
+```yaml
+name: my-runner
+provider: gcp
+region: us-central1-a
+instanceClass: compute.small
+reclaim:
+  ttl: 2h
+relay:
+  addr: wss://relay.snapmatch.ai
+```
+
+Launch with `runlease up -m my-runner-manifest.yaml`.
+
+---
+
+## Top-level fields
+
+### Required
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | string | Instance name. Becomes the hostname prefix (`rl-<name>-<rand>`), the registry key, and the `runlease-managed` tag. |
+| `provider` | enum | `aws` or `gcp`. |
+| `region` | string | AWS region (`us-east-1`) or GCP zone (`us-central1-a`). |
+| **one of** `instanceClass` **or** `instanceType` | string | Portable class (`compute.small` …) **or** concrete cloud type (`t3.large`, `e2-standard-4`). Mutually exclusive. |
+
+### Image
+
+| Field | Default | Notes |
+|---|---|---|
+| `baseImage` | auto-detected for `aws` (latest AL2023) and `gcp` (Debian 12 family) | AMI ID for AWS; image family path for GCP. Required for other providers. |
+
+### Networking
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `publicIp` | bool | `true` (or `false` if `relay.addr` is set) | Attach a public IP. When `false` on GCP, ensure Cloud NAT is set up so the instance can reach the relay. |
+| `relay.addr` | string | — | `wss://…` or `host:port`. Enables the relay tunnel. With this set, no inbound firewall rule is needed. |
+
+### Lifecycle
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `reclaim.ttl` | duration | — | `2h`, `90m`, `1d`. Auto-terminate after this much elapsed time. |
+| `reclaim.selfTermination` | bool | `false` | Install `/usr/local/bin/runlease-terminate` + a `systemd-run` timer. Required for TTL to actually fire from inside the VM. |
+| `tags` | map[string]string | — | AWS tags / GCP labels. User keys override the auto-injected `runlease-managed`, `runlease-created-by`, `runlease-expires-at`. |
+
+### Sudo
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `sudo` | enum | `locked` | `locked`: only `/usr/local/bin/runlease-terminate` is `NOPASSWD`. `passwordless`: writes `runlease-agent ALL=(ALL) NOPASSWD: ALL` to `/etc/sudoers.d/runlease-agent-full` at boot. **Cannot be added to a running VM** — set it before launch. |
+
+```yaml
+sudo: passwordless
+```
+
+### Setup scripts
+
+`setup` runs as root after the runlease bootstrap completes. Output streams to `/var/log/runlease-setup.log`; `/run/runlease-setup-done` is touched on success.
+
+```yaml
+setup:
+  - name: install-k3s
+    run: |
+      curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--write-kubeconfig-mode=644" sh -
+      until k3s kubectl get nodes 2>/dev/null | grep -q ' Ready'; do sleep 1; done
+  - name: seed
+    file: ./scripts/seed.sh    # local file inlined at manifest-load time
+```
+
+Each step has:
+- `name`: optional, used for the step's script filename `/var/lib/runlease/setup/NN-name.sh` and the section header in the log.
+- `run`: inline bash. Mutually exclusive with `file`.
+- `file`: local file path (relative to the manifest dir). Inlined into the userdata at launch — the VM doesn't need to fetch it.
+
+Idempotency is your problem. The wrapping script uses `set -euo pipefail`, so a failing step halts and the `__RUNLEASE_SETUP_DONE__` marker is never written (which is the signal `runlease up --attach` watches for).
+
+### Forwards
+
+`forwards` is the declarative version of `runlease forward -L`. Applied by `runlease up --attach` and by `runlease forward --all <name>`.
+
+```yaml
+forwards:
+  - name: kube-api
+    local: 16443      # listen on this port (default bind 127.0.0.1)
+    remote: 6443      # dial this on the instance side
+  - name: app
+    direction: local  # default; "remote" for ssh -R semantics
+    bind: 0.0.0.0     # default 127.0.0.1
+    host: localhost   # default; remote-side hostname
+    local: 8080
+    remote: 80
+```
+
+Persisted to the registry at `up` time so `forward --all` doesn't need to re-read the manifest.
+
+### Provider-specific
+
+#### AWS
+
+| Field | Type | Notes |
+|---|---|---|
+| `aws.securityGroupIDs` | []string | Attach these SGs. |
+| `aws.subnetID` | string | Subnet placement. |
+| `aws.instanceProfile` | string | IAM instance profile ARN — required if your setup scripts hit AWS APIs. |
+
+#### GCP
+
+| Field | Type | Notes |
+|---|---|---|
+| `gcp.serviceAccount` | string | SA email to attach. Needed for `selfTermination: true` (the script uses the metadata server to issue the delete call). |
+| `gcp.networkTags` | []string | GCE network tags — typically firewall selectors. |
+
+---
+
+## Full example
+
+```yaml
+name: bastion-dev
+provider: gcp
+region: us-central1-a
+instanceClass: compute.large
+baseImage: projects/debian-cloud/global/images/family/debian-12
+
+publicIp: false                      # relay-only access
+relay:
+  addr: wss://relay.snapmatch.ai
+
+reclaim:
+  ttl: 4h
+  selfTermination: true
+
+tags:
+  env: dev
+  team: platform
+
+sudo: passwordless
+
+setup:
+  - name: install-k3s
+    run: |
+      curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--write-kubeconfig-mode=644" sh -
+      until k3s kubectl get nodes 2>/dev/null | grep -q ' Ready'; do sleep 1; done
+
+forwards:
+  - name: kube-api
+    local: 16443
+    remote: 6443
+
+gcp:
+  serviceAccount: deployer@my-project.iam.gserviceaccount.com
+  networkTags:
+    - allow-egress-only
+```
+
+Launch with `runlease up --attach -m bastion-dev-manifest.yaml`.
+
+---
+
+## See also
+
+- [`runlease manifest new`](../cmd/runlease/manifest.go) — interactive wizard
+- [`examples/manifests/`](../examples/manifests/) — minimal sample manifests
+- [`CLAUDE.md`](../CLAUDE.md) — architecture, security invariants, deployment story
+- [`docs/k3s-bastion-integration.md`](k3s-bastion-integration.md) — example end-to-end use case

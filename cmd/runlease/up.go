@@ -36,6 +36,7 @@ var (
 	manifestPath  string
 	upTimeout     time.Duration
 	detach        bool
+	attach        bool
 	quickProvider string
 	quickRegion   string
 	quickSize     string
@@ -52,6 +53,7 @@ func init() {
 	upCmd.Flags().StringVarP(&manifestPath, "manifest", "m", "", "path to manifest YAML")
 	upCmd.Flags().DurationVar(&upTimeout, "timeout", 5*time.Minute, "timeout waiting for instance to become ready")
 	upCmd.Flags().BoolVarP(&detach, "detach", "d", false, "exit after provisioning without waiting for SSH")
+	upCmd.Flags().BoolVar(&attach, "attach", false, "after provisioning, tail setup logs and apply manifest.forwards (blocks until Ctrl+C)")
 	upCmd.Flags().StringVarP(&quickProvider, "provider", "p", "", "provider: aws or gcp (quick mode — no manifest needed)")
 	upCmd.Flags().StringVarP(&quickRegion, "region", "r", "", "region/zone (quick mode; defaults: us-east-1 for aws, us-central1-a for gcp)")
 	upCmd.Flags().StringVarP(&quickSize, "size", "s", "compute.small", "instance class (quick mode)")
@@ -95,16 +97,26 @@ func runUp(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 	default:
-		// No manifest, no --provider flag — try config default.
-		cfg, _ := rlconfig.Load(defaultConfigPath())
-		if cfg != nil && cfg.Defaults.Provider != "" {
-			quickProvider = cfg.Defaults.Provider
-			m, err = buildQuickManifest()
+		// 1. Look for runlease.yaml walking up from cwd. This lets `runlease up`
+		//    "just work" inside a project directory the same way `git status` does.
+		if discovered, derr := discoverProjectManifest(); derr == nil && discovered != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "📄 Using discovered manifest: %s\n", discovered)
+			m, err = manifest.Load(discovered)
 			if err != nil {
 				return err
 			}
 		} else {
-			return fmt.Errorf("provide --manifest/-m <file>, --provider/-p <aws|gcp>, or set a default with: runlease configure")
+			// 2. Fall back to config default provider for quick mode.
+			cfg, _ := rlconfig.Load(defaultConfigPath())
+			if cfg != nil && cfg.Defaults.Provider != "" {
+				quickProvider = cfg.Defaults.Provider
+				m, err = buildQuickManifest()
+				if err != nil {
+					return err
+				}
+			} else {
+				return fmt.Errorf("provide --manifest/-m <file>, --provider/-p <aws|gcp>, or set a default with: runlease configure")
+			}
 		}
 	}
 
@@ -166,6 +178,8 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		Provider:          m.Provider,
 		SelfTermination:   m.Reclaim.SelfTermination,
 		TTLSeconds:        ttlSeconds,
+		PasswordlessSudo:  m.Sudo.IsPasswordless(),
+		SetupSteps:        toUserdataSteps(m.Setup),
 	})
 	if err != nil {
 		return fmt.Errorf("building user-data: %w", err)
@@ -243,52 +257,70 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		CredDir:    credDir,
 		RelayAddr:  m.Relay.Addr,
 		RelayToken: relayToken,
+		Forwards:   manifestToRegistryForwards(m.Forwards),
 	}); err != nil {
 		return fmt.Errorf("updating registry: %w", err)
 	}
 
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "\n✅ Instance ready!\n")
-	fmt.Fprintf(out, "   Name:      %s\n", m.Name)
-	fmt.Fprintf(out, "   ID:        %s\n", running.ID)
-	if running.PublicIP != "" {
-		fmt.Fprintf(out, "   Public IP: %s\n", running.PublicIP)
-	}
-	if running.ExpiresAt != nil {
-		fmt.Fprintf(out, "   Expires:   %s (%s)\n", running.ExpiresAt.Format(time.RFC3339), time.Until(*running.ExpiresAt).Round(time.Second))
-	}
-	if m.Relay.Addr != "" {
-		fmt.Fprintf(out, "\n🔌 Connect via relay:\n\n   runlease connect %s\n", m.Name)
-	} else {
-		fmt.Fprintf(out, "\n🔌 Connect:\n\n   runlease ssh %s\n", m.Name)
-		if running.PublicIP == "" {
-			fmt.Fprintf(out, "\n💡 No public IP assigned — add 'relay.addr' to your manifest for relay-based access,\n")
-			fmt.Fprintf(out, "   or set 'publicIp: true' for direct SSH.\n")
-		} else {
-			fmt.Fprintf(out, "\n💡 Tip: add a relay to connect without a public IP next time:\n")
-			fmt.Fprintf(out, "   runlease config set relay.addr wss://relay.snapmatch.ai\n")
+	if jsonOutput() {
+		if err := writeUpJSON(cmd, m, running); err != nil {
+			return err
 		}
-	}
+		if detach {
+			return nil
+		}
+		// Even in JSON mode, if the user wants to attach/connect we still do so.
+	} else {
+		fmt.Fprintf(out, "\n✅ Instance ready!\n")
+		fmt.Fprintf(out, "   Name:      %s\n", m.Name)
+		fmt.Fprintf(out, "   ID:        %s\n", running.ID)
+		if running.PublicIP != "" {
+			fmt.Fprintf(out, "   Public IP: %s\n", running.PublicIP)
+		}
+		if running.ExpiresAt != nil {
+			fmt.Fprintf(out, "   Expires:   %s (%s)\n", running.ExpiresAt.Format(time.RFC3339), time.Until(*running.ExpiresAt).Round(time.Second))
+		}
+		if m.Relay.Addr != "" {
+			fmt.Fprintf(out, "\n🔌 Connect via relay:\n\n   runlease connect %s\n", m.Name)
+		} else {
+			fmt.Fprintf(out, "\n🔌 Connect:\n\n   runlease ssh %s\n", m.Name)
+			if running.PublicIP == "" {
+				fmt.Fprintf(out, "\n💡 No public IP assigned — add 'relay.addr' to your manifest for relay-based access,\n")
+				fmt.Fprintf(out, "   or set 'publicIp: true' for direct SSH.\n")
+			} else {
+				fmt.Fprintf(out, "\n💡 Tip: add a relay to connect without a public IP next time:\n")
+				fmt.Fprintf(out, "   runlease config set relay.addr wss://relay.snapmatch.ai\n")
+			}
+		}
 
-	fmt.Fprintf(out, "\n🛑 To terminate:\n")
-	fmt.Fprintf(out, "   runlease down %s\n", m.Name)
-	fmt.Fprintf(out, "   # or from inside the instance: sudo /usr/local/bin/runlease-terminate\n")
-	if running.ExpiresAt != nil {
-		fmt.Fprintf(out, "   # or wait — auto-terminates in %s\n", time.Until(*running.ExpiresAt).Round(time.Second))
+		fmt.Fprintf(out, "\n🛑 To terminate:\n")
+		fmt.Fprintf(out, "   runlease down %s\n", m.Name)
+		fmt.Fprintf(out, "   # or from inside the instance: sudo /usr/local/bin/runlease-terminate\n")
+		if running.ExpiresAt != nil {
+			fmt.Fprintf(out, "   # or wait — auto-terminates in %s\n", time.Until(*running.ExpiresAt).Round(time.Second))
+		}
 	}
 
 	if detach {
 		return nil
 	}
-	if m.Relay.Addr != "" {
-		return pollAndConnectViaRelay(cmd, m.Relay.Addr, relayToken, m.Name, cred)
+	if attach {
+		return runAttach(cmd, m, running, cred, relayToken)
 	}
-	return pollAndConnect(cmd, running.PublicIP, m.Name, cred)
+	// Manifest forwards auto-apply alongside the interactive shell. The
+	// shell runs in the foreground; forwards run in a goroutine on the same
+	// SSH client and are torn down when the shell exits.
+	specs := registryForwardsToSpecs(manifestToRegistryForwards(m.Forwards))
+	if m.Relay.Addr != "" {
+		return pollAndConnectViaRelay(cmd, m.Relay.Addr, relayToken, m.Name, cred, specs)
+	}
+	return pollAndConnect(cmd, running.PublicIP, m.Name, cred, specs)
 }
 
 const sshPollInterval = 8 * time.Second
 
-func pollAndConnect(cmd *cobra.Command, publicIP, name string, cred *credential.EphemeralCredential) error {
+func pollAndConnect(cmd *cobra.Command, publicIP, name string, cred *credential.EphemeralCredential, forwards []forwardSpec) error {
 	out := cmd.OutOrStdout()
 
 	sigCh := make(chan os.Signal, 1)
@@ -311,8 +343,15 @@ func pollAndConnect(cmd *cobra.Command, publicIP, name string, cred *credential.
 		d := &net.Dialer{Timeout: 5 * time.Second}
 		conn, err := d.DialContext(pollCtx, "tcp", publicIP+":22")
 		if err == nil {
+			// Build a fresh conn for sshShellWithForwards (the probe conn was closed).
+			sshConn, derr := net.DialTimeout("tcp", publicIP+":22", 10*time.Second)
 			conn.Close()
-			sshErr := sshSession(publicIP, cred)
+			var sshErr error
+			if derr != nil {
+				sshErr = derr
+			} else {
+				sshErr = sshShellWithForwards(sshConn, publicIP+":22", cred, forwards, out)
+			}
 			if sshErr != nil && strings.Contains(sshErr.Error(), "host key mismatch") {
 				// sshd is up but the startup script hasn't injected our key yet.
 				fmt.Fprintf(out, "🔄 sshd up, startup script still running — retrying in %s...\n", sshPollInterval)
@@ -338,7 +377,7 @@ func pollAndConnect(cmd *cobra.Command, publicIP, name string, cred *credential.
 	}
 }
 
-func pollAndConnectViaRelay(cmd *cobra.Command, relayAddr, token, name string, cred *credential.EphemeralCredential) error {
+func pollAndConnectViaRelay(cmd *cobra.Command, relayAddr, token, name string, cred *credential.EphemeralCredential, forwards []forwardSpec) error {
 	out := cmd.OutOrStdout()
 	readyURL := relayHTTPBase(relayAddr) + "/ready"
 
@@ -372,7 +411,7 @@ func pollAndConnectViaRelay(cmd *cobra.Command, relayAddr, token, name string, c
 				if err != nil {
 					return fmt.Errorf("relay: %w", err)
 				}
-				return sshOverConn(conn, relayAddr, cred)
+				return sshShellWithForwards(conn, relayAddr, cred, forwards, out)
 			}
 		}
 
@@ -621,6 +660,66 @@ func mergeAutoTags(userTags map[string]string, name string, ttlSeconds int) map[
 		tags[k] = v
 	}
 	return tags
+}
+
+// manifestToRegistryForwards copies manifest.Forwards into the registry's
+// independent ForwardSpec shape (avoids a registry → manifest import cycle).
+func manifestToRegistryForwards(in []manifest.ForwardSpec) []registry.ForwardSpec {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]registry.ForwardSpec, len(in))
+	for i, f := range in {
+		out[i] = registry.ForwardSpec{
+			Name: f.Name, Direction: f.Direction, Bind: f.Bind,
+			Local: f.Local, Remote: f.Remote, Host: f.Host,
+		}
+	}
+	return out
+}
+
+// writeUpJSON emits a compact, stable JSON record describing the new instance.
+// Used by CI/scripts via `runlease up --output json`.
+func writeUpJSON(cmd *cobra.Command, m *manifest.Manifest, running *provider.InstanceHandle) error {
+	type rec struct {
+		Name      string `json:"name"`
+		ID        string `json:"id"`
+		Provider  string `json:"provider"`
+		Region    string `json:"region"`
+		PublicIP  string `json:"publicIp,omitempty"`
+		PrivateIP string `json:"privateIp,omitempty"`
+		Relay     string `json:"relay,omitempty"`
+		ExpiresAt string `json:"expiresAt,omitempty"`
+	}
+	r := rec{
+		Name:      m.Name,
+		ID:        string(running.ID),
+		Provider:  m.Provider,
+		Region:    m.Region,
+		PublicIP:  running.PublicIP,
+		PrivateIP: running.PrivateIP,
+		Relay:     m.Relay.Addr,
+	}
+	if running.ExpiresAt != nil {
+		r.ExpiresAt = running.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+	enc := json.NewEncoder(cmd.OutOrStdout())
+	enc.SetIndent("", "  ")
+	return enc.Encode(r)
+}
+
+// toUserdataSteps converts manifest setup steps into the simpler shape the
+// userdata template expects. File: references have already been inlined at
+// manifest load time.
+func toUserdataSteps(steps []manifest.SetupStep) []userdata.SetupStep {
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]userdata.SetupStep, len(steps))
+	for i, s := range steps {
+		out[i] = userdata.SetupStep{Name: s.Name, Run: s.Run}
+	}
+	return out
 }
 
 func currentUsername() string {

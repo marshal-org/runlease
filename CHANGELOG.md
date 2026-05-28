@@ -4,10 +4,40 @@ All notable changes to this project will be documented here.
 
 ---
 
-## [0.0.5] — 2026-05-08
+## [0.0.6] — 2026-05-28
 
 ### Added
-- `cmd/runlease/root.go`: `RUNLEASE_HOME` env var — overrides the base directory for all runlease state (`config.yaml`, `registry.json`, `master.key`, `credentials/`); defaults to `~/.runlease` when unset
+- `cmd/runlease/manifest.go`: `runlease manifest new` — renamed from `manifest init` (kept as an alias for back-compat). Default output filename is now `<instance-name>-manifest.yaml` (derived from the entered instance name) instead of the always-collide-prone `manifest.yaml`. `-o/--output` still overrides. Ctrl+C during the wizard now exits cleanly with `Cancelled.` (was previously swallowed by the blocking `scanner.Scan()`) — mirrors the existing signal handling in `runlease configure`
+- `cmd/runlease/manifest.go`: `runlease manifest schema` — prints the full annotated manifest schema (every field, every default, with inline comments) to stdout. Lets users discover the schema from the installed binary without needing the source checkout. Pipe to a file to start hand-editing: `runlease manifest schema > my-runner-manifest.yaml`
+- `cmd/runlease/manifest.go`: wizard now prompts for `Sudo (locked/passwordless)` after the relay prompt; `passwordless` writes `sudo: passwordless` into the generated manifest. Locked stays the default
+- `docs/manifest.md`: new field-by-field reference for the manifest schema (useful when browsing the repo on GitHub; CLI users should prefer `runlease manifest schema`)
+- `examples/manifests/gcp-ar-private-pull.yaml`: starter manifest for spot instances that need to pull from a private GCP Artifact Registry. Uses the kubelet `CredentialProvider` plugin (`auth-provider-gcp` binary + `kubelet.config.k8s.io/v1` `CredentialProviderConfig` keyed to `*.pkg.dev` / `*.gcr.io`) so credentials are minted on every pull from the GCE metadata server — no static token in `registries.yaml`, no expiration, no refresh timer. The k3s install passes the credential-provider config and bin-dir as `--kubelet-arg`s; a third setup step asserts kubelet actually picked them up
+- `cmd/runlease/exec.go`: new `runlease exec [name] -- <cmd>` — runs a command on the instance over the existing SSH/relay tunnel without allocating a PTY; streams stdout/stderr, forwards stdin (unless `--no-stdin`), propagates the remote exit code. Prefers relay when one is configured, `-R/--relay` forces relay over direct SSH
+- `cmd/runlease/forward.go`: new `runlease forward [name] -L/-R …` — OpenSSH-style port forwards over the SSH/relay tunnel. Local forwards listen on the dev machine and dial out to the instance; remote forwards listen on the instance and dial back. `--all` applies every entry in `manifest.forwards` from the registry. Blocks until Ctrl+C
+- `cmd/runlease/transfer.go`: new `runlease push [name] <local> <remote>` / `runlease pull [name] <remote> <local>` — file transfer over the SSH/relay tunnel via SFTP (`github.com/pkg/sftp`). Mirrors `scp` UX: pulling into an existing local directory uses the remote basename; push preserves file mode
+- `cmd/runlease/attach.go`: new `runlease up --attach` mode — after provisioning, waits for the SSH/relay tunnel, tails `/var/log/runlease-setup.log` until the `__RUNLEASE_SETUP_DONE__` marker appears, then applies every `manifest.forwards` entry and blocks until Ctrl+C. One command for the developer-flow happy path (launch → setup → forwards live)
+- `cmd/runlease/discover.go`: `runlease up` (no `-m` and no `--provider`) walks up from `cwd` looking for `runlease.yaml` (or `.yml`) and uses the first one it finds. Walk stops at filesystem root or `$HOME`
+- `cmd/runlease/root.go`: `--output json` persistent flag — wires through `up`, `list`, and `exec` for CI/scripting. Stable JSON schemas; `exec` writes its `{command, exitCode}` record to stderr so stdout stays clean
+- `pkg/manifest/manifest.go`: `sudo: passwordless` — opt-in NOPASSWD: ALL for the `runlease-agent` user via `/etc/sudoers.d/runlease-agent-full`. Default `locked` keeps the existing security posture (only `/usr/local/bin/runlease-terminate` is sudo-allowed)
+- `pkg/manifest/manifest.go`: `setup:` — list of `run:` / `file:` scripts that execute as root after the runlease bootstrap completes. Output streams to `/var/log/runlease-setup.log`; `/run/runlease-setup-done` is touched on success. `file:` references are inlined at manifest-load time relative to the manifest directory
+- `pkg/manifest/manifest.go`: `forwards:` — declarative list of port-forward entries, persisted to the registry at `up` time so `forward --all` and `up --attach` re-apply them without re-reading the manifest
+- `pkg/registry/registry.go`: `ForwardSpec` — registry-side copy of `manifest.ForwardSpec` (kept here to avoid a registry → manifest import); stored on `Entry.Forwards`
+- `pkg/agent/agent.go`: new package — extracts the agent core loop (dial relay, register, yamux server, accept streams) from `cmd/runlease-agent/main.go` so it can be exercised by integration tests and reused by future tooling
+- `cmd/runlease-agent`: `RUNLEASE_LOCAL_TARGET` env var (defaults to `localhost:22`) — TCP target each yamux stream is bridged to. Enables in-process testing and future bridging to non-standard sshd ports
+
+### Changed
+- `cmd/runlease/up.go`, `cmd/runlease/connect.go`: `runlease up -m <manifest>` (interactive mode, default) and `runlease connect <name>` now auto-apply `manifest.forwards` alongside the shell. Forwards run in a goroutine on the same SSH client; they're torn down when the shell exits. Yamux makes this concurrent-safe — the relay supports multiple client streams over one agent socket. `runlease up --detach` still exits immediately (no shell, no forwards), and `runlease up --attach` continues to be the no-shell-just-forwards mode
+- `cmd/runlease/ssh.go`: refactored `sshOverConn` to delegate client setup to the existing `newSSHClient` and extracted the PTY+shell logic into `sshInteractiveSession`, so the new with-forwards path can reuse it
+- `pkg/userdata/userdata.go`: the `runlease-terminate` script + `/etc/sudoers.d/runlease-terminate` drop-in are now installed on **every** VM regardless of `reclaim.selfTermination`. The flag now only gates the auto-fire `systemd-run` timer. Rationale: the script is a small operator convenience (`sudo runlease-terminate` cleanly shuts down the VM from the inside) and there's no good reason to make it opt-in. Strictly additive — no existing behavior removed
+- `pkg/relay/server.go`: replaced the 1:1 pair-once bridge with a multiplexed agent connection. The agent runs `yamux.Server` on its single outbound WebSocket; the relay runs `yamux.Client` and `OpenStream()`s per incoming CLI client. The CLI sees an unchanged byte stream — yamux is terminated by the relay against the agent's socket. Concurrent CLI processes (e.g. `forward` holding a tunnel while another shell runs `exec`/`push`/`pull`) all work against one VM through one agent socket. yamux keepalives stay enabled — the WebSocket layer doesn't ping, so NAT timeouts could otherwise silently drop idle outbound sessions
+- `pkg/relay/server.go`: dropped the `paired` / `ready` handshake messages (legacy 1:1 contract); coordinator now sets `instanceReady` as soon as the yamux session opens. Dropped the unused `instanceIdleLimit` constant
+- `pkg/userdata/userdata.go`: setup scripts (when `manifest.setup` is set) write to `/var/lib/runlease/setup/NN-name.sh`, execute with output `tee`'d to `/var/log/runlease-setup.log`, and emit `__RUNLEASE_SETUP_DONE__` to the log before touching `/run/runlease-setup-done` — so `--attach` and other tooling can poll for completion
+- `pkg/userdata/userdata.go`: passwordless sudo (when `manifest.sudo: passwordless`) writes `/etc/sudoers.d/runlease-agent-full` with `runlease-agent ALL=(ALL) NOPASSWD: ALL`
+- `cmd/runlease-agent/main.go`: slimmed to a thin reconnect loop on top of `pkg/agent.RunOnce`
+- `pkg/relay/server_test.go`: rewritten for the yamux flow; added `TestRelay_concurrentClients` exercising N concurrent client websockets through one agent yamux session
+
+### Fixed
+- `cmd/runlease/attach.go`: `markerWriter` now signals a non-blocking channel when the setup-done marker is first seen, and `tailSetup` selects on `(ctx.Done, marker, copy-end)` with deferred tail teardown. Previously `io.Copy` on `tail -F` never returned on its own, so attach would block forever after setup completed even though the marker had been received
 
 ## [0.0.4] — 2026-05-05
 

@@ -11,8 +11,10 @@ import (
 const script = `#!/bin/bash
 set -euo pipefail
 
-# ── self-termination ──────────────────────────────────────────────────────────
-{{- if .SelfTermination }}
+# ── terminate script ─────────────────────────────────────────────────────────
+# Always installed — it's a small convenience tool, not a policy. The
+# reclaim.selfTermination field only controls whether the systemd-run timer
+# below auto-fires it at TTL.
 {{- if eq .Provider "gcp" }}
 cat > /usr/local/bin/runlease-terminate << 'TERM_EOF'
 #!/bin/bash
@@ -44,9 +46,8 @@ chmod +x /usr/local/bin/runlease-terminate
 echo "runlease-agent ALL=(ALL) NOPASSWD: /usr/local/bin/runlease-terminate" \
   > /etc/sudoers.d/runlease-terminate
 chmod 440 /etc/sudoers.d/runlease-terminate
-{{- if .TTLSeconds }}
+{{- if and .SelfTermination .TTLSeconds }}
 systemd-run --on-active={{ .TTLSeconds }} /usr/local/bin/runlease-terminate
-{{- end }}
 {{- end }}
 
 # ── runlease-agent user ──────────────────────────────────────────────────────
@@ -88,6 +89,12 @@ ClientAliveCountMax 2
 SSHD_EOF
 
 systemctl restart sshd 2>/dev/null || service ssh restart 2>/dev/null || true
+{{- if .PasswordlessSudo }}
+
+# ── passwordless sudo (opt-in via manifest.sudo: passwordless) ───────────────
+echo "runlease-agent ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/runlease-agent-full
+chmod 440 /etc/sudoers.d/runlease-agent-full
+{{- end }}
 {{- if .RelayAddr }}
 
 # ── runlease relay agent ──────────────────────────────────────────────────────
@@ -118,6 +125,28 @@ SVCEOF
 systemctl daemon-reload
 systemctl enable --now runlease-agent
 {{- end }}
+{{- if .SetupSteps }}
+
+# ── user setup scripts (from manifest.setup) ─────────────────────────────────
+# Each step is written to /var/lib/runlease/setup/NN-name.sh and executed with
+# its output tee'd to /var/log/runlease-setup.log. The sentinel file
+# /run/runlease-setup-done is written on success so callers can poll for it.
+mkdir -p /var/lib/runlease/setup
+: > /var/log/runlease-setup.log
+chmod 644 /var/log/runlease-setup.log
+{
+{{- range $i, $s := .SetupSteps }}
+  echo "── runlease setup [{{ printf "%02d" $i }}{{ if $s.Name }} {{ $s.Name }}{{ end }}] ──"
+  cat > /var/lib/runlease/setup/{{ printf "%02d" $i }}{{ if $s.Name }}-{{ $s.Name }}{{ end }}.sh << 'RUNLEASE_SETUP_EOF'
+{{ $s.Run }}
+RUNLEASE_SETUP_EOF
+  chmod +x /var/lib/runlease/setup/{{ printf "%02d" $i }}{{ if $s.Name }}-{{ $s.Name }}{{ end }}.sh
+  bash /var/lib/runlease/setup/{{ printf "%02d" $i }}{{ if $s.Name }}-{{ $s.Name }}{{ end }}.sh
+{{- end }}
+  echo "__RUNLEASE_SETUP_DONE__"
+  touch /run/runlease-setup-done
+} 2>&1 | tee -a /var/log/runlease-setup.log
+{{- end }}
 `
 
 var tmpl = template.Must(template.New("userdata").Parse(script))
@@ -129,11 +158,28 @@ type Params struct {
 	// Optional relay fields; relay setup is skipped when RelayAddr is empty.
 	RelayAddr  string
 	RelayToken string
-	// Self-termination. When SelfTermination is true the runlease-terminate script
-	// is installed. When TTLSeconds > 0 a systemd-run timer fires it automatically.
+	// The runlease-terminate script + dedicated sudoers drop-in are always
+	// installed (manual escape hatch for the operator). Only the systemd-run
+	// auto-fire timer is gated: it requires BOTH SelfTermination=true and
+	// TTLSeconds>0.
 	Provider        string // "gcp" or "aws"
-	SelfTermination bool   // install terminate script; required for TTL to work
-	TTLSeconds      int    // 0 = no timer (script still installed if SelfTermination is true)
+	SelfTermination bool   // schedule the auto-fire TTL timer
+	TTLSeconds      int    // 0 = no timer
+	// PasswordlessSudo grants the runlease-agent user NOPASSWD: ALL when true.
+	// Default false keeps the locked-down posture; only the runlease-terminate
+	// command is sudo-allowed.
+	PasswordlessSudo bool
+	// SetupSteps are inline scripts to run as root after bootstrap completes.
+	// They are executed in order; on success /run/runlease-setup-done is touched.
+	SetupSteps []SetupStep
+}
+
+// SetupStep is an inline bootstrap script. The userdata template writes each
+// to /var/lib/runlease/setup and runs it under bash with output captured to
+// /var/log/runlease-setup.log.
+type SetupStep struct {
+	Name string
+	Run  string
 }
 
 type templateData struct {
@@ -146,6 +192,8 @@ type templateData struct {
 	Provider         string
 	SelfTermination  bool
 	TTLSeconds       int
+	PasswordlessSudo bool
+	SetupSteps       []SetupStep
 }
 
 // relayHTTPBase converts a relay addr (host:port or ws[s]://...) to its HTTP
@@ -182,6 +230,8 @@ func Build(p Params) (string, error) {
 		Provider:         p.Provider,
 		SelfTermination:  p.SelfTermination,
 		TTLSeconds:       p.TTLSeconds,
+		PasswordlessSudo: p.PasswordlessSudo,
+		SetupSteps:       p.SetupSteps,
 	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {

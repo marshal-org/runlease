@@ -134,7 +134,7 @@ var configureCmd = &cobra.Command{
 			fmt.Fprintf(out, "   runlease config set relay.addr wss://your-relay.example.com\n")
 		}
 		fmt.Fprintf(out, "\n📋 Need advanced options? (VPC, security groups, custom AMI, service accounts)\n\n")
-		fmt.Fprintf(out, "   runlease manifest init     — guided wizard with all available fields\n")
+		fmt.Fprintf(out, "   runlease manifest new      — guided wizard with all available fields\n")
 		fmt.Fprintf(out, "   runlease up -m manifest.yaml\n")
 		fmt.Fprintln(out)
 		return nil

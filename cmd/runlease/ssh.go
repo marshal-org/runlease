@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -69,36 +68,18 @@ func sshSession(publicIP string, cred *credential.EphemeralCredential) error {
 // sshOverConn runs an interactive SSH session over an already-established
 // net.Conn (used by both sshSession and the relay connect path).
 func sshOverConn(conn net.Conn, addr string, cred *credential.EphemeralCredential) error {
-	signer, err := cryptossh.ParsePrivateKey(cred.PrivateKeyPEM)
-	if err != nil {
-		return fmt.Errorf("parsing agent private key: %w", err)
-	}
-
-	hostPub, _, _, _, err := cryptossh.ParseAuthorizedKey(
-		[]byte(strings.TrimSuffix(cred.HostPublicKeySSH, "\n")),
-	)
-	if err != nil {
-		return fmt.Errorf("parsing host public key: %w", err)
-	}
-
-	config := &cryptossh.ClientConfig{
-		User:              "runlease-agent",
-		Auth:              []cryptossh.AuthMethod{cryptossh.PublicKeys(signer)},
-		HostKeyCallback:   cryptossh.FixedHostKey(hostPub),
-		HostKeyAlgorithms: []string{"ssh-ed25519"},
-	}
-
-	// Apply handshake timeout via deadline; NewClientConn doesn't use Timeout.
-	conn.SetDeadline(time.Now().Add(10 * time.Second)) //nolint:errcheck
-	c, chans, reqs, err := cryptossh.NewClientConn(conn, addr, config)
+	client, err := newSSHClient(conn, addr, cred)
 	if err != nil {
 		return err
 	}
-	conn.SetDeadline(time.Time{}) //nolint:errcheck
-
-	client := cryptossh.NewClient(c, chans, reqs)
 	defer client.Close()
+	return sshInteractiveSession(client)
+}
 
+// sshInteractiveSession opens an interactive shell on the given SSH client and
+// blocks until it exits. Extracted from sshOverConn so the up-with-forwards
+// flow can start background forwards on the same client before calling this.
+func sshInteractiveSession(client *cryptossh.Client) error {
 	session, err := client.NewSession()
 	if err != nil {
 		return fmt.Errorf("opening SSH session: %w", err)

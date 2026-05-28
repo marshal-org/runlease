@@ -3,6 +3,7 @@ package manifest
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -23,7 +24,48 @@ type Manifest struct {
 	Tags     map[string]string `yaml:"tags"`
 	AWS      AWSConfig         `yaml:"aws"`
 	GCP      GCPConfig         `yaml:"gcp"`
+	// Sudo controls the sudo configuration of the runlease-agent user.
+	// "locked" (default) leaves the existing locked-down behaviour: NOPASSWD
+	// only for /usr/local/bin/runlease-terminate. "passwordless" grants
+	// NOPASSWD: ALL. Empty string means "locked".
+	Sudo SudoMode `yaml:"sudo"`
+	// Setup is a list of scripts to run as root after the runlease bootstrap
+	// completes. Each step is either an inline `run:` script or a `file:`
+	// pointing at a local file that will be inlined at launch time.
+	Setup []SetupStep `yaml:"setup"`
+	// Forwards is the declarative version of `runlease forward -L …`. Applied
+	// by `runlease up --attach` and by `runlease forward --all <name>`.
+	Forwards []ForwardSpec `yaml:"forwards"`
 }
+
+// ForwardSpec declares one port forward attached to the instance.
+// Direction is "local" (default, == ssh -L) or "remote" (== ssh -R).
+type ForwardSpec struct {
+	Name      string `yaml:"name"`
+	Direction string `yaml:"direction"` // "local" (default) or "remote"
+	Bind      string `yaml:"bind"`      // local listen address; "" → 127.0.0.1
+	Local     int    `yaml:"local"`     // local port (mandatory for direction=local)
+	Remote    int    `yaml:"remote"`    // remote port (mandatory for direction=local)
+	Host      string `yaml:"host"`      // remote host on the instance side; default "localhost"
+}
+
+// SetupStep is one entry in manifest.setup. Exactly one of Run or File must
+// be set. File is resolved relative to the manifest directory at load time.
+type SetupStep struct {
+	Name string `yaml:"name"`
+	Run  string `yaml:"run"`
+	File string `yaml:"file"`
+}
+
+// SudoMode is the privilege level granted to the runlease-agent user.
+type SudoMode string
+
+const (
+	SudoLocked       SudoMode = "locked"
+	SudoPasswordless SudoMode = "passwordless"
+)
+
+func (s SudoMode) IsPasswordless() bool { return s == SudoPasswordless }
 
 // AWSConfig holds AWS-specific instance configuration.
 type AWSConfig struct {
@@ -74,10 +116,40 @@ func Load(path string) (*Manifest, error) {
 	if err := yaml.Unmarshal(data, &m); err != nil {
 		return nil, fmt.Errorf("parsing manifest: %w", err)
 	}
+	baseDir := filepath.Dir(path)
+	if err := m.resolveSetupFiles(baseDir); err != nil {
+		return nil, err
+	}
 	if err := m.Validate(); err != nil {
 		return nil, err
 	}
 	return &m, nil
+}
+
+// resolveSetupFiles inlines any setup step that uses `file:` so that the rest
+// of the pipeline only ever sees inline `run:` content. baseDir is the directory
+// of the manifest file; relative file: paths are resolved against it.
+func (m *Manifest) resolveSetupFiles(baseDir string) error {
+	for i := range m.Setup {
+		s := &m.Setup[i]
+		if s.File == "" {
+			continue
+		}
+		if s.Run != "" {
+			return fmt.Errorf("manifest.setup[%d]: `run` and `file` are mutually exclusive", i)
+		}
+		p := s.File
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(baseDir, p)
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return fmt.Errorf("manifest.setup[%d]: reading file %s: %w", i, s.File, err)
+		}
+		s.Run = string(data)
+		s.File = ""
+	}
+	return nil
 }
 
 func (m *Manifest) Validate() error {
@@ -102,6 +174,29 @@ func (m *Manifest) Validate() error {
 	if m.Reclaim.TTL != "" {
 		if _, err := m.Reclaim.TTLDuration(); err != nil {
 			return fmt.Errorf("manifest.reclaim.ttl invalid: %w", err)
+		}
+	}
+	switch m.Sudo {
+	case "", SudoLocked, SudoPasswordless:
+	default:
+		return fmt.Errorf("manifest.sudo invalid: %q (allowed: locked, passwordless)", m.Sudo)
+	}
+	for i, s := range m.Setup {
+		if s.Run == "" && s.File == "" {
+			return fmt.Errorf("manifest.setup[%d]: either `run` or `file` is required", i)
+		}
+		if s.Run != "" && s.File != "" {
+			return fmt.Errorf("manifest.setup[%d]: `run` and `file` are mutually exclusive", i)
+		}
+	}
+	for i, f := range m.Forwards {
+		switch f.Direction {
+		case "", "local", "remote":
+		default:
+			return fmt.Errorf("manifest.forwards[%d].direction invalid: %q (allowed: local, remote)", i, f.Direction)
+		}
+		if f.Local <= 0 || f.Remote <= 0 {
+			return fmt.Errorf("manifest.forwards[%d]: both `local` and `remote` ports are required", i)
 		}
 	}
 	return nil

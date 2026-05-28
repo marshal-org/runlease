@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"text/tabwriter"
@@ -36,6 +37,9 @@ func runList(cmd *cobra.Command, _ []string) error {
 	}
 
 	entries := filterEntries(reg.List(), filters)
+	if jsonOutput() {
+		return writeListJSON(cmd, entries)
+	}
 	if len(entries) == 0 {
 		fmt.Fprintln(cmd.OutOrStdout(), "No active instances.")
 		return nil
@@ -148,4 +152,49 @@ func matchesLabels(tags, filters map[string]string) bool {
 		}
 	}
 	return true
+}
+
+// listJSONEntry is the public-shape JSON record for one instance. We expose a
+// stable subset of the registry entry so callers can rely on the schema even
+// if internal fields shift.
+type listJSONEntry struct {
+	Name      string            `json:"name"`
+	ID        string            `json:"id"`
+	Provider  string            `json:"provider"`
+	State     string            `json:"state"`
+	Region    string            `json:"region"`
+	PublicIP  string            `json:"publicIp,omitempty"`
+	PrivateIP string            `json:"privateIp,omitempty"`
+	Relay     string            `json:"relay,omitempty"`
+	CreatedAt string            `json:"createdAt,omitempty"`
+	ExpiresAt string            `json:"expiresAt,omitempty"`
+	Tags      map[string]string `json:"tags,omitempty"`
+}
+
+func writeListJSON(cmd *cobra.Command, entries []*registry.Entry) error {
+	out := make([]listJSONEntry, 0, len(entries))
+	for _, e := range entries {
+		h := e.Handle
+		row := listJSONEntry{
+			Name:      h.ManifestName,
+			ID:        string(h.ID),
+			Provider:  string(h.Provider),
+			State:     string(h.State),
+			Region:    h.Region,
+			PublicIP:  h.PublicIP,
+			PrivateIP: h.PrivateIP,
+			Relay:     e.RelayAddr,
+			Tags:      h.Tags,
+		}
+		if !h.CreatedAt.IsZero() {
+			row.CreatedAt = h.CreatedAt.UTC().Format(time.RFC3339)
+		}
+		if h.ExpiresAt != nil {
+			row.ExpiresAt = h.ExpiresAt.UTC().Format(time.RFC3339)
+		}
+		out = append(out, row)
+	}
+	enc := json.NewEncoder(cmd.OutOrStdout())
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
 }

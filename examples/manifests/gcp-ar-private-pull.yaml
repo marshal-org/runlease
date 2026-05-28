@@ -39,18 +39,19 @@ setup:
       BIN_DIR=/usr/local/lib/kubelet/credential-providers
       mkdir -p "$BIN_DIR"
 
-      # Build auth-provider-gcp from source. The upstream repo doesn't ship a
-      # stable standalone release tarball with predictable asset URLs, and
-      # GKE bundles it on its nodes rather than publishing for external use.
-      # Building from source costs ~60-90s of boot time but Just Works.
+      # Build auth-provider-gcp from source. The upstream repo's go.mod has
+      # 'replace' directives, so `go install …@latest` refuses to honor them
+      # — clone the repo and `go build` from inside it (where it IS the main
+      # module). Upstream doesn't publish a usable standalone release tarball;
+      # GKE bundles it on its own nodes rather than publishing externally.
       apt-get update
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         ca-certificates curl git golang-go
 
-      tmp=$(mktemp -d)
-      GOPATH="$tmp" GOBIN="$BIN_DIR" \
-        go install k8s.io/cloud-provider-gcp/cmd/auth-provider-gcp@latest
-      rm -rf "$tmp"
+      src=$(mktemp -d)
+      git clone --depth 1 https://github.com/kubernetes/cloud-provider-gcp.git "$src"
+      (cd "$src" && go build -o "$BIN_DIR/auth-provider-gcp" ./cmd/auth-provider-gcp)
+      rm -rf "$src"
       chmod +x "$BIN_DIR/auth-provider-gcp"
       "$BIN_DIR/auth-provider-gcp" --help >/dev/null  # smoke test
 

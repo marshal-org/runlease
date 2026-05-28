@@ -1,0 +1,116 @@
+# gcp-ar-private-pull.yaml
+#
+# Runs k3s on a GCP spot instance with kubelet's CredentialProvider plugin
+# wired to pull from a private Google Artifact Registry. Tokens are minted
+# from the GCE metadata server ON EVERY PULL — there's no static credential
+# stored anywhere on disk, no expiration to manage, no refresh timer needed.
+#
+# Prereqs (one-time, on your GCP project):
+#
+#   PROJ=marshal-dev-495114
+#   SA=ar-puller@${PROJ}.iam.gserviceaccount.com
+#
+#   gcloud iam service-accounts create ar-puller --project=$PROJ
+#   gcloud projects add-iam-policy-binding $PROJ \
+#     --member="serviceAccount:$SA" \
+#     --role="roles/artifactregistry.reader"
+#   gcloud iam service-accounts add-iam-policy-binding $SA \
+#     --member="user:$(gcloud config get-value account)" \
+#     --role="roles/iam.serviceAccountUser"
+#
+# Then:  runlease up --attach -m gcp-ar-private-pull.yaml
+#
+# After it boots, any pod referencing an image at *.pkg.dev (or gcr.io / *.gcr.io)
+# pulls with credentials minted just-in-time. No registries.yaml, no Secrets,
+# no imagePullSecrets, no Secrets to rotate.
+
+name: ar-private-pull
+provider: gcp
+region: us-central1-a
+instanceClass: compute.large
+baseImage: projects/debian-cloud/global/images/family/debian-12
+
+reclaim:
+  ttl: 4h
+  selfTermination: true
+
+relay:
+  addr: wss://relay.snapmatch.ai
+
+sudo: passwordless
+
+gcp:
+  # Must have roles/artifactregistry.reader on the AR repos you intend to pull from.
+  serviceAccount: ar-puller@marshal-dev-495114.iam.gserviceaccount.com
+
+setup:
+  - name: install-auth-provider-gcp
+    run: |
+      set -euo pipefail
+
+      # Pin a known release. Newer versions usually drop-in fine; update if
+      # you hit a CredentialProvider API mismatch with your k3s version.
+      # Releases: https://github.com/kubernetes/cloud-provider-gcp/releases
+      APG_VERSION=v0.0.2
+      BIN_DIR=/usr/local/lib/kubelet/credential-providers
+      mkdir -p "$BIN_DIR"
+
+      curl -sfL \
+        "https://github.com/kubernetes/cloud-provider-gcp/releases/download/auth-provider-gcp/${APG_VERSION}/auth-provider-gcp-linux-amd64-${APG_VERSION}.tar.gz" \
+        | tar -xz -C "$BIN_DIR" auth-provider-gcp
+      chmod +x "$BIN_DIR/auth-provider-gcp"
+
+      # CredentialProvider config: tells kubelet which binary to invoke for
+      # which image patterns. Cache the credential for 30 min on the kubelet
+      # side so we don't re-shell out on every Pod scheduling event.
+      mkdir -p /etc/kubernetes
+      cat > /etc/kubernetes/credential-providers.yaml <<'EOF'
+      apiVersion: kubelet.config.k8s.io/v1
+      kind: CredentialProviderConfig
+      providers:
+        - name: auth-provider-gcp
+          apiVersion: credentialprovider.kubelet.k8s.io/v1
+          matchImages:
+            - "*.pkg.dev"
+            - "*-docker.pkg.dev"
+            - "gcr.io"
+            - "*.gcr.io"
+          defaultCacheDuration: "30m"
+          args:
+            - get-credentials
+            - --v=3
+      EOF
+
+  - name: install-k3s
+    run: |
+      set -euo pipefail
+
+      # k3s ≥ v1.26 ships kubelet ≥ 1.26 which speaks the v1 CredentialProvider API.
+      # The two kubelet-arg flags below are the whole integration — point kubelet
+      # at the config + bin dir we set up above.
+      curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server \
+        --write-kubeconfig-mode=644 \
+        --kubelet-arg=image-credential-provider-config=/etc/kubernetes/credential-providers.yaml \
+        --kubelet-arg=image-credential-provider-bin-dir=/usr/local/lib/kubelet/credential-providers" \
+        sh -
+
+      for i in $(seq 1 60); do
+        if k3s kubectl get nodes 2>/dev/null | grep -q ' Ready'; then
+          echo "k3s ready (${i}s)"
+          break
+        fi
+        sleep 1
+      done
+
+  - name: verify-credential-provider-wired
+    run: |
+      # Look for the credential-provider flags in the running kubelet command line.
+      # If these are missing, the install above didn't take effect.
+      pgrep -af kubelet | grep -E 'image-credential-provider-(config|bin-dir)' \
+        || (echo "ERROR: kubelet did not pick up the credential provider flags" && exit 1)
+      echo "Credential provider wired into kubelet."
+
+forwards:
+  - name: kube-api
+    local: 16443
+    remote: 6443

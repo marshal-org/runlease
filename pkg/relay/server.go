@@ -15,12 +15,12 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/hashicorp/yamux"
 )
 
 const (
-	handshakeTimeout  = 30 * time.Second
-	instanceIdleLimit = 24 * time.Hour
-	tokenTTL          = 24 * time.Hour
+	handshakeTimeout = 30 * time.Second
+	tokenTTL         = 24 * time.Hour
 )
 
 // Server is a WebSocket relay server that implements http.Handler.
@@ -57,9 +57,9 @@ type Server struct {
 type slot struct {
 	expiresAt       time.Time
 	instanceClaimed atomic.Bool
-	instanceReady   atomic.Bool // set after instance sends "ready" ack
+	instanceReady   atomic.Bool   // set true once the yamux session is established
 	instanceCh      chan net.Conn
-	clientCh        chan net.Conn
+	clientCh        chan net.Conn // clients queue here for the coordinator to pick up
 }
 
 func New(log *slog.Logger, cfg Config) *Server {
@@ -132,6 +132,8 @@ func newWSConn(ws *websocket.Conn) net.Conn {
 // ── protocol dispatch ─────────────────────────────────────────────────────────
 //
 // All messages are binary WebSocket frames containing newline-terminated JSON.
+// After handshake the agent's connection is owned by yamux; client connections
+// remain raw byte streams (yamux is terminated by the relay on the agent side).
 //
 // Register (CLI during runlease up):
 //   → {"role":"register","token":"<tok>"}
@@ -140,14 +142,12 @@ func newWSConn(ws *websocket.Conn) net.Conn {
 // Instance (runlease-agent on boot):
 //   → {"role":"instance","token":"<tok>"}
 //   ← {"status":"registered"}
-//   ← {"status":"paired"}          (client arrived)
-//   → {"status":"ready"}           (agent dialled localhost:22)
-//   raw SSH bytes
+//   <yamux server-side from agent; relay opens streams for each client>
 //
-// Client (runlease connect):
+// Client (runlease connect, exec, forward, push, pull — any number, concurrent):
 //   → {"role":"client","token":"<tok>"}
 //   ← {"status":"connected"}
-//   raw SSH bytes
+//   raw SSH bytes (relay bridges to a fresh yamux stream against the agent)
 
 type wireMsg struct {
 	Role    string `json:"role,omitempty"`
@@ -236,13 +236,9 @@ func (s *Server) handleClient(conn net.Conn, token string) {
 		conn.Close()
 		return
 	}
-
-	select {
-	case sl.clientCh <- conn:
-	default:
-		writeMsg(conn, wireMsg{Status: "busy", Message: "a client is already connected or waiting"}) //nolint:errcheck
-		conn.Close()
-	}
+	// Concurrency is expected: the coordinator runs an OpenStream per client.
+	// Block (with the handshake deadline still in effect) until it's picked up.
+	sl.clientCh <- conn
 }
 
 func (s *Server) startCoordinator(token string, sl *slot) {
@@ -253,7 +249,7 @@ func (s *Server) startCoordinator(token string, sl *slot) {
 		defer cancel()
 
 		for {
-			// Wait for instance to (re)connect.
+			// Wait for the agent to (re)connect.
 			var instanceConn net.Conn
 			select {
 			case instanceConn = <-sl.instanceCh:
@@ -268,65 +264,72 @@ func (s *Server) startCoordinator(token string, sl *slot) {
 				sl.instanceClaimed.Store(false)
 				continue
 			}
-			sl.instanceReady.Store(true)
 			s.log.Info("instance registered", "token", token[:8]+"…")
 
-			// Wait for a client to arrive.
-			idle := time.NewTimer(instanceIdleLimit)
-			var clientConn net.Conn
-			select {
-			case clientConn = <-sl.clientCh:
-				idle.Stop()
-			case <-idle.C:
-				s.log.Info("instance idle timeout", "token", token[:8]+"…")
-				instanceConn.Close()
-				sl.instanceReady.Store(false)
-				sl.instanceClaimed.Store(false)
-				return
-			case <-ctx.Done():
-				idle.Stop()
-				instanceConn.Close()
-				drainClose(sl.clientCh)
-				return
-			}
-
-			s.log.Info("client arrived, pairing", "token", token[:8]+"…")
-
-			if err := writeMsg(instanceConn, wireMsg{Status: "paired"}); err != nil {
-				instanceConn.Close()
-				clientConn.Close()
-				sl.instanceReady.Store(false)
-				sl.instanceClaimed.Store(false)
-				continue
-			}
-			instanceConn.SetDeadline(time.Now().Add(15 * time.Second)) //nolint:errcheck
-			ack, err := readMsg(instanceConn)
-			instanceConn.SetDeadline(time.Time{}) //nolint:errcheck
-			if err != nil || ack.Status != "ready" {
-				s.log.Warn("instance did not ack pairing", "token", token[:8]+"…", "err", err)
-				instanceConn.Close()
-				clientConn.Close()
-				sl.instanceReady.Store(false)
-				sl.instanceClaimed.Store(false)
-				continue
-			}
-
-			if err := writeMsg(clientConn, wireMsg{Status: "connected"}); err != nil {
-				instanceConn.Close()
-				clientConn.Close()
-				sl.instanceReady.Store(false)
-				sl.instanceClaimed.Store(false)
-				continue
-			}
-
-			bridge(instanceConn, clientConn)
-			s.log.Info("session closed, ready for reconnection", "token", token[:8]+"…")
-
-			// Reset so the agent can reconnect and the next client can pair.
+			s.runMuxSession(ctx, token, sl, instanceConn)
 			sl.instanceReady.Store(false)
 			sl.instanceClaimed.Store(false)
 		}
 	}()
+}
+
+// runMuxSession wraps the agent's WebSocket as a yamux client session and
+// opens one yamux stream per incoming CLI client. Returns when the agent
+// disconnects (yamux session breaks) or the slot deadline expires.
+func (s *Server) runMuxSession(ctx context.Context, token string, sl *slot, instanceConn net.Conn) {
+	session, err := yamux.Client(instanceConn, yamuxConfig())
+	if err != nil {
+		s.log.Warn("yamux.Client init failed", "token", token[:8]+"…", "err", err)
+		instanceConn.Close()
+		return
+	}
+	defer session.Close()
+
+	// As soon as the mux session is up, clients may connect — they no longer
+	// need a per-session "ready" ack from the agent.
+	sl.instanceReady.Store(true)
+	s.log.Info("mux session active", "token", token[:8]+"…")
+
+	for {
+		select {
+		case <-ctx.Done():
+			drainClose(sl.clientCh)
+			return
+		case <-session.CloseChan():
+			s.log.Info("mux session ended, awaiting agent reconnect", "token", token[:8]+"…")
+			drainClose(sl.clientCh)
+			return
+		case clientConn := <-sl.clientCh:
+			go s.handleMuxClient(session, clientConn, token)
+		}
+	}
+}
+
+func (s *Server) handleMuxClient(session *yamux.Session, clientConn net.Conn, token string) {
+	stream, err := session.OpenStream()
+	if err != nil {
+		s.log.Warn("yamux OpenStream failed", "token", token[:8]+"…", "err", err)
+		writeMsg(clientConn, wireMsg{Status: "error", Message: "mux open failed"}) //nolint:errcheck
+		clientConn.Close()
+		return
+	}
+	if err := writeMsg(clientConn, wireMsg{Status: "connected"}); err != nil {
+		stream.Close()
+		clientConn.Close()
+		return
+	}
+	bridge(stream, clientConn)
+}
+
+// yamuxConfig returns the yamux config used by the relay (client side) when
+// muxing CLI streams over the agent WebSocket. yamux keepalives stay enabled —
+// the WebSocket layer doesn't ping on its own, so NAT timeouts can silently
+// drop an idle outbound session.
+func yamuxConfig() *yamux.Config {
+	cfg := yamux.DefaultConfig()
+	cfg.StreamOpenTimeout = 30 * time.Second
+	cfg.LogOutput = io.Discard
+	return cfg
 }
 
 func (s *Server) removeSlot(token string) {

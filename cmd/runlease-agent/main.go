@@ -1,6 +1,7 @@
 // runlease-agent runs on each launched instance. It connects outbound to the
-// relay server over WebSocket and proxies SSH traffic once a CLI client pairs.
-// After each session it reconnects automatically.
+// relay over WebSocket, registers its token, then runs a yamux server on the
+// WebSocket — accepting one stream per incoming CLI client and proxying each to
+// localhost:22 (sshd). On disconnect it reconnects automatically.
 //
 // Required env vars (written to /etc/runlease-agent.env by user-data):
 //   RUNLEASE_RELAY_ADDR  – relay address: host:port or ws[s]://host[:port]
@@ -10,6 +11,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -17,6 +19,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/hashicorp/yamux"
+
+	"github.com/runlease/runlease/pkg/relay"
 )
 
 func main() {
@@ -45,7 +50,8 @@ func runSession(relayAddr, token string, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("dial relay: %w", err)
 	}
-	defer ws.Close()
+	wsNet := relay.NewWSConn(ws)
+	defer wsNet.Close()
 
 	if err := wsSend(ws, map[string]string{"role": "instance", "token": token}); err != nil {
 		return fmt.Errorf("send handshake: %w", err)
@@ -57,58 +63,45 @@ func runSession(relayAddr, token string, log *slog.Logger) error {
 	if resp["status"] != "registered" {
 		return fmt.Errorf("registration rejected: %s %s", resp["status"], resp["message"])
 	}
-	log.Info("registered with relay, waiting for client")
+	log.Info("registered with relay, starting yamux server")
 
-	resp, err = wsRecvDeadline(ws, 2*time.Hour)
+	// The WebSocket carries yamux frames from here on. Relay runs yamux client,
+	// agent runs yamux server — symmetric API, but only the client opens streams.
+	cfg := yamux.DefaultConfig()
+	// Keep yamux keepalives enabled — WebSocket on its own doesn't ping, so
+	// NAT timeouts can silently drop an idle outbound session.
+	cfg.StreamOpenTimeout = 30 * time.Second
+	cfg.LogOutput = io.Discard
+	session, err := yamux.Server(wsNet, cfg)
 	if err != nil {
-		return fmt.Errorf("waiting for paired: %w", err)
+		return fmt.Errorf("yamux.Server: %w", err)
 	}
-	if resp["status"] != "paired" {
-		return fmt.Errorf("unexpected relay message: %s", resp["status"])
-	}
+	defer session.Close()
 
+	for {
+		stream, err := session.AcceptStream()
+		if err != nil {
+			return fmt.Errorf("yamux accept: %w", err)
+		}
+		go proxyStreamToSSHD(stream, log)
+	}
+}
+
+// proxyStreamToSSHD dials localhost:22 and bidirectionally copies bytes between
+// the yamux stream and sshd. One stream = one independent SSH session for the
+// CLI on the other end.
+func proxyStreamToSSHD(stream *yamux.Stream, log *slog.Logger) {
+	defer stream.Close()
 	local, err := net.DialTimeout("tcp", "localhost:22", 5*time.Second)
 	if err != nil {
-		return fmt.Errorf("dial local SSH: %w", err)
+		log.Warn("dial local sshd failed", "err", err)
+		return
 	}
 	defer local.Close()
-	log.Info("local SSH connected, sending ready")
-
-	if err := wsSend(ws, map[string]string{"status": "ready"}); err != nil {
-		return fmt.Errorf("send ready: %w", err)
-	}
-
-	// Bridge: relay WS ↔ localhost:22 using binary frames.
-	done := make(chan struct{}, 1)
-	go func() {
-		buf := make([]byte, 32*1024)
-		for {
-			n, err := local.Read(buf)
-			if n > 0 {
-				ws.WriteMessage(websocket.BinaryMessage, buf[:n]) //nolint:errcheck
-			}
-			if err != nil {
-				break
-			}
-		}
-		done <- struct{}{}
-	}()
-	go func() {
-		for {
-			_, data, err := ws.ReadMessage()
-			if len(data) > 0 {
-				local.Write(data) //nolint:errcheck
-			}
-			if err != nil {
-				break
-			}
-		}
-		done <- struct{}{}
-	}()
+	done := make(chan struct{}, 2)
+	go func() { io.Copy(local, stream); done <- struct{}{} }() //nolint:errcheck
+	go func() { io.Copy(stream, local); done <- struct{}{} }() //nolint:errcheck
 	<-done
-
-	log.Info("session ended")
-	return nil
 }
 
 func wsSend(ws *websocket.Conn, m map[string]string) error {
@@ -120,12 +113,8 @@ func wsSend(ws *websocket.Conn, m map[string]string) error {
 }
 
 func wsRecv(ws *websocket.Conn) (map[string]string, error) {
-	return wsRecvDeadline(ws, 60*time.Second)
-}
-
-func wsRecvDeadline(ws *websocket.Conn, d time.Duration) (map[string]string, error) {
-	ws.SetReadDeadline(time.Now().Add(d)) //nolint:errcheck
-	defer ws.SetReadDeadline(time.Time{}) //nolint:errcheck
+	ws.SetReadDeadline(time.Now().Add(60 * time.Second)) //nolint:errcheck
+	defer ws.SetReadDeadline(time.Time{})                //nolint:errcheck
 	_, data, err := ws.ReadMessage()
 	if err != nil {
 		return nil, err

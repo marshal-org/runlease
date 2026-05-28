@@ -8,6 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.299.1
 	github.com/aws/smithy-go v1.25.1
 	github.com/gorilla/websocket v1.5.3
+	github.com/hashicorp/yamux v0.1.2
 	github.com/pkg/sftp v1.13.6
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/crypto v0.50.0

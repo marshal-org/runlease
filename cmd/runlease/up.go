@@ -166,6 +166,7 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		Provider:          m.Provider,
 		SelfTermination:   m.Reclaim.SelfTermination,
 		TTLSeconds:        ttlSeconds,
+		PasswordlessSudo:  m.Sudo.IsPasswordless(),
 	})
 	if err != nil {
 		return fmt.Errorf("building user-data: %w", err)

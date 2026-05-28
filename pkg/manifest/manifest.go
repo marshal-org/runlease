@@ -23,7 +23,22 @@ type Manifest struct {
 	Tags     map[string]string `yaml:"tags"`
 	AWS      AWSConfig         `yaml:"aws"`
 	GCP      GCPConfig         `yaml:"gcp"`
+	// Sudo controls the sudo configuration of the runlease-agent user.
+	// "locked" (default) leaves the existing locked-down behaviour: NOPASSWD
+	// only for /usr/local/bin/runlease-terminate. "passwordless" grants
+	// NOPASSWD: ALL. Empty string means "locked".
+	Sudo SudoMode `yaml:"sudo"`
 }
+
+// SudoMode is the privilege level granted to the runlease-agent user.
+type SudoMode string
+
+const (
+	SudoLocked       SudoMode = "locked"
+	SudoPasswordless SudoMode = "passwordless"
+)
+
+func (s SudoMode) IsPasswordless() bool { return s == SudoPasswordless }
 
 // AWSConfig holds AWS-specific instance configuration.
 type AWSConfig struct {
@@ -103,6 +118,11 @@ func (m *Manifest) Validate() error {
 		if _, err := m.Reclaim.TTLDuration(); err != nil {
 			return fmt.Errorf("manifest.reclaim.ttl invalid: %w", err)
 		}
+	}
+	switch m.Sudo {
+	case "", SudoLocked, SudoPasswordless:
+	default:
+		return fmt.Errorf("manifest.sudo invalid: %q (allowed: locked, passwordless)", m.Sudo)
 	}
 	return nil
 }

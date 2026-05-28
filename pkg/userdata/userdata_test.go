@@ -192,6 +192,34 @@ func TestBuild_awsTTLBlock(t *testing.T) {
 	}
 }
 
+func TestBuild_passwordlessSudo(t *testing.T) {
+	p := fullParams()
+	p.PasswordlessSudo = true
+	out, err := Build(p)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if !strings.Contains(out, "runlease-agent ALL=(ALL) NOPASSWD: ALL") {
+		t.Error("output missing NOPASSWD: ALL directive")
+	}
+	if !strings.Contains(out, "/etc/sudoers.d/runlease-agent-full") {
+		t.Error("output missing sudoers.d drop-in path")
+	}
+}
+
+func TestBuild_lockedSudoIsDefault(t *testing.T) {
+	out, err := Build(fullParams())
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if strings.Contains(out, "NOPASSWD: ALL") {
+		t.Error("default output should not grant NOPASSWD: ALL")
+	}
+	if strings.Contains(out, "/etc/sudoers.d/runlease-agent-full") {
+		t.Error("default output should not write the full sudoers drop-in")
+	}
+}
+
 func TestBuild_noTTLBlock(t *testing.T) {
 	p := fullParams()
 	p.Provider = "gcp"

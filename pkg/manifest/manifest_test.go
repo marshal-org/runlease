@@ -165,6 +165,38 @@ func TestLoad_gcpFields(t *testing.T) {
 	}
 }
 
+func TestSudoMode_defaultsAndValid(t *testing.T) {
+	cases := []struct {
+		mode    SudoMode
+		ok      bool
+		pwLess  bool
+	}{
+		{"", true, false},
+		{SudoLocked, true, false},
+		{SudoPasswordless, true, true},
+		{"yolo", false, false},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.mode), func(t *testing.T) {
+			m := &Manifest{
+				Name: "n", Provider: "aws", Region: "us-east-1",
+				InstanceType: "t3.micro", BaseImage: "ami-x",
+				Sudo: tc.mode,
+			}
+			err := m.Validate()
+			if tc.ok && err != nil {
+				t.Fatalf("Validate() = %v, want nil", err)
+			}
+			if !tc.ok && err == nil {
+				t.Fatal("Validate() = nil, want error")
+			}
+			if got := m.Sudo.IsPasswordless(); got != tc.pwLess {
+				t.Errorf("IsPasswordless() = %v, want %v", got, tc.pwLess)
+			}
+		})
+	}
+}
+
 func TestValidate_invalidTTL(t *testing.T) {
 	f := writeTempFile(t, validYAML)
 	m, err := Load(f)

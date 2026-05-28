@@ -88,6 +88,12 @@ ClientAliveCountMax 2
 SSHD_EOF
 
 systemctl restart sshd 2>/dev/null || service ssh restart 2>/dev/null || true
+{{- if .PasswordlessSudo }}
+
+# ── passwordless sudo (opt-in via manifest.sudo: passwordless) ───────────────
+echo "runlease-agent ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/runlease-agent-full
+chmod 440 /etc/sudoers.d/runlease-agent-full
+{{- end }}
 {{- if .RelayAddr }}
 
 # ── runlease relay agent ──────────────────────────────────────────────────────
@@ -134,6 +140,10 @@ type Params struct {
 	Provider        string // "gcp" or "aws"
 	SelfTermination bool   // install terminate script; required for TTL to work
 	TTLSeconds      int    // 0 = no timer (script still installed if SelfTermination is true)
+	// PasswordlessSudo grants the runlease-agent user NOPASSWD: ALL when true.
+	// Default false keeps the locked-down posture; only the runlease-terminate
+	// command is sudo-allowed.
+	PasswordlessSudo bool
 }
 
 type templateData struct {
@@ -146,6 +156,7 @@ type templateData struct {
 	Provider         string
 	SelfTermination  bool
 	TTLSeconds       int
+	PasswordlessSudo bool
 }
 
 // relayHTTPBase converts a relay addr (host:port or ws[s]://...) to its HTTP
@@ -182,6 +193,7 @@ func Build(p Params) (string, error) {
 		Provider:         p.Provider,
 		SelfTermination:  p.SelfTermination,
 		TTLSeconds:       p.TTLSeconds,
+		PasswordlessSudo: p.PasswordlessSudo,
 	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {

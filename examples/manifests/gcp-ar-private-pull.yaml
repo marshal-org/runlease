@@ -2,27 +2,15 @@
 #
 # Runs k3s on a GCP spot instance with kubelet's CredentialProvider plugin
 # wired to pull from a private Google Artifact Registry. Tokens are minted
-# from the GCE metadata server ON EVERY PULL — there's no static credential
-# stored anywhere on disk, no expiration to manage, no refresh timer needed.
+# from the GCE metadata server ON EVERY PULL — no static credential on disk,
+# no expiration to manage, no refresh timer needed.
 #
-# Prereqs (one-time, on your GCP project):
+# Detailed walkthrough (one-time IAM setup, verification, troubleshooting,
+# how it works under the hood):  docs/private-ar-k3s.md
 #
-#   PROJ=marshal-dev-495114
-#   SA=ar-puller@${PROJ}.iam.gserviceaccount.com
-#
-#   gcloud iam service-accounts create ar-puller --project=$PROJ
-#   gcloud projects add-iam-policy-binding $PROJ \
-#     --member="serviceAccount:$SA" \
-#     --role="roles/artifactregistry.reader"
-#   gcloud iam service-accounts add-iam-policy-binding $SA \
-#     --member="user:$(gcloud config get-value account)" \
-#     --role="roles/iam.serviceAccountUser"
-#
-# Then:  runlease up --attach -m gcp-ar-private-pull.yaml
-#
-# After it boots, any pod referencing an image at *.pkg.dev (or gcr.io / *.gcr.io)
-# pulls with credentials minted just-in-time. No registries.yaml, no Secrets,
-# no imagePullSecrets, no Secrets to rotate.
+# TL;DR:
+#   1. Create ar-puller SA + grant it roles/artifactregistry.reader (one-time)
+#   2. runlease up --attach -m examples/manifests/gcp-ar-private-pull.yaml
 
 name: ar-private-pull
 provider: gcp

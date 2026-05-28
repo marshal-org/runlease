@@ -167,6 +167,7 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		SelfTermination:   m.Reclaim.SelfTermination,
 		TTLSeconds:        ttlSeconds,
 		PasswordlessSudo:  m.Sudo.IsPasswordless(),
+		SetupSteps:        toUserdataSteps(m.Setup),
 	})
 	if err != nil {
 		return fmt.Errorf("building user-data: %w", err)
@@ -622,6 +623,20 @@ func mergeAutoTags(userTags map[string]string, name string, ttlSeconds int) map[
 		tags[k] = v
 	}
 	return tags
+}
+
+// toUserdataSteps converts manifest setup steps into the simpler shape the
+// userdata template expects. File: references have already been inlined at
+// manifest load time.
+func toUserdataSteps(steps []manifest.SetupStep) []userdata.SetupStep {
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]userdata.SetupStep, len(steps))
+	for i, s := range steps {
+		out[i] = userdata.SetupStep{Name: s.Name, Run: s.Run}
+	}
+	return out
 }
 
 func currentUsername() string {

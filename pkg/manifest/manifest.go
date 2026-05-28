@@ -3,6 +3,7 @@ package manifest
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -28,6 +29,18 @@ type Manifest struct {
 	// only for /usr/local/bin/runlease-terminate. "passwordless" grants
 	// NOPASSWD: ALL. Empty string means "locked".
 	Sudo SudoMode `yaml:"sudo"`
+	// Setup is a list of scripts to run as root after the runlease bootstrap
+	// completes. Each step is either an inline `run:` script or a `file:`
+	// pointing at a local file that will be inlined at launch time.
+	Setup []SetupStep `yaml:"setup"`
+}
+
+// SetupStep is one entry in manifest.setup. Exactly one of Run or File must
+// be set. File is resolved relative to the manifest directory at load time.
+type SetupStep struct {
+	Name string `yaml:"name"`
+	Run  string `yaml:"run"`
+	File string `yaml:"file"`
 }
 
 // SudoMode is the privilege level granted to the runlease-agent user.
@@ -89,10 +102,40 @@ func Load(path string) (*Manifest, error) {
 	if err := yaml.Unmarshal(data, &m); err != nil {
 		return nil, fmt.Errorf("parsing manifest: %w", err)
 	}
+	baseDir := filepath.Dir(path)
+	if err := m.resolveSetupFiles(baseDir); err != nil {
+		return nil, err
+	}
 	if err := m.Validate(); err != nil {
 		return nil, err
 	}
 	return &m, nil
+}
+
+// resolveSetupFiles inlines any setup step that uses `file:` so that the rest
+// of the pipeline only ever sees inline `run:` content. baseDir is the directory
+// of the manifest file; relative file: paths are resolved against it.
+func (m *Manifest) resolveSetupFiles(baseDir string) error {
+	for i := range m.Setup {
+		s := &m.Setup[i]
+		if s.File == "" {
+			continue
+		}
+		if s.Run != "" {
+			return fmt.Errorf("manifest.setup[%d]: `run` and `file` are mutually exclusive", i)
+		}
+		p := s.File
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(baseDir, p)
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return fmt.Errorf("manifest.setup[%d]: reading file %s: %w", i, s.File, err)
+		}
+		s.Run = string(data)
+		s.File = ""
+	}
+	return nil
 }
 
 func (m *Manifest) Validate() error {
@@ -123,6 +166,14 @@ func (m *Manifest) Validate() error {
 	case "", SudoLocked, SudoPasswordless:
 	default:
 		return fmt.Errorf("manifest.sudo invalid: %q (allowed: locked, passwordless)", m.Sudo)
+	}
+	for i, s := range m.Setup {
+		if s.Run == "" && s.File == "" {
+			return fmt.Errorf("manifest.setup[%d]: either `run` or `file` is required", i)
+		}
+		if s.Run != "" && s.File != "" {
+			return fmt.Errorf("manifest.setup[%d]: `run` and `file` are mutually exclusive", i)
+		}
 	}
 	return nil
 }

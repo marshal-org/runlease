@@ -124,6 +124,27 @@ SVCEOF
 systemctl daemon-reload
 systemctl enable --now runlease-agent
 {{- end }}
+{{- if .SetupSteps }}
+
+# ── user setup scripts (from manifest.setup) ─────────────────────────────────
+# Each step is written to /var/lib/runlease/setup/NN-name.sh and executed with
+# its output tee'd to /var/log/runlease-setup.log. The sentinel file
+# /run/runlease-setup-done is written on success so callers can poll for it.
+mkdir -p /var/lib/runlease/setup
+: > /var/log/runlease-setup.log
+chmod 644 /var/log/runlease-setup.log
+{
+{{- range $i, $s := .SetupSteps }}
+  echo "── runlease setup [{{ printf "%02d" $i }}{{ if $s.Name }} {{ $s.Name }}{{ end }}] ──"
+  cat > /var/lib/runlease/setup/{{ printf "%02d" $i }}{{ if $s.Name }}-{{ $s.Name }}{{ end }}.sh << 'RUNLEASE_SETUP_EOF'
+{{ $s.Run }}
+RUNLEASE_SETUP_EOF
+  chmod +x /var/lib/runlease/setup/{{ printf "%02d" $i }}{{ if $s.Name }}-{{ $s.Name }}{{ end }}.sh
+  bash /var/lib/runlease/setup/{{ printf "%02d" $i }}{{ if $s.Name }}-{{ $s.Name }}{{ end }}.sh
+{{- end }}
+  touch /run/runlease-setup-done
+} 2>&1 | tee -a /var/log/runlease-setup.log
+{{- end }}
 `
 
 var tmpl = template.Must(template.New("userdata").Parse(script))
@@ -144,6 +165,17 @@ type Params struct {
 	// Default false keeps the locked-down posture; only the runlease-terminate
 	// command is sudo-allowed.
 	PasswordlessSudo bool
+	// SetupSteps are inline scripts to run as root after bootstrap completes.
+	// They are executed in order; on success /run/runlease-setup-done is touched.
+	SetupSteps []SetupStep
+}
+
+// SetupStep is an inline bootstrap script. The userdata template writes each
+// to /var/lib/runlease/setup and runs it under bash with output captured to
+// /var/log/runlease-setup.log.
+type SetupStep struct {
+	Name string
+	Run  string
 }
 
 type templateData struct {
@@ -157,6 +189,7 @@ type templateData struct {
 	SelfTermination  bool
 	TTLSeconds       int
 	PasswordlessSudo bool
+	SetupSteps       []SetupStep
 }
 
 // relayHTTPBase converts a relay addr (host:port or ws[s]://...) to its HTTP
@@ -194,6 +227,7 @@ func Build(p Params) (string, error) {
 		SelfTermination:  p.SelfTermination,
 		TTLSeconds:       p.TTLSeconds,
 		PasswordlessSudo: p.PasswordlessSudo,
+		SetupSteps:       p.SetupSteps,
 	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {

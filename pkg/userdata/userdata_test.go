@@ -192,6 +192,46 @@ func TestBuild_awsTTLBlock(t *testing.T) {
 	}
 }
 
+func TestBuild_setupStepsRendered(t *testing.T) {
+	p := fullParams()
+	p.SetupSteps = []SetupStep{
+		{Name: "install-k3s", Run: "curl -sfL https://get.k3s.io | sh -"},
+		{Name: "", Run: "echo unnamed-step"},
+	}
+	out, err := Build(p)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, want := range []string{
+		"curl -sfL https://get.k3s.io",
+		"echo unnamed-step",
+		"/var/lib/runlease/setup",
+		"/var/log/runlease-setup.log",
+		"touch /run/runlease-setup-done",
+		"00-install-k3s.sh",
+		"01.sh",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("setup output missing %q", want)
+		}
+	}
+}
+
+func TestBuild_noSetupStepsIsClean(t *testing.T) {
+	out, err := Build(fullParams())
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, absent := range []string{
+		"/var/lib/runlease/setup",
+		"runlease-setup-done",
+	} {
+		if strings.Contains(out, absent) {
+			t.Errorf("output without setup steps should not contain %q", absent)
+		}
+	}
+}
+
 func TestBuild_passwordlessSudo(t *testing.T) {
 	p := fullParams()
 	p.PasswordlessSudo = true

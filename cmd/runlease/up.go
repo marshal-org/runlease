@@ -263,33 +263,43 @@ func runUp(cmd *cobra.Command, _ []string) error {
 	}
 
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "\n✅ Instance ready!\n")
-	fmt.Fprintf(out, "   Name:      %s\n", m.Name)
-	fmt.Fprintf(out, "   ID:        %s\n", running.ID)
-	if running.PublicIP != "" {
-		fmt.Fprintf(out, "   Public IP: %s\n", running.PublicIP)
-	}
-	if running.ExpiresAt != nil {
-		fmt.Fprintf(out, "   Expires:   %s (%s)\n", running.ExpiresAt.Format(time.RFC3339), time.Until(*running.ExpiresAt).Round(time.Second))
-	}
-	if m.Relay.Addr != "" {
-		fmt.Fprintf(out, "\n🔌 Connect via relay:\n\n   runlease connect %s\n", m.Name)
-	} else {
-		fmt.Fprintf(out, "\n🔌 Connect:\n\n   runlease ssh %s\n", m.Name)
-		if running.PublicIP == "" {
-			fmt.Fprintf(out, "\n💡 No public IP assigned — add 'relay.addr' to your manifest for relay-based access,\n")
-			fmt.Fprintf(out, "   or set 'publicIp: true' for direct SSH.\n")
-		} else {
-			fmt.Fprintf(out, "\n💡 Tip: add a relay to connect without a public IP next time:\n")
-			fmt.Fprintf(out, "   runlease config set relay.addr wss://relay.snapmatch.ai\n")
+	if jsonOutput() {
+		if err := writeUpJSON(cmd, m, running); err != nil {
+			return err
 		}
-	}
+		if detach {
+			return nil
+		}
+		// Even in JSON mode, if the user wants to attach/connect we still do so.
+	} else {
+		fmt.Fprintf(out, "\n✅ Instance ready!\n")
+		fmt.Fprintf(out, "   Name:      %s\n", m.Name)
+		fmt.Fprintf(out, "   ID:        %s\n", running.ID)
+		if running.PublicIP != "" {
+			fmt.Fprintf(out, "   Public IP: %s\n", running.PublicIP)
+		}
+		if running.ExpiresAt != nil {
+			fmt.Fprintf(out, "   Expires:   %s (%s)\n", running.ExpiresAt.Format(time.RFC3339), time.Until(*running.ExpiresAt).Round(time.Second))
+		}
+		if m.Relay.Addr != "" {
+			fmt.Fprintf(out, "\n🔌 Connect via relay:\n\n   runlease connect %s\n", m.Name)
+		} else {
+			fmt.Fprintf(out, "\n🔌 Connect:\n\n   runlease ssh %s\n", m.Name)
+			if running.PublicIP == "" {
+				fmt.Fprintf(out, "\n💡 No public IP assigned — add 'relay.addr' to your manifest for relay-based access,\n")
+				fmt.Fprintf(out, "   or set 'publicIp: true' for direct SSH.\n")
+			} else {
+				fmt.Fprintf(out, "\n💡 Tip: add a relay to connect without a public IP next time:\n")
+				fmt.Fprintf(out, "   runlease config set relay.addr wss://relay.snapmatch.ai\n")
+			}
+		}
 
-	fmt.Fprintf(out, "\n🛑 To terminate:\n")
-	fmt.Fprintf(out, "   runlease down %s\n", m.Name)
-	fmt.Fprintf(out, "   # or from inside the instance: sudo /usr/local/bin/runlease-terminate\n")
-	if running.ExpiresAt != nil {
-		fmt.Fprintf(out, "   # or wait — auto-terminates in %s\n", time.Until(*running.ExpiresAt).Round(time.Second))
+		fmt.Fprintf(out, "\n🛑 To terminate:\n")
+		fmt.Fprintf(out, "   runlease down %s\n", m.Name)
+		fmt.Fprintf(out, "   # or from inside the instance: sudo /usr/local/bin/runlease-terminate\n")
+		if running.ExpiresAt != nil {
+			fmt.Fprintf(out, "   # or wait — auto-terminates in %s\n", time.Until(*running.ExpiresAt).Round(time.Second))
+		}
 	}
 
 	if detach {
@@ -655,6 +665,36 @@ func manifestToRegistryForwards(in []manifest.ForwardSpec) []registry.ForwardSpe
 		}
 	}
 	return out
+}
+
+// writeUpJSON emits a compact, stable JSON record describing the new instance.
+// Used by CI/scripts via `runlease up --output json`.
+func writeUpJSON(cmd *cobra.Command, m *manifest.Manifest, running *provider.InstanceHandle) error {
+	type rec struct {
+		Name      string `json:"name"`
+		ID        string `json:"id"`
+		Provider  string `json:"provider"`
+		Region    string `json:"region"`
+		PublicIP  string `json:"publicIp,omitempty"`
+		PrivateIP string `json:"privateIp,omitempty"`
+		Relay     string `json:"relay,omitempty"`
+		ExpiresAt string `json:"expiresAt,omitempty"`
+	}
+	r := rec{
+		Name:      m.Name,
+		ID:        string(running.ID),
+		Provider:  m.Provider,
+		Region:    m.Region,
+		PublicIP:  running.PublicIP,
+		PrivateIP: running.PrivateIP,
+		Relay:     m.Relay.Addr,
+	}
+	if running.ExpiresAt != nil {
+		r.ExpiresAt = running.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+	enc := json.NewEncoder(cmd.OutOrStdout())
+	enc.SetIndent("", "  ")
+	return enc.Encode(r)
 }
 
 // toUserdataSteps converts manifest setup steps into the simpler shape the

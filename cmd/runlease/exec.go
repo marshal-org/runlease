@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -149,22 +150,44 @@ func execOverConn(conn net.Conn, addr string, cred *credential.EphemeralCredenti
 		session.Stdin = os.Stdin
 	}
 
-	if err := session.Start(quoteRemoteCommand(remoteArgs)); err != nil {
+	cmdStr := quoteRemoteCommand(remoteArgs)
+	if err := session.Start(cmdStr); err != nil {
 		return fmt.Errorf("starting remote command: %w", err)
 	}
 	err = session.Wait()
-	if err == nil {
-		return nil
-	}
-	if ee, ok := err.(*cryptossh.ExitError); ok {
-		// Mirror the remote exit code in our own exit code.
-		os.Exit(ee.ExitStatus())
-	}
-	if _, ok := err.(*cryptossh.ExitMissingError); ok {
-		// Remote ended without sending an exit status — likely a connection drop.
+	exit := 0
+	switch e := err.(type) {
+	case nil:
+		// success
+	case *cryptossh.ExitError:
+		exit = e.ExitStatus()
+	case *cryptossh.ExitMissingError:
+		writeExecJSON(remoteArgs, -1, "missing-exit-status")
 		return fmt.Errorf("remote command did not return an exit status (connection dropped?)")
+	default:
+		writeExecJSON(remoteArgs, -1, err.Error())
+		return err
 	}
-	return err
+	writeExecJSON(remoteArgs, exit, "")
+	if exit != 0 {
+		os.Exit(exit)
+	}
+	return nil
+}
+
+// writeExecJSON emits a single-line JSON record to stderr when --output json
+// is active. Stays on stderr so the remote command's stdout is unpolluted.
+func writeExecJSON(argv []string, exitCode int, errStr string) {
+	if !jsonOutput() {
+		return
+	}
+	rec := struct {
+		Command  []string `json:"command"`
+		ExitCode int      `json:"exitCode"`
+		Error    string   `json:"error,omitempty"`
+	}{argv, exitCode, errStr}
+	b, _ := json.Marshal(rec)
+	fmt.Fprintln(os.Stderr, string(b))
 }
 
 // quoteRemoteCommand joins argv into a single shell string. Each token is

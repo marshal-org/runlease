@@ -270,12 +270,70 @@ func TestBuild_noTTLBlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	// terminate script is always installed when SelfTermination is true
+	// terminate script is always installed
 	if !strings.Contains(out, "runlease-terminate") {
 		t.Error("terminate script should always be installed")
 	}
 	// but the systemd-run timer should not be scheduled
 	if strings.Contains(out, "systemd-run --on-active") {
 		t.Error("zero-TTL output should not schedule a systemd-run timer")
+	}
+}
+
+// TestBuild_terminateScriptInstalledWithoutSelfTerm verifies the new contract:
+// the runlease-terminate manual-escape script is installed on every VM
+// regardless of `reclaim.selfTermination`. Only the auto-fire timer is gated.
+func TestBuild_terminateScriptInstalledWithoutSelfTerm(t *testing.T) {
+	p := fullParams()
+	p.Provider = "gcp"
+	p.SelfTermination = false
+	p.TTLSeconds = 0
+
+	out, err := Build(p)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, want := range []string{
+		"/usr/local/bin/runlease-terminate",
+		"/etc/sudoers.d/runlease-terminate",
+		"NOPASSWD: /usr/local/bin/runlease-terminate",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("script/sudoers should be installed regardless of SelfTermination; missing %q", want)
+		}
+	}
+	if strings.Contains(out, "systemd-run --on-active") {
+		t.Error("auto-fire timer must NOT be scheduled when SelfTermination is false")
+	}
+}
+
+func TestBuild_autoFireTimerGated(t *testing.T) {
+	// SelfTermination=true alone is not enough; TTLSeconds must also be > 0.
+	cases := []struct {
+		name       string
+		selfTerm   bool
+		ttlSeconds int
+		wantTimer  bool
+	}{
+		{"both off", false, 0, false},
+		{"selfTerm on, ttl zero", true, 0, false},
+		{"selfTerm off, ttl set (no auto-fire)", false, 3600, false},
+		{"both on", true, 3600, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := fullParams()
+			p.Provider = "gcp"
+			p.SelfTermination = tc.selfTerm
+			p.TTLSeconds = tc.ttlSeconds
+			out, err := Build(p)
+			if err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+			has := strings.Contains(out, "systemd-run --on-active")
+			if has != tc.wantTimer {
+				t.Errorf("systemd-run timer presence = %v, want %v", has, tc.wantTimer)
+			}
+		})
 	}
 }

@@ -11,8 +11,10 @@ import (
 const script = `#!/bin/bash
 set -euo pipefail
 
-# ── self-termination ──────────────────────────────────────────────────────────
-{{- if .SelfTermination }}
+# ── terminate script ─────────────────────────────────────────────────────────
+# Always installed — it's a small convenience tool, not a policy. The
+# reclaim.selfTermination field only controls whether the systemd-run timer
+# below auto-fires it at TTL.
 {{- if eq .Provider "gcp" }}
 cat > /usr/local/bin/runlease-terminate << 'TERM_EOF'
 #!/bin/bash
@@ -44,9 +46,8 @@ chmod +x /usr/local/bin/runlease-terminate
 echo "runlease-agent ALL=(ALL) NOPASSWD: /usr/local/bin/runlease-terminate" \
   > /etc/sudoers.d/runlease-terminate
 chmod 440 /etc/sudoers.d/runlease-terminate
-{{- if .TTLSeconds }}
+{{- if and .SelfTermination .TTLSeconds }}
 systemd-run --on-active={{ .TTLSeconds }} /usr/local/bin/runlease-terminate
-{{- end }}
 {{- end }}
 
 # ── runlease-agent user ──────────────────────────────────────────────────────
@@ -157,11 +158,13 @@ type Params struct {
 	// Optional relay fields; relay setup is skipped when RelayAddr is empty.
 	RelayAddr  string
 	RelayToken string
-	// Self-termination. When SelfTermination is true the runlease-terminate script
-	// is installed. When TTLSeconds > 0 a systemd-run timer fires it automatically.
+	// The runlease-terminate script + dedicated sudoers drop-in are always
+	// installed (manual escape hatch for the operator). Only the systemd-run
+	// auto-fire timer is gated: it requires BOTH SelfTermination=true and
+	// TTLSeconds>0.
 	Provider        string // "gcp" or "aws"
-	SelfTermination bool   // install terminate script; required for TTL to work
-	TTLSeconds      int    // 0 = no timer (script still installed if SelfTermination is true)
+	SelfTermination bool   // schedule the auto-fire TTL timer
+	TTLSeconds      int    // 0 = no timer
 	// PasswordlessSudo grants the runlease-agent user NOPASSWD: ALL when true.
 	// Default false keeps the locked-down posture; only the runlease-terminate
 	// command is sudo-allowed.

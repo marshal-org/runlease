@@ -7,6 +7,7 @@ All notable changes to this project will be documented here.
 ## [0.0.6] — 2026-05-28
 
 ### Added
+- `cmd/runlease/manifest.go`: `runlease manifest new` — renamed from `manifest init` (kept as an alias for back-compat). Default output filename is now `<instance-name>-manifest.yaml` (derived from the entered instance name) instead of the always-collide-prone `manifest.yaml`. `-o/--output` still overrides
 - `cmd/runlease/exec.go`: new `runlease exec [name] -- <cmd>` — runs a command on the instance over the existing SSH/relay tunnel without allocating a PTY; streams stdout/stderr, forwards stdin (unless `--no-stdin`), propagates the remote exit code. Prefers relay when one is configured, `-R/--relay` forces relay over direct SSH
 - `cmd/runlease/forward.go`: new `runlease forward [name] -L/-R …` — OpenSSH-style port forwards over the SSH/relay tunnel. Local forwards listen on the dev machine and dial out to the instance; remote forwards listen on the instance and dial back. `--all` applies every entry in `manifest.forwards` from the registry. Blocks until Ctrl+C
 - `cmd/runlease/transfer.go`: new `runlease push [name] <local> <remote>` / `runlease pull [name] <remote> <local>` — file transfer over the SSH/relay tunnel via SFTP (`github.com/pkg/sftp`). Mirrors `scp` UX: pulling into an existing local directory uses the remote basename; push preserves file mode

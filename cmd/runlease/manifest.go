@@ -12,11 +12,11 @@ import (
 	rlconfig "github.com/runlease/runlease/pkg/config"
 )
 
-var manifestInitOutput string
+var manifestNewOutput string
 
 func init() {
-	manifestInitCmd.Flags().StringVarP(&manifestInitOutput, "output", "o", "manifest.yaml", "output file path")
-	manifestCmd.AddCommand(manifestInitCmd)
+	manifestNewCmd.Flags().StringVarP(&manifestNewOutput, "output", "o", "", "output file path (default: <instance-name>-manifest.yaml)")
+	manifestCmd.AddCommand(manifestNewCmd)
 	rootCmd.AddCommand(manifestCmd)
 }
 
@@ -25,10 +25,17 @@ var manifestCmd = &cobra.Command{
 	Short: "Manage runlease manifests",
 }
 
-var manifestInitCmd = &cobra.Command{
-	Use:   "init",
-	Short: "Interactively create a new manifest YAML",
-	RunE:  runManifestInit,
+// manifestNewCmd is the canonical name; "init" is kept as an alias so old
+// scripts/docs that still say "runlease manifest init" keep working.
+var manifestNewCmd = &cobra.Command{
+	Use:     "new",
+	Aliases: []string{"init"},
+	Short:   "Interactively generate a new manifest YAML",
+	Long: `Interactively generate a new manifest YAML.
+
+Defaults to writing <instance-name>-manifest.yaml in the current directory.
+Pass -o/--output to override.`,
+	RunE: runManifestNew,
 }
 
 const manifestTemplate = `name: {{ .Name }}
@@ -92,7 +99,7 @@ type manifestTemplateData struct {
 	RelayAddr     string
 }
 
-func runManifestInit(cmd *cobra.Command, _ []string) error {
+func runManifestNew(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()
 	scanner := bufio.NewScanner(cmd.InOrStdin())
 
@@ -178,9 +185,17 @@ func runManifestInit(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	f, err := os.Create(manifestInitOutput)
+	// Resolve the output filename: explicit --output wins; otherwise derive
+	// from the entered instance name so multiple manifests can sit side-by-side
+	// in one project directory without colliding on `manifest.yaml`.
+	outputPath := manifestNewOutput
+	if outputPath == "" {
+		outputPath = name + "-manifest.yaml"
+	}
+
+	f, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf("creating %s: %w", manifestInitOutput, err)
+		return fmt.Errorf("creating %s: %w", outputPath, err)
 	}
 	defer f.Close()
 
@@ -188,7 +203,7 @@ func runManifestInit(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("writing manifest: %w", err)
 	}
 
-	fmt.Fprintf(out, "\n✓ Written to %s\n", manifestInitOutput)
-	fmt.Fprintf(out, "  Launch with: runlease up -m %s\n\n", manifestInitOutput)
+	fmt.Fprintf(out, "\n✓ Written to %s\n", outputPath)
+	fmt.Fprintf(out, "  Launch with: runlease up -m %s\n\n", outputPath)
 	return nil
 }

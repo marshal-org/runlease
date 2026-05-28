@@ -71,9 +71,9 @@ All diagrams must be Mermaid (` ```mermaid `) — do not introduce ASCII art. If
 
 When `pkg/manifest/manifest.go` gains a new field this session, verify:
 
-1. The wizard template in `cmd/runlease/manifest.go` (`manifestTemplate` constant) has a commented-out example of the new field so `runlease manifest init` surfaces it.
+1. The wizard template in `cmd/runlease/manifest.go` (`manifestTemplate` constant) has a commented-out example of the new field so `runlease manifest new` surfaces it.
 2. `runlease configure` does **not** need an update — it only sets global defaults (provider/region/size/TTL/relay), none of which are sensible global defaults for per-manifest fields like `sudo`/`setup`/`forwards`.
-3. The commented template is parseable: build the CLI, run `echo "" | ./runlease manifest init -o /tmp/test.yaml`, eyeball the output. Watch for backtick-in-raw-string-literal issues in `pkg/userdata/userdata.go` if the field involves the userdata template.
+3. The commented template is parseable: build the CLI, run `echo "" | ./runlease manifest new -o /tmp/test.yaml`, eyeball the output. Watch for backtick-in-raw-string-literal issues in `pkg/userdata/userdata.go` if the field involves the userdata template.
 
 If the wizard is stale, draft the addition and show the user before editing.
 

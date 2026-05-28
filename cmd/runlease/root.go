@@ -54,7 +54,7 @@ Manage instances:
   runlease down <name>         terminate an instance
 
 Manifest helpers:
-  runlease manifest init       interactive manifest wizard
+  runlease manifest new        interactive manifest wizard (alias: init)
   runlease catalog             list available instance classes`,
 }
 

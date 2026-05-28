@@ -308,15 +308,19 @@ func runUp(cmd *cobra.Command, _ []string) error {
 	if attach {
 		return runAttach(cmd, m, running, cred, relayToken)
 	}
+	// Manifest forwards auto-apply alongside the interactive shell. The
+	// shell runs in the foreground; forwards run in a goroutine on the same
+	// SSH client and are torn down when the shell exits.
+	specs := registryForwardsToSpecs(manifestToRegistryForwards(m.Forwards))
 	if m.Relay.Addr != "" {
-		return pollAndConnectViaRelay(cmd, m.Relay.Addr, relayToken, m.Name, cred)
+		return pollAndConnectViaRelay(cmd, m.Relay.Addr, relayToken, m.Name, cred, specs)
 	}
-	return pollAndConnect(cmd, running.PublicIP, m.Name, cred)
+	return pollAndConnect(cmd, running.PublicIP, m.Name, cred, specs)
 }
 
 const sshPollInterval = 8 * time.Second
 
-func pollAndConnect(cmd *cobra.Command, publicIP, name string, cred *credential.EphemeralCredential) error {
+func pollAndConnect(cmd *cobra.Command, publicIP, name string, cred *credential.EphemeralCredential, forwards []forwardSpec) error {
 	out := cmd.OutOrStdout()
 
 	sigCh := make(chan os.Signal, 1)
@@ -339,8 +343,15 @@ func pollAndConnect(cmd *cobra.Command, publicIP, name string, cred *credential.
 		d := &net.Dialer{Timeout: 5 * time.Second}
 		conn, err := d.DialContext(pollCtx, "tcp", publicIP+":22")
 		if err == nil {
+			// Build a fresh conn for sshShellWithForwards (the probe conn was closed).
+			sshConn, derr := net.DialTimeout("tcp", publicIP+":22", 10*time.Second)
 			conn.Close()
-			sshErr := sshSession(publicIP, cred)
+			var sshErr error
+			if derr != nil {
+				sshErr = derr
+			} else {
+				sshErr = sshShellWithForwards(sshConn, publicIP+":22", cred, forwards, out)
+			}
 			if sshErr != nil && strings.Contains(sshErr.Error(), "host key mismatch") {
 				// sshd is up but the startup script hasn't injected our key yet.
 				fmt.Fprintf(out, "🔄 sshd up, startup script still running — retrying in %s...\n", sshPollInterval)
@@ -366,7 +377,7 @@ func pollAndConnect(cmd *cobra.Command, publicIP, name string, cred *credential.
 	}
 }
 
-func pollAndConnectViaRelay(cmd *cobra.Command, relayAddr, token, name string, cred *credential.EphemeralCredential) error {
+func pollAndConnectViaRelay(cmd *cobra.Command, relayAddr, token, name string, cred *credential.EphemeralCredential, forwards []forwardSpec) error {
 	out := cmd.OutOrStdout()
 	readyURL := relayHTTPBase(relayAddr) + "/ready"
 
@@ -400,7 +411,7 @@ func pollAndConnectViaRelay(cmd *cobra.Command, relayAddr, token, name string, c
 				if err != nil {
 					return fmt.Errorf("relay: %w", err)
 				}
-				return sshOverConn(conn, relayAddr, cred)
+				return sshShellWithForwards(conn, relayAddr, cred, forwards, out)
 			}
 		}
 

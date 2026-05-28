@@ -226,6 +226,43 @@ func proxyConn(a, b net.Conn) {
 	_ = b.Close()
 }
 
+// sshShellWithForwards opens an interactive SSH session and concurrently
+// applies a set of port forwards on the same SSH client. The shell runs in
+// the foreground; forwards run in a goroutine and are torn down when the
+// shell exits (the SSH client closes, which closes the listeners' Accept
+// loops).
+//
+// Banner output ("🔀 -L … → …, Forwards active") prints to `out` BEFORE the
+// shell takes over the terminal in raw mode, so it doesn't garble the prompt.
+func sshShellWithForwards(conn net.Conn, addr string, cred *credential.EphemeralCredential, specs []forwardSpec, out io.Writer) error {
+	client, err := newSSHClient(conn, addr, cred)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	if len(specs) > 0 {
+		fwdCtx, fwdCancel := context.WithCancel(context.Background())
+		defer fwdCancel()
+		ready := make(chan struct{})
+		go func() {
+			// runForwards prints the banner and "Forwards active" line to `out`,
+			// then blocks until ctx is cancelled. Close `ready` once the banner
+			// has had time to land so the shell prompt comes after it.
+			_ = runForwards(fwdCtx, out, client, specs)
+		}()
+		// Tiny pause so listener banner lines land before the shell prompt.
+		// 150ms is enough for runForwards to bind listeners + write its banner.
+		go func() {
+			time.Sleep(150 * time.Millisecond)
+			close(ready)
+		}()
+		<-ready
+	}
+
+	return sshInteractiveSession(client)
+}
+
 // newSSHClient builds an *ssh.Client from an established net.Conn and the
 // instance credential. Takes ownership of conn — closes it on any error path
 // so callers don't need to remember a redundant defer. Shared by forward,

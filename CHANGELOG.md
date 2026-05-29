@@ -4,6 +4,18 @@ All notable changes to this project will be documented here.
 
 ---
 
+## [0.0.7] — 2026-05-29
+
+### Changed
+- `cmd/runlease/exec.go`, `cmd/runlease/ssh.go`: `exec` and `ssh` now default to the **relay** whenever the instance has one configured, matching `forward`/`push`/`pull`/`connect`. Previously `exec` dialed the instance's public IP directly when one existed (and `ssh` had no relay path at all), so commands timed out against VMs with no inbound `:22` — the exact case the relay exists for. Direct public-IP dialing is now opt-in via a new `--direct` flag. `exec`'s old `-R/--relay` flag (which forced relay over a direct dial) is removed, since relay is now the default
+
+### Fixed
+- `pkg/relay/server.go`: fixed a client-goroutine leak — a CLI handshake blocked on the unbuffered `clientCh` send would hang forever once the slot's coordinator exited (slot expiry / agent gone). Added a `done` channel closed when the coordinator returns; `handleClient` selects on it and tears the client down cleanly. **Takes effect only after the deployed relay is rebuilt from this release.**
+- `cmd/runlease/attach.go`: `markerWriter.Write` no longer concatenates the carried tail with all of `p` (up to ~32KB per `io.Copy` chunk) on every write — it checks `p` directly first, then a small `len(marker)-1` boundary slice only when a marker could be split across writes
+- `cmd/runlease/up.go`: `pollAndConnect` no longer dials the SSH port twice (probe → close → redial); the probe connection is handed straight to `sshShellWithForwards`, removing the redundant dial and a reconnect race
+
+---
+
 ## [0.0.6] — 2026-05-28
 
 ### Added

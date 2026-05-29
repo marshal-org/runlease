@@ -15,14 +15,14 @@ import (
 )
 
 func init() {
-	execCmd.Flags().BoolVarP(&execViaRelay, "relay", "R", false, "force relay even when a public IP is available")
+	execCmd.Flags().BoolVar(&execDirect, "direct", false, "dial the instance's public IP directly instead of via the relay")
 	execCmd.Flags().BoolVar(&execNoStdin, "no-stdin", false, "do not forward local stdin to the remote command")
 	rootCmd.AddCommand(execCmd)
 }
 
 var (
-	execViaRelay bool
-	execNoStdin  bool
+	execDirect  bool
+	execNoStdin bool
 )
 
 var execCmd = &cobra.Command{
@@ -89,8 +89,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading credential: %w", err)
 	}
 
-	useRelay := execViaRelay || entry.Handle.PublicIP == ""
-	if entry.RelayAddr != "" && useRelay {
+	if entry.RelayAddr != "" && !execDirect {
 		conn, err := dialRelay(entry.RelayAddr, entry.RelayToken)
 		if err != nil {
 			return fmt.Errorf("relay: %w", err)

@@ -60,6 +60,7 @@ type slot struct {
 	instanceReady   atomic.Bool   // set true once the yamux session is established
 	instanceCh      chan net.Conn
 	clientCh        chan net.Conn // clients queue here for the coordinator to pick up
+	done            chan struct{} // closed when the coordinator goroutine exits
 }
 
 func New(log *slog.Logger, cfg Config) *Server {
@@ -199,6 +200,7 @@ func (s *Server) handleRegister(conn net.Conn, token, bearer string) {
 		expiresAt:  time.Now().Add(tokenTTL),
 		instanceCh: make(chan net.Conn, 1),
 		clientCh:   make(chan net.Conn, 1),
+		done:       make(chan struct{}),
 	}
 	s.slots[token] = sl
 	s.mu.Unlock()
@@ -237,13 +239,27 @@ func (s *Server) handleClient(conn net.Conn, token string) {
 		return
 	}
 	// Concurrency is expected: the coordinator runs an OpenStream per client.
-	// Block (with the handshake deadline still in effect) until it's picked up.
-	sl.clientCh <- conn
+	// Block (with the handshake deadline still in effect) until the coordinator
+	// picks it up, or bail out if the coordinator has exited (slot expired /
+	// removed) — a bare send on clientCh with no reader would otherwise leak
+	// this goroutine and its conn forever.
+	select {
+	case sl.clientCh <- conn:
+	case <-sl.done:
+		writeMsg(conn, wireMsg{Status: "error", Message: "slot closed"}) //nolint:errcheck
+		conn.Close()
+	}
 }
 
 func (s *Server) startCoordinator(token string, sl *slot) {
 	go func() {
-		defer s.removeSlot(token)
+		// close(done) unblocks any client blocked in handleClient; the final
+		// drainClose mops up a conn that raced into the buffer on the way out.
+		defer func() {
+			close(sl.done)
+			drainClose(sl.clientCh)
+			s.removeSlot(token)
+		}()
 
 		ctx, cancel := context.WithDeadline(context.Background(), sl.expiresAt)
 		defer cancel()

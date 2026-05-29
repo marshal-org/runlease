@@ -23,7 +23,7 @@ reclaim:
   selfTermination: true
 
 relay:
-  addr: wss://relay.snapmatch.ai
+  addr: wss://relay.runlease.online
 
 sudo: passwordless
 

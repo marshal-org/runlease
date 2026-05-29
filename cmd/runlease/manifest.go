@@ -73,7 +73,7 @@ instanceClass: compute.small   # Portable class: micro | small | medium | large 
 # publicIp: true               # Default: true if no relay, false if relay set.
                                # On GCP, false requires Cloud NAT for egress.
 relay:
-  addr: wss://relay.snapmatch.ai   # Set for tunneled access (no inbound firewall).
+  addr: wss://relay.runlease.online   # Set for tunneled access (no inbound firewall).
                                    # Leave empty to use direct SSH on the public IP.
 
 # ── Lifecycle ───────────────────────────────────────────────────────────────

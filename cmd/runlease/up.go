@@ -498,6 +498,12 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 	if relayAddr != "" {
 		m.Relay = manifest.RelayConfig{Addr: relayAddr}
 	}
+	// Manifest-file paths validate inside manifest.Load; quick mode builds the
+	// struct directly, so validate here too (catches e.g. negative --disk-size
+	// or a bad --ttl before we hit the cloud).
+	if err := m.Validate(); err != nil {
+		return nil, err
+	}
 	return m, nil
 }
 

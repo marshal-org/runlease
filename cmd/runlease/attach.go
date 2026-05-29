@@ -184,9 +184,21 @@ func (w *markerWriter) Write(p []byte) (int, error) {
 	if w.matched {
 		return n, err
 	}
-	// Look for the marker in (buf || p), keep a tail of len(marker)-1 bytes.
-	combined := append(w.buf, p...)
-	if bytes.Contains(combined, w.marker) {
+	keep := len(w.marker) - 1
+
+	// Fast path: marker fully contained in this write — no allocation. p can be
+	// up to io.Copy's 32KB buffer, so avoid concatenating buf||p every write.
+	matched := bytes.Contains(p, w.marker)
+	if !matched && len(w.buf) > 0 {
+		// A split marker can only straddle the carried tail and the first `keep`
+		// bytes of p, so only check that small boundary.
+		boundary := p
+		if len(boundary) > keep {
+			boundary = boundary[:keep]
+		}
+		matched = bytes.Contains(append(w.buf, boundary...), w.marker)
+	}
+	if matched {
 		w.matched = true
 		w.buf = nil
 		if w.signal != nil {
@@ -199,11 +211,15 @@ func (w *markerWriter) Write(p []byte) (int, error) {
 		}
 		return n, err
 	}
-	keep := len(w.marker) - 1
-	if len(combined) > keep {
-		w.buf = append(w.buf[:0], combined[len(combined)-keep:]...)
+
+	// Carry the last `keep` bytes forward to catch a marker split across writes.
+	if len(p) >= keep {
+		w.buf = append(w.buf[:0], p[len(p)-keep:]...)
 	} else {
-		w.buf = combined
+		w.buf = append(w.buf, p...)
+		if len(w.buf) > keep {
+			w.buf = append(w.buf[:0], w.buf[len(w.buf)-keep:]...)
+		}
 	}
 	return n, err
 }

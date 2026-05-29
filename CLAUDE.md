@@ -150,7 +150,7 @@ These must hold regardless of feature work:
 
 ## Deployment Story
 
-The relay is a singleton: one VM at `runlease-relay` in `marshal-dev-495114/us-central1-a`, exposed via `wss://relay.snapmatch.ai` (Cloudflare in front). The agent binary served from `/agent` is what every new VM downloads at boot, so **relay version == agent version** by construction.
+The relay is a singleton: one VM at `runlease-relay` in `marshal-dev-495114/us-central1-a`, exposed via `wss://relay.runlease.online` (Cloudflare in front). The agent binary served from `/agent` is what every new VM downloads at boot, so **relay version == agent version** by construction.
 
 To deploy:
 ```bash

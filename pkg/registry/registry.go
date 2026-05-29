@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/runlease/runlease/pkg/provider"
 )
@@ -79,6 +80,41 @@ func (r *Registry) UpdateState(nameOrID string, state provider.InstanceStatus) e
 	}
 	r.data[key].Handle.State = state
 	return r.save()
+}
+
+// UpdateExpiry sets the instance's auto-termination deadline (used by
+// `runlease snooze`). A nil expiresAt clears it (manually managed).
+func (r *Registry) UpdateExpiry(nameOrID string, expiresAt *time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := r.findKey(nameOrID)
+	if key == "" {
+		return fmt.Errorf("instance %q not found", nameOrID)
+	}
+	r.data[key].Handle.ExpiresAt = expiresAt
+	return r.save()
+}
+
+// Reload re-reads the registry file from disk, replacing the in-memory state.
+// The reclaim daemon calls this so it picks up out-of-band changes (e.g. a
+// `runlease snooze` from another process pushing back a TTL).
+func (r *Registry) Reload() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	raw, err := os.ReadFile(r.path)
+	if os.IsNotExist(err) {
+		r.data = make(map[string]*Entry)
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("reading registry: %w", err)
+	}
+	data := make(map[string]*Entry)
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return fmt.Errorf("parsing registry: %w", err)
+	}
+	r.data = data
+	return nil
 }
 
 func (r *Registry) Remove(nameOrID string) error {

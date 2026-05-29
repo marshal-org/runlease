@@ -80,6 +80,45 @@ func TestRemove(t *testing.T) {
 	}
 }
 
+func TestUpdateExpiry(t *testing.T) {
+	r, _ := Load(filepath.Join(t.TempDir(), "registry.json"))
+	_ = r.Add(makeEntry("my-runner", "i-abc"))
+
+	exp := time.Now().Add(3 * time.Hour).UTC()
+	if err := r.UpdateExpiry("my-runner", &exp); err != nil {
+		t.Fatalf("UpdateExpiry: %v", err)
+	}
+	got, _ := r.Get("my-runner")
+	if got.Handle.ExpiresAt == nil || !got.Handle.ExpiresAt.Equal(exp) {
+		t.Errorf("ExpiresAt = %v, want %v", got.Handle.ExpiresAt, exp)
+	}
+	if err := r.UpdateExpiry("nope", &exp); err == nil {
+		t.Error("expected error for unknown instance")
+	}
+}
+
+func TestReload_picksUpExternalWrite(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.json")
+	r1, _ := Load(path)
+	_ = r1.Add(makeEntry("my-runner", "i-abc"))
+
+	// A second process (here, a second Registry over the same file) snoozes.
+	r2, _ := Load(path)
+	exp := time.Now().Add(5 * time.Hour).UTC()
+	_ = r2.UpdateExpiry("my-runner", &exp)
+
+	// r1 doesn't see it until it reloads from disk.
+	if e, _ := r1.Get("my-runner"); e.Handle.ExpiresAt != nil {
+		t.Fatal("r1 should not see the write before Reload")
+	}
+	if err := r1.Reload(); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
+	if e, _ := r1.Get("my-runner"); e.Handle.ExpiresAt == nil || !e.Handle.ExpiresAt.Equal(exp) {
+		t.Errorf("after Reload ExpiresAt = %v, want %v", e.Handle.ExpiresAt, exp)
+	}
+}
+
 func TestList(t *testing.T) {
 	r, _ := Load(filepath.Join(t.TempDir(), "registry.json"))
 	_ = r.Add(makeEntry("runner-a", "i-aaa"))

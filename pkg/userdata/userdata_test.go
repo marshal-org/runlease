@@ -1,6 +1,7 @@
 package userdata
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -153,7 +154,7 @@ func TestBuild_gcpTTLBlock(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	for _, want := range []string{
-		"systemd-run --on-active=7200",
+		"systemd-run --unit=runlease-selfterminate --on-active=7200",
 		"/usr/local/bin/runlease-terminate",
 		"metadata.google.internal",
 		"compute.googleapis.com",
@@ -179,7 +180,7 @@ func TestBuild_awsTTLBlock(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	for _, want := range []string{
-		"systemd-run --on-active=3600",
+		"systemd-run --unit=runlease-selfterminate --on-active=3600",
 		"/usr/local/bin/runlease-terminate",
 		"systemctl --force --force poweroff",
 	} {
@@ -274,9 +275,12 @@ func TestBuild_noTTLBlock(t *testing.T) {
 	if !strings.Contains(out, "runlease-terminate") {
 		t.Error("terminate script should always be installed")
 	}
-	// but the systemd-run timer should not be scheduled
-	if strings.Contains(out, "systemd-run --on-active") {
-		t.Error("zero-TTL output should not schedule a systemd-run timer")
+	// but the auto-fire boot timer should not be scheduled. The snooze helper
+	// always carries a `systemd-run --unit=runlease-selfterminate
+	// --on-active="$SECS"` line, so key the check on the numeric offset, which
+	// only the boot timer emits.
+	if strings.Contains(out, "--on-active=0 /usr/local/bin/runlease-terminate") {
+		t.Error("zero-TTL output should not schedule the auto-fire boot timer")
 	}
 }
 
@@ -302,7 +306,7 @@ func TestBuild_terminateScriptInstalledWithoutSelfTerm(t *testing.T) {
 			t.Errorf("script/sudoers should be installed regardless of SelfTermination; missing %q", want)
 		}
 	}
-	if strings.Contains(out, "systemd-run --on-active") {
+	if strings.Contains(out, "--on-active=0 /usr/local/bin/runlease-terminate") {
 		t.Error("auto-fire timer must NOT be scheduled when SelfTermination is false")
 	}
 }
@@ -330,9 +334,12 @@ func TestBuild_autoFireTimerGated(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Build: %v", err)
 			}
-			has := strings.Contains(out, "systemd-run --on-active")
+			// Key on the numeric offset + terminate path: only the gated boot
+			// timer emits it. The always-present snooze helper uses "$SECS".
+			marker := "--on-active=" + strconv.Itoa(tc.ttlSeconds) + " /usr/local/bin/runlease-terminate"
+			has := strings.Contains(out, marker)
 			if has != tc.wantTimer {
-				t.Errorf("systemd-run timer presence = %v, want %v", has, tc.wantTimer)
+				t.Errorf("auto-fire timer presence = %v, want %v", has, tc.wantTimer)
 			}
 		})
 	}

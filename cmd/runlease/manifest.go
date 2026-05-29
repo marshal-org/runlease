@@ -69,6 +69,11 @@ instanceClass: compute.small   # Portable class: micro | small | medium | large 
 # baseImage: ami-0abcdef1234567890
 # baseImage: projects/debian-cloud/global/images/family/debian-12
 
+# ── Disk ────────────────────────────────────────────────────────────────────
+# diskSizeGb: 50               # Boot disk size in GB. Default: the image's own
+                               # size (GCP debian-12 ~10GB; AWS AL2023 ~30GB).
+                               # Must be >= the image minimum (can't shrink).
+
 # ── Networking ──────────────────────────────────────────────────────────────
 # publicIp: true               # Default: true if no relay, false if relay set.
                                # On GCP, false requires Cloud NAT for egress.
@@ -152,6 +157,7 @@ baseImage: {{ .BaseImage }}
 {{- else }}
 # baseImage: (auto-detected at launch)
 {{- end }}
+# diskSizeGb: 50               # boot disk size in GB (default: image's size)
 reclaim:
   ttl: {{ .TTL }}
 {{- if .RelayAddr }}

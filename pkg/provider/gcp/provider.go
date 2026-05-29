@@ -73,6 +73,7 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 				AutoDelete: true,
 				InitializeParams: &compute.AttachedDiskInitializeParams{
 					SourceImage: spec.ImageID,
+					DiskSizeGb:  int64(spec.DiskSizeGb), // 0 → GCP uses the image's default size
 				},
 			},
 		},

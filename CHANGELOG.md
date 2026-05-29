@@ -4,6 +4,13 @@ All notable changes to this project will be documented here.
 
 ---
 
+## [0.2.0](https://github.com/marshal-org/runlease/compare/v0.1.0...v0.2.0) (2026-05-29)
+
+
+### Features
+
+* **manifest:** configurable boot disk size + delete GCP spot on preemption ([#7](https://github.com/marshal-org/runlease/issues/7)) ([d6f3f1b](https://github.com/marshal-org/runlease/commit/d6f3f1bc3511afd83b727e729de86168d41744ee))
+
 ## [0.1.0](https://github.com/marshal-org/runlease/compare/v0.0.7...v0.1.0) (2026-05-29)
 
 

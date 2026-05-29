@@ -7,7 +7,7 @@ Starter manifest: [`examples/manifests/gcp-ar-private-pull.yaml`](../examples/ma
 ```mermaid
 flowchart LR
     L["Developer laptop<br/>(runlease CLI)"]
-    R[("relay.snapmatch.ai")]
+    R[("relay.runlease.online")]
     subgraph VM["Spot instance (no public IP)"]
         K["k3s / kubelet"]
         APG["auth-provider-gcp<br/>(invoked per pull)"]

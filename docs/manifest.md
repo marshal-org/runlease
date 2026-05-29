@@ -16,7 +16,7 @@ instanceClass: compute.small
 reclaim:
   ttl: 2h
 relay:
-  addr: wss://relay.snapmatch.ai
+  addr: wss://relay.runlease.online
 ```
 
 Launch with `runlease up -m my-runner-manifest.yaml`.
@@ -135,7 +135,7 @@ baseImage: projects/debian-cloud/global/images/family/debian-12
 
 publicIp: false                      # relay-only access
 relay:
-  addr: wss://relay.snapmatch.ai
+  addr: wss://relay.runlease.online
 
 reclaim:
   ttl: 4h

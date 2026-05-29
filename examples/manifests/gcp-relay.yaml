@@ -6,6 +6,6 @@ baseImage: projects/debian-cloud/global/images/debian-12-bookworm-v20260428
 reclaim:
   ttl: 1h
 relay:
-  addr: wss://relay.snapmatch.ai
+  addr: wss://relay.runlease.online
 tags:
   env: test

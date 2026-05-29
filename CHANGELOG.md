@@ -4,6 +4,18 @@ All notable changes to this project will be documented here.
 
 ---
 
+## [0.1.0](https://github.com/marshal-org/runlease/compare/v0.0.7...v0.1.0) (2026-05-29)
+
+
+### Features
+
+* snooze auto-termination + abort blocking commands when the instance is gone ([#6](https://github.com/marshal-org/runlease/issues/6)) ([fe065b6](https://github.com/marshal-org/runlease/commit/fe065b6c34fbb272e77b31bed67470afa82011a9))
+
+
+### Bug Fixes
+
+* **relay:** point default relay at relay.runlease.online ([e4e2460](https://github.com/marshal-org/runlease/commit/e4e2460e0fba33649d35662e3d4a86f68d584085))
+
 ## [0.0.7] — 2026-05-29
 
 ### Changed

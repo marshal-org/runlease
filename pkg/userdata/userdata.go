@@ -43,11 +43,29 @@ systemctl --force --force poweroff
 TERM_EOF
 {{- end }}
 chmod +x /usr/local/bin/runlease-terminate
-echo "runlease-agent ALL=(ALL) NOPASSWD: /usr/local/bin/runlease-terminate" \
-  > /etc/sudoers.d/runlease-terminate
+
+# ── snooze script ────────────────────────────────────────────────────────────
+# Reschedules the self-termination timer to fire its argument (seconds) from
+# now. Used by 'runlease snooze' over the relay. The timer is a named transient
+# unit (runlease-selfterminate) so it can be cancelled and re-armed.
+cat > /usr/local/bin/runlease-snooze << 'SNOOZE_EOF'
+#!/bin/bash
+[ "$EUID" -ne 0 ] && exec sudo "$0" "$@"
+SECS="$1"
+case "$SECS" in ''|*[!0-9]*) echo "usage: runlease-snooze <seconds-from-now>" >&2; exit 1 ;; esac
+systemctl stop runlease-selfterminate.timer 2>/dev/null || true
+systemctl reset-failed runlease-selfterminate.timer runlease-selfterminate.service 2>/dev/null || true
+systemd-run --unit=runlease-selfterminate --on-active="$SECS" /usr/local/bin/runlease-terminate
+SNOOZE_EOF
+chmod +x /usr/local/bin/runlease-snooze
+
+cat > /etc/sudoers.d/runlease-terminate << 'SUDO_EOF'
+runlease-agent ALL=(ALL) NOPASSWD: /usr/local/bin/runlease-terminate
+runlease-agent ALL=(ALL) NOPASSWD: /usr/local/bin/runlease-snooze
+SUDO_EOF
 chmod 440 /etc/sudoers.d/runlease-terminate
 {{- if and .SelfTermination .TTLSeconds }}
-systemd-run --on-active={{ .TTLSeconds }} /usr/local/bin/runlease-terminate
+systemd-run --unit=runlease-selfterminate --on-active={{ .TTLSeconds }} /usr/local/bin/runlease-terminate
 {{- end }}
 
 # ── runlease-agent user ──────────────────────────────────────────────────────

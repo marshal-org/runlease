@@ -102,6 +102,24 @@ func (m *Manager) watch(ctx context.Context, wg *sync.WaitGroup, p provider.Clou
 				m.terminate(ctx, p, e)
 				return
 			case <-pollTicker.C:
+				// Pick up out-of-band TTL changes (e.g. `runlease snooze`
+				// pushing back the deadline from another process) and re-arm.
+				if err := m.reg.Reload(); err == nil {
+					if fresh, ferr := m.reg.Get(string(e.Handle.ID)); ferr == nil && fresh.Handle.ExpiresAt != nil {
+						if !fresh.Handle.ExpiresAt.Equal(*e.Handle.ExpiresAt) {
+							e.Handle.ExpiresAt = fresh.Handle.ExpiresAt
+							if !ttlTimer.Stop() {
+								select {
+								case <-ttlTimer.C:
+								default:
+								}
+							}
+							ttlTimer.Reset(time.Until(*fresh.Handle.ExpiresAt))
+							m.log.Info("TTL updated, re-armed", "id", e.Handle.ID, "name", e.Handle.ManifestName,
+								"expires_in", time.Until(*fresh.Handle.ExpiresAt).Round(time.Second))
+						}
+					}
+				}
 				status, err := p.Status(ctx, e.Handle.ID)
 				if err != nil {
 					m.log.Error("polling instance status", "id", e.Handle.ID, "err", err)

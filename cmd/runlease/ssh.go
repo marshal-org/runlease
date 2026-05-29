@@ -14,8 +14,11 @@ import (
 )
 
 func init() {
+	sshCmd.Flags().BoolVar(&sshDirect, "direct", false, "dial the instance's public IP directly instead of via the relay")
 	rootCmd.AddCommand(sshCmd)
 }
+
+var sshDirect bool
 
 var sshCmd = &cobra.Command{
 	Use:   "ssh [name|id]",
@@ -37,9 +40,6 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if entry.Handle.PublicIP == "" {
-		return fmt.Errorf("instance %s has no public IP — is it running?", entry.Handle.ID)
-	}
 
 	masterKey, err := credential.LoadOrCreateMasterKey(defaultMasterKeyPath())
 	if err != nil {
@@ -50,7 +50,20 @@ func runSSH(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading credential: %w", err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Connecting to %s (%s) as runlease-agent...\n",
+	out := cmd.OutOrStdout()
+	if entry.RelayAddr != "" && !sshDirect {
+		fmt.Fprintf(out, "Connecting to %s via relay (%s) as runlease-agent...\n",
+			entry.Handle.ManifestName, entry.RelayAddr)
+		conn, err := dialRelay(entry.RelayAddr, entry.RelayToken)
+		if err != nil {
+			return fmt.Errorf("relay: %w", err)
+		}
+		return sshOverConn(conn, entry.RelayAddr, cred)
+	}
+	if entry.Handle.PublicIP == "" {
+		return fmt.Errorf("instance %s has no public IP and no relay configured", entry.Handle.ID)
+	}
+	fmt.Fprintf(out, "Connecting to %s (%s) as runlease-agent...\n",
 		entry.Handle.ManifestName, entry.Handle.PublicIP+":22")
 	return sshSession(entry.Handle.PublicIP, cred)
 }

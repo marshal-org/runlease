@@ -136,17 +136,16 @@ func runForwards(ctx context.Context, out io.Writer, client *cryptossh.Client, s
 
 	// Abort if the instance goes away (TTL/snooze expiry, spot reclaim, manual
 	// `down`, or a network drop): client.Wait returns when the SSH transport
-	// tears down, so we stop instead of hanging with dead listeners. The select
-	// stays silent on normal shutdown, where the caller's client.Close() unblocks
-	// Wait only after ctx is already cancelled.
+	// tears down, so we stop instead of hanging with dead listeners. On a normal
+	// shutdown the caller's client.Close() unblocks Wait only after ctx is
+	// already cancelled, so ctx.Err() distinguishes that case race-free.
 	go func() {
 		werr := client.Wait()
-		select {
-		case <-ctx.Done():
-		default:
-			fmt.Fprintf(out, "\n⚠️  Connection to the instance lost (%v) — stopping forwards.\n", werr)
-			cancel()
+		if ctx.Err() != nil {
+			return
 		}
+		fmt.Fprintf(out, "\n⚠️  Connection to the instance lost (%v) — stopping forwards.\n", werr)
+		cancel()
 	}()
 
 	var wg sync.WaitGroup

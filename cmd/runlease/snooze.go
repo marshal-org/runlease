@@ -112,7 +112,8 @@ func runSnooze(cmd *cobra.Command, args []string) error {
 	}
 
 	// Reflect the new deadline locally so `list` and the reclaim daemon agree.
-	expiresAt := time.Now().Add(d)
+	// UTC to match how the rest of the codebase stores timestamps.
+	expiresAt := time.Now().UTC().Add(d)
 	if uerr := reg.UpdateExpiry(nameOrID, &expiresAt); uerr != nil {
 		return fmt.Errorf("instance rescheduled, but updating registry failed: %w", uerr)
 	}

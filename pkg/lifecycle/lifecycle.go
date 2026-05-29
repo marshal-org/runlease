@@ -102,18 +102,21 @@ func (m *Manager) watch(ctx context.Context, wg *sync.WaitGroup, p provider.Clou
 				m.terminate(ctx, p, e)
 				return
 			case <-pollTicker.C:
-				// Pick up out-of-band TTL changes (e.g. `runlease snooze`
-				// pushing back the deadline from another process) and re-arm.
+				// Pick up out-of-band TTL changes (e.g. `runlease snooze` from
+				// another process) and re-arm. Handle both directions: a new
+				// deadline, and a cleared deadline (instance made manually
+				// managed) — leaving the old timer armed would terminate it.
 				if err := m.reg.Reload(); err == nil {
-					if fresh, ferr := m.reg.Get(string(e.Handle.ID)); ferr == nil && fresh.Handle.ExpiresAt != nil {
-						if !fresh.Handle.ExpiresAt.Equal(*e.Handle.ExpiresAt) {
+					if fresh, ferr := m.reg.Get(string(e.Handle.ID)); ferr == nil {
+						switch {
+						case fresh.Handle.ExpiresAt == nil && e.Handle.ExpiresAt != nil:
+							e.Handle.ExpiresAt = nil
+							stopTimer(ttlTimer)
+							m.log.Info("TTL cleared, now manually managed", "id", e.Handle.ID, "name", e.Handle.ManifestName)
+						case fresh.Handle.ExpiresAt != nil &&
+							(e.Handle.ExpiresAt == nil || !fresh.Handle.ExpiresAt.Equal(*e.Handle.ExpiresAt)):
 							e.Handle.ExpiresAt = fresh.Handle.ExpiresAt
-							if !ttlTimer.Stop() {
-								select {
-								case <-ttlTimer.C:
-								default:
-								}
-							}
+							stopTimer(ttlTimer)
 							ttlTimer.Reset(time.Until(*fresh.Handle.ExpiresAt))
 							m.log.Info("TTL updated, re-armed", "id", e.Handle.ID, "name", e.Handle.ManifestName,
 								"expires_in", time.Until(*fresh.Handle.ExpiresAt).Round(time.Second))
@@ -137,6 +140,17 @@ func (m *Manager) watch(ctx context.Context, wg *sync.WaitGroup, p provider.Clou
 			}
 		}
 	}()
+}
+
+// stopTimer stops t, draining its channel if it had already fired, so a later
+// Reset starts clean.
+func stopTimer(t *time.Timer) {
+	if !t.Stop() {
+		select {
+		case <-t.C:
+		default:
+		}
+	}
 }
 
 func (m *Manager) terminate(ctx context.Context, p provider.CloudProvider, e *registry.Entry) {

@@ -343,15 +343,9 @@ func pollAndConnect(cmd *cobra.Command, publicIP, name string, cred *credential.
 		d := &net.Dialer{Timeout: 5 * time.Second}
 		conn, err := d.DialContext(pollCtx, "tcp", publicIP+":22")
 		if err == nil {
-			// Build a fresh conn for sshShellWithForwards (the probe conn was closed).
-			sshConn, derr := net.DialTimeout("tcp", publicIP+":22", 10*time.Second)
-			conn.Close()
-			var sshErr error
-			if derr != nil {
-				sshErr = derr
-			} else {
-				sshErr = sshShellWithForwards(sshConn, publicIP+":22", cred, forwards, out)
-			}
+			// The probe conn is the connection: sshShellWithForwards takes
+			// ownership of it (and closes it on every path).
+			sshErr := sshShellWithForwards(conn, publicIP+":22", cred, forwards, out)
 			if sshErr != nil && strings.Contains(sshErr.Error(), "host key mismatch") {
 				// sshd is up but the startup script hasn't injected our key yet.
 				fmt.Fprintf(out, "🔄 sshd up, startup script still running — retrying in %s...\n", sshPollInterval)

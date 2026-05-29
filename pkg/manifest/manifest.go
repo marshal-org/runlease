@@ -16,6 +16,9 @@ type Manifest struct {
 	InstanceClass string            `yaml:"instanceClass"`
 	InstanceType  string            `yaml:"instanceType"`
 	BaseImage     string            `yaml:"baseImage"`
+	// DiskSizeGb overrides the boot disk size in GB. 0 (default) uses the
+	// image's own size. Must be >= the image's minimum on both clouds.
+	DiskSizeGb int `yaml:"diskSizeGb"`
 	// PublicIP controls whether a public IP is assigned. Nil = auto: true when
 	// no relay is configured (direct SSH needs it), false when relay is set.
 	PublicIP *bool             `yaml:"publicIp"`
@@ -170,6 +173,9 @@ func (m *Manifest) Validate() error {
 	}
 	if m.BaseImage == "" && m.Provider != "aws" && m.Provider != "gcp" {
 		return fmt.Errorf("manifest.baseImage is required")
+	}
+	if m.DiskSizeGb < 0 {
+		return fmt.Errorf("manifest.diskSizeGb must be >= 0 (0 = image default), got %d", m.DiskSizeGb)
 	}
 	if m.Reclaim.TTL != "" {
 		if _, err := m.Reclaim.TTLDuration(); err != nil {

@@ -269,6 +269,23 @@ func TestValidate_invalidTTL(t *testing.T) {
 	}
 }
 
+func TestValidate_diskSize(t *testing.T) {
+	f := writeTempFile(t, validYAML)
+	m, _ := Load(f)
+	m.DiskSizeGb = -1
+	if err := m.Validate(); err == nil {
+		t.Fatal("expected error for negative diskSizeGb")
+	}
+	m.DiskSizeGb = 0 // image default
+	if err := m.Validate(); err != nil {
+		t.Errorf("diskSizeGb=0 should be valid: %v", err)
+	}
+	m.DiskSizeGb = 100
+	if err := m.Validate(); err != nil {
+		t.Errorf("diskSizeGb=100 should be valid: %v", err)
+	}
+}
+
 func writeTempFile(t *testing.T, content string) string {
 	t.Helper()
 	f, err := os.CreateTemp(t.TempDir(), "manifest-*.yaml")

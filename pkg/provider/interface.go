@@ -35,6 +35,7 @@ type InstanceSpec struct {
 	NetworkTags        []string          // GCP only: network tags for firewall rule matching
 	PublicIP           bool              // assign a public IP; default false (relay mode) or true (direct SSH)
 	SelfTermination    bool              // install runlease-terminate and grant compute-delete scope (GCP)
+	DiskSizeGb         int               // boot disk size in GB; 0 = use the image's default
 }
 
 type InstanceHandle struct {

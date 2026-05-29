@@ -22,6 +22,7 @@ type ec2API interface {
 	RunInstances(ctx context.Context, params *ec2.RunInstancesInput, optFns ...func(*ec2.Options)) (*ec2.RunInstancesOutput, error)
 	TerminateInstances(ctx context.Context, params *ec2.TerminateInstancesInput, optFns ...func(*ec2.Options)) (*ec2.TerminateInstancesOutput, error)
 	DescribeInstances(ctx context.Context, params *ec2.DescribeInstancesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
+	DescribeImages(ctx context.Context, params *ec2.DescribeImagesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeImagesOutput, error)
 }
 
 type Provider struct {
@@ -72,6 +73,15 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 		input.IamInstanceProfile = &types.IamInstanceProfileSpecification{
 			Arn: awssdk.String(spec.InstanceProfileARN),
 		}
+	}
+	if spec.DiskSizeGb > 0 {
+		// Resize the AMI's root volume. We look up the actual root device name
+		// rather than assuming /dev/xvda, so custom AMIs (e.g. /dev/sda1) get
+		// their root resized instead of an extra volume attached.
+		input.BlockDeviceMappings = []types.BlockDeviceMapping{{
+			DeviceName: awssdk.String(p.rootDeviceName(ctx, spec.ImageID)),
+			Ebs:        &types.EbsBlockDevice{VolumeSize: awssdk.Int32(int32(spec.DiskSizeGb))},
+		}}
 	}
 
 	out, err := p.ec2.RunInstances(ctx, input)
@@ -176,6 +186,24 @@ func mapStatus(state *types.InstanceState) provider.InstanceStatus {
 	default:
 		return provider.StatusUnknown
 	}
+}
+
+// rootDeviceName returns the AMI's root device name (e.g. /dev/xvda) so a
+// boot-disk resize targets the root volume rather than attaching a second one.
+// Falls back to /dev/xvda if the lookup returns nothing.
+func (p *Provider) rootDeviceName(ctx context.Context, imageID string) string {
+	// Fall back to the common default rather than blocking provisioning: an
+	// empty image ID, a DescribeImages denial (restricted IAM), or a missing
+	// root device all degrade to /dev/xvda. Genuine image problems still surface
+	// from RunInstances.
+	if imageID == "" {
+		return "/dev/xvda"
+	}
+	out, err := p.ec2.DescribeImages(ctx, &ec2.DescribeImagesInput{ImageIds: []string{imageID}})
+	if err != nil || len(out.Images) == 0 || awssdk.ToString(out.Images[0].RootDeviceName) == "" {
+		return "/dev/xvda"
+	}
+	return awssdk.ToString(out.Images[0].RootDeviceName)
 }
 
 // ResolveAL2023AMI returns the latest Amazon Linux 2023 x86_64 AMI ID for the

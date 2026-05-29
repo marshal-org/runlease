@@ -40,6 +40,7 @@ var (
 	quickProvider string
 	quickRegion   string
 	quickSize     string
+	quickDiskSize       int
 	quickImage          string
 	quickRelay          string
 	quickTTL            string
@@ -57,6 +58,7 @@ func init() {
 	upCmd.Flags().StringVarP(&quickProvider, "provider", "p", "", "provider: aws or gcp (quick mode — no manifest needed)")
 	upCmd.Flags().StringVarP(&quickRegion, "region", "r", "", "region/zone (quick mode; defaults: us-east-1 for aws, us-central1-a for gcp)")
 	upCmd.Flags().StringVarP(&quickSize, "size", "s", "compute.small", "instance class (quick mode)")
+	upCmd.Flags().IntVar(&quickDiskSize, "disk-size", 0, "boot disk size in GB (quick mode; 0 = image default)")
 	upCmd.Flags().StringVar(&quickImage, "image", "", "base image ID (quick mode; GCP defaults to debian-12)")
 	upCmd.Flags().StringVar(&quickRelay, "relay", "", "relay address, e.g. wss://relay.example.com (quick mode)")
 	upCmd.Flags().StringVar(&quickTTL, "ttl", "2h", "instance TTL (quick mode)")
@@ -212,6 +214,7 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		NetworkTags:         m.GCP.NetworkTags,
 		PublicIP:            m.WantsPublicIP(),
 		SelfTermination:     m.Reclaim.SelfTermination,
+		DiskSizeGb:          m.DiskSizeGb,
 	})
 	if err != nil {
 		return fmt.Errorf("requesting spot instance: %w", err)
@@ -487,12 +490,19 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 		Region:        region,
 		InstanceClass: size,
 		BaseImage:     image,
+		DiskSizeGb:    quickDiskSize,
 		Reclaim:       manifest.ReclaimPolicy{TTL: ttl, SelfTermination: quickSelfTerminate},
 		GCP:           manifest.GCPConfig{ServiceAccount: quickServiceAccount},
 		AWS:           manifest.AWSConfig{InstanceProfile: quickInstanceProfile},
 	}
 	if relayAddr != "" {
 		m.Relay = manifest.RelayConfig{Addr: relayAddr}
+	}
+	// Manifest-file paths validate inside manifest.Load; quick mode builds the
+	// struct directly, so validate here too (catches e.g. negative --disk-size
+	// or a bad --ttl before we hit the cloud).
+	if err := m.Validate(); err != nil {
+		return nil, err
 	}
 	return m, nil
 }

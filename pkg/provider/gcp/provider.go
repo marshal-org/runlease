@@ -66,6 +66,10 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 			ProvisioningModel: "SPOT",
 			AutomaticRestart:  googleapi.Bool(false),
 			OnHostMaintenance: "TERMINATE",
+			// DELETE (not the Spot default STOP) on preemption, so a preempted
+			// instance is removed along with its AutoDelete boot disk instead of
+			// lingering in a stopped state and accruing disk cost.
+			InstanceTerminationAction: "DELETE",
 		},
 		Disks: []*compute.AttachedDisk{
 			{
@@ -73,6 +77,7 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 				AutoDelete: true,
 				InitializeParams: &compute.AttachedDiskInitializeParams{
 					SourceImage: spec.ImageID,
+					DiskSizeGb:  int64(spec.DiskSizeGb), // 0 → GCP uses the image's default size
 				},
 			},
 		},

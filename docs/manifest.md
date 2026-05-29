@@ -39,6 +39,7 @@ Launch with `runlease up -m my-runner-manifest.yaml`.
 | Field | Default | Notes |
 |---|---|---|
 | `baseImage` | auto-detected for `aws` (latest AL2023) and `gcp` (Debian 12 family) | AMI ID for AWS; image family path for GCP. Required for other providers. |
+| `diskSizeGb` | image default (GCP Debian 12 ≈ 10 GB; AWS AL2023 ≈ 30 GB) | Boot disk size in GB. GCP sets `DiskSizeGb` on the boot disk; AWS resizes the AMI's root volume (root device looked up via `DescribeImages`). Must be ≥ the image's minimum — clouds reject shrinking. |
 
 ### Networking
 

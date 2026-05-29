@@ -18,14 +18,22 @@ import (
 type mockEC2 struct {
 	runOut       *ec2.RunInstancesOutput
 	runErr       error
+	lastRunInput *ec2.RunInstancesInput
 	terminateErr error
 	describeOuts []*ec2.DescribeInstancesOutput
 	describeIdx  int
 	describeErr  error
+	imagesOut    *ec2.DescribeImagesOutput
+	imagesErr    error
 }
 
-func (m *mockEC2) RunInstances(_ context.Context, _ *ec2.RunInstancesInput, _ ...func(*ec2.Options)) (*ec2.RunInstancesOutput, error) {
+func (m *mockEC2) RunInstances(_ context.Context, in *ec2.RunInstancesInput, _ ...func(*ec2.Options)) (*ec2.RunInstancesOutput, error) {
+	m.lastRunInput = in
 	return m.runOut, m.runErr
+}
+
+func (m *mockEC2) DescribeImages(_ context.Context, _ *ec2.DescribeImagesInput, _ ...func(*ec2.Options)) (*ec2.DescribeImagesOutput, error) {
+	return m.imagesOut, m.imagesErr
 }
 
 func (m *mockEC2) TerminateInstances(_ context.Context, _ *ec2.TerminateInstancesInput, _ ...func(*ec2.Options)) (*ec2.TerminateInstancesOutput, error) {
@@ -91,6 +99,46 @@ func TestRequestSpot_success(t *testing.T) {
 	}
 	if h.State != provider.StatusPending {
 		t.Errorf("State = %q, want pending", h.State)
+	}
+}
+
+func TestRequestSpot_diskSizeResizesRootVolume(t *testing.T) {
+	mock := &mockEC2{
+		runOut: runOut("i-abc"),
+		imagesOut: &ec2.DescribeImagesOutput{
+			Images: []types.Image{{RootDeviceName: awssdk.String("/dev/sda1")}},
+		},
+	}
+	p := newProvider(mock)
+
+	_, err := p.RequestSpot(context.Background(), provider.InstanceSpec{
+		InstanceType: "c5.xlarge",
+		ImageID:      "ami-123",
+		DiskSizeGb:   80,
+	})
+	if err != nil {
+		t.Fatalf("RequestSpot: %v", err)
+	}
+	bdm := mock.lastRunInput.BlockDeviceMappings
+	if len(bdm) != 1 {
+		t.Fatalf("BlockDeviceMappings len = %d, want 1", len(bdm))
+	}
+	if got := awssdk.ToString(bdm[0].DeviceName); got != "/dev/sda1" {
+		t.Errorf("DeviceName = %q, want /dev/sda1 (from the AMI's root device)", got)
+	}
+	if got := awssdk.ToInt32(bdm[0].Ebs.VolumeSize); got != 80 {
+		t.Errorf("VolumeSize = %d, want 80", got)
+	}
+}
+
+func TestRequestSpot_noDiskSizeNoBlockDevice(t *testing.T) {
+	mock := &mockEC2{runOut: runOut("i-abc")}
+	p := newProvider(mock)
+	if _, err := p.RequestSpot(context.Background(), provider.InstanceSpec{InstanceType: "c5.xlarge", ImageID: "ami-123"}); err != nil {
+		t.Fatalf("RequestSpot: %v", err)
+	}
+	if mock.lastRunInput.BlockDeviceMappings != nil {
+		t.Errorf("expected no BlockDeviceMappings when DiskSizeGb=0, got %d", len(mock.lastRunInput.BlockDeviceMappings))
 	}
 }
 

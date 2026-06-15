@@ -96,6 +96,7 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 	return &provider.InstanceHandle{
 		ID:           provider.InstanceID(awssdk.ToString(inst.InstanceId)),
 		Provider:     provider.ProviderAWS,
+		InstanceType: string(inst.InstanceType),
 		Region:       p.region,
 		State:        mapStatus(inst.State),
 		ManifestName: spec.ManifestName,
@@ -161,12 +162,13 @@ func (p *Provider) describe(ctx context.Context, id provider.InstanceID) (*provi
 	}
 	inst := out.Reservations[0].Instances[0]
 	return &provider.InstanceHandle{
-		ID:        id,
-		Provider:  provider.ProviderAWS,
-		Region:    p.region,
-		PublicIP:  awssdk.ToString(inst.PublicIpAddress),
-		PrivateIP: awssdk.ToString(inst.PrivateIpAddress),
-		State:     mapStatus(inst.State),
+		ID:           id,
+		Provider:     provider.ProviderAWS,
+		InstanceType: string(inst.InstanceType),
+		Region:       p.region,
+		PublicIP:     awssdk.ToString(inst.PublicIpAddress),
+		PrivateIP:    awssdk.ToString(inst.PrivateIpAddress),
+		State:        mapStatus(inst.State),
 	}, nil
 }
 

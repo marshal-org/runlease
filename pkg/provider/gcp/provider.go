@@ -126,6 +126,7 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 	return &provider.InstanceHandle{
 		ID:           provider.InstanceID(name),
 		Provider:     provider.ProviderGCP,
+		InstanceType: spec.InstanceType,
 		Region:       p.zone,
 		State:        provider.StatusPending,
 		ManifestName: spec.ManifestName,
@@ -183,10 +184,11 @@ func (p *Provider) WaitUntilRunning(ctx context.Context, id provider.InstanceID)
 
 func gcpHandle(inst *compute.Instance, zone string) *provider.InstanceHandle {
 	h := &provider.InstanceHandle{
-		ID:       provider.InstanceID(inst.Name),
-		Provider: provider.ProviderGCP,
-		Region:   zone,
-		State:    gcpStatus(inst.Status),
+		ID:           provider.InstanceID(inst.Name),
+		Provider:     provider.ProviderGCP,
+		InstanceType: machineTypeName(inst.MachineType),
+		Region:       zone,
+		State:        gcpStatus(inst.Status),
 	}
 	if len(inst.NetworkInterfaces) > 0 {
 		h.PrivateIP = inst.NetworkInterfaces[0].NetworkIP
@@ -195,6 +197,16 @@ func gcpHandle(inst *compute.Instance, zone string) *provider.InstanceHandle {
 		}
 	}
 	return h
+}
+
+// machineTypeName extracts the bare machine-type name from the full URL the
+// Compute API returns (e.g. ".../zones/us-central1-a/machineTypes/e2-standard-2"
+// → "e2-standard-2"). Returns the input unchanged if it has no path.
+func machineTypeName(url string) string {
+	if i := strings.LastIndex(url, "/"); i >= 0 {
+		return url[i+1:]
+	}
+	return url
 }
 
 func gcpStatus(s string) provider.InstanceStatus {

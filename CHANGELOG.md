@@ -4,6 +4,13 @@ All notable changes to this project will be documented here.
 
 ---
 
+## [0.3.0](https://github.com/marshal-org/runlease/compare/v0.2.0...v0.3.0) (2026-06-15)
+
+
+### Features
+
+* **pricing:** show spot $/hr and projected lease cost ([#9](https://github.com/marshal-org/runlease/issues/9)) ([c170003](https://github.com/marshal-org/runlease/commit/c17000320811adaa71829a7787385ae8507332cb))
+
 ## [0.2.0](https://github.com/marshal-org/runlease/compare/v0.1.0...v0.2.0) (2026-05-29)
 
 

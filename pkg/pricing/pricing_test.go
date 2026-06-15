@@ -179,6 +179,33 @@ func TestCacheCorruptFile(t *testing.T) {
 	}
 }
 
+func TestRemediationHint(t *testing.T) {
+	cases := []struct {
+		msg  string
+		want string
+	}{
+		{"listing compute SKUs: googleapi: Error 403: Cloud Billing API has not been used in project 123", "enable the Cloud Billing API: gcloud services enable cloudbilling.googleapis.com"},
+		{"googleapi: Error 403: SERVICE_DISABLED", "enable the Cloud Billing API: gcloud services enable cloudbilling.googleapis.com"},
+		{"PERMISSION_DENIED on billing account", "grant your account the Billing Account Viewer role (cloudbilling.skus.list)"},
+		{"DescribeSpotPriceHistory: UnauthorizedOperation: not authorized", "grant ec2:DescribeSpotPriceHistory to your IAM identity"},
+		{"some unrelated network timeout", ""},
+	}
+	for _, c := range cases {
+		if got := RemediationHint(fmtErr(c.msg)); got != c.want {
+			t.Errorf("RemediationHint(%q) = %q, want %q", c.msg, got, c.want)
+		}
+	}
+	if RemediationHint(nil) != "" {
+		t.Error("nil error should yield no hint")
+	}
+}
+
+func fmtErr(s string) error { return &simpleErr{s} }
+
+type simpleErr struct{ s string }
+
+func (e *simpleErr) Error() string { return e.s }
+
 func approxEq(a, b float64) bool {
 	d := a - b
 	if d < 0 {

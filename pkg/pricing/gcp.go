@@ -62,7 +62,7 @@ func fetchGCPSpot(ctx context.Context, machineType, zone string) (float64, bool,
 		return 0, false, err
 	}
 
-	skus, err := gcpPreemptibleSKUs(ctx, region)
+	skus, err := gcpPreemptibleSKUs(ctx, region, gcpFamilyTokens[family])
 	if err != nil {
 		return 0, false, err
 	}
@@ -135,15 +135,19 @@ func gcpMachineSpec(ctx context.Context, project, zone, machineType string) (cpu
 	return mt.GuestCpus, float64(mt.MemoryMb) / 1024.0, nil
 }
 
-// gcpPreemptibleSKUs lists Compute Engine preemptible SKUs that apply to
-// region, reduced to description + USD unit price.
-func gcpPreemptibleSKUs(ctx context.Context, region string) ([]gcpSKU, error) {
+// gcpPreemptibleSKUs lists Compute Engine preemptible SKUs that apply to region
+// and match the given family tokens, reduced to description + USD unit price.
+// Compute Engine has ~15k SKUs across several pages, so we stop paging as soon
+// as both a core and a ram SKU for the family are found — the common case is a
+// single matching pair, which keeps the lookup well under the call timeout.
+func gcpPreemptibleSKUs(ctx context.Context, region string, familyTokens []string) ([]gcpSKU, error) {
 	svc, err := cloudbilling.NewService(ctx, option.WithScopes(cloudbilling.CloudPlatformScope))
 	if err != nil {
 		return nil, fmt.Errorf("gcp billing service: %w", err)
 	}
 
 	var out []gcpSKU
+	var haveCore, haveRam bool
 	call := svc.Services.Skus.List("services/" + computeEngineServiceID).CurrencyCode("USD").PageSize(5000)
 	err = call.Pages(ctx, func(page *cloudbilling.ListSkusResponse) error {
 		for _, sku := range page.Skus {
@@ -153,22 +157,40 @@ func gcpPreemptibleSKUs(ctx context.Context, region string) ([]gcpSKU, error) {
 			if !containsRegion(sku.ServiceRegions, region) {
 				continue
 			}
+			d := " " + strings.ToUpper(sku.Description) + " "
+			if strings.Contains(d, "CUSTOM") || strings.Contains(d, "SOLE TENANCY") || !matchesAnyToken(d, familyTokens) {
+				continue
+			}
+			isCore := strings.Contains(d, " CORE ")
+			isRam := strings.Contains(d, " RAM ")
+			if !isCore && !isRam {
+				continue
+			}
 			price, ok := skuUnitUSD(sku)
 			if !ok {
 				continue
 			}
 			out = append(out, gcpSKU{Description: sku.Description, UnitUSD: price})
+			haveCore = haveCore || isCore
+			haveRam = haveRam || isRam
+			if haveCore && haveRam {
+				return errStopPaging // found the pair — stop early
+			}
 		}
 		return nil
 	})
-	if err != nil {
+	if err != nil && err != errStopPaging {
 		return nil, fmt.Errorf("listing compute SKUs: %w", err)
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("no preemptible compute SKUs for region %s", region)
+		return nil, fmt.Errorf("no preemptible compute SKUs for family in region %s", region)
 	}
 	return out, nil
 }
+
+// errStopPaging is a sentinel returned from the page callback to stop
+// pagination early once we have the SKUs we need.
+var errStopPaging = fmt.Errorf("stop paging")
 
 // skuUnitUSD pulls the marginal (last-tier) unit price out of a SKU in USD.
 func skuUnitUSD(sku *cloudbilling.Sku) (float64, bool) {

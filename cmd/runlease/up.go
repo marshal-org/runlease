@@ -241,10 +241,13 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("waiting for instance: %w\n(instance %s may still be running — check AWS console and terminate manually)", err, handle.ID)
 	}
 
-	// Restore fields that DescribeInstances doesn't return.
+	// Restore fields that DescribeInstances doesn't return. CreatedAt comes from
+	// the original RequestSpot handle — it anchors both the AGE column and the
+	// projected LEASE cost (rate × full TTL) in `runlease list`.
 	running.ManifestName = m.Name
 	running.Tags = m.Tags
 	running.InstanceType = instanceType
+	running.CreatedAt = handle.CreatedAt
 
 	// Set expiry from TTL, anchored to when the instance was created.
 	if m.Reclaim.TTL != "" {
@@ -273,7 +276,7 @@ func runUp(cmd *cobra.Command, _ []string) error {
 	if m.Reclaim.TTL != "" {
 		leaseDur, _ = m.Reclaim.TTLDuration()
 	}
-	priceCtx, priceCancel := context.WithTimeout(ctx, 15*time.Second)
+	priceCtx, priceCancel := context.WithTimeout(ctx, 25*time.Second)
 	rate, rateErr := pricing.SpotRate(priceCtx, runleaseHome(), provider.ProviderType(m.Provider), instanceType, m.Region)
 	priceCancel()
 
@@ -298,6 +301,9 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		}
 		if rateErr != nil {
 			fmt.Fprintf(out, "   Rate:      unavailable — %s\n", pricingErrSummary(rateErr))
+			if hint := pricing.RemediationHint(rateErr); hint != "" {
+				fmt.Fprintf(out, "              ↳ for live rates, %s\n", hint)
+			}
 		} else {
 			line := pricing.FormatHourly(rate)
 			if leaseDur > 0 {

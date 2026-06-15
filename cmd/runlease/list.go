@@ -49,6 +49,7 @@ func runList(cmd *cobra.Command, _ []string) error {
 
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 1, ' ', 0)
 	fmt.Fprintln(w, "NAME\tPROV\tID\tSTATE\tREGION\tAGE\tEXPIRES\t$/HR\tLEASE\tACCESS")
+	var priceHint string
 	for _, e := range entries {
 		h := e.Handle
 		age := fmtAge(h.CreatedAt)
@@ -65,7 +66,11 @@ func runList(cmd *cobra.Command, _ []string) error {
 		if e.RelayAddr != "" {
 			access = "relay"
 		}
-		rate, haveRate := instanceRate(cmd.Context(), e)
+		rate, rateErr := instanceRate(cmd.Context(), e)
+		haveRate := rateErr == nil
+		if rateErr != nil && priceHint == "" {
+			priceHint = pricing.RemediationHint(rateErr)
+		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			h.ManifestName, h.Provider, truncateID(string(h.ID)), h.State,
 			h.Region, age, expires, fmtHourlyCell(rate, haveRate),
@@ -74,25 +79,25 @@ func runList(cmd *cobra.Command, _ []string) error {
 	if err := w.Flush(); err != nil {
 		return err
 	}
+	if priceHint != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "\n💡 $/HR unavailable — for live rates, %s\n", priceHint)
+	}
 	fmt.Fprintln(cmd.OutOrStdout(), "\nState is cached — run 'runlease sync' to refresh")
 	return nil
 }
 
-// instanceRate fetches the spot rate for an entry, bounded by a short timeout
-// so a slow pricing API can't freeze `list`. Returns (_, false) on any failure
-// or when the entry predates instance-type tracking — the caller renders "-".
-func instanceRate(ctx context.Context, e *registry.Entry) (pricing.Rate, bool) {
+// instanceRate fetches the spot rate for an entry, bounded by a timeout so a
+// slow pricing API can't freeze `list`. Returns a non-nil error on any failure
+// (or when the entry predates instance-type tracking) — the caller renders "-"
+// and may surface a remediation hint from the error.
+func instanceRate(ctx context.Context, e *registry.Entry) (pricing.Rate, error) {
 	h := e.Handle
 	if h.InstanceType == "" || h.Region == "" {
-		return pricing.Rate{}, false
+		return pricing.Rate{}, fmt.Errorf("no instance type recorded")
 	}
-	c, cancel := context.WithTimeout(ctx, 8*time.Second)
+	c, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
-	r, err := pricing.SpotRate(c, runleaseHome(), h.Provider, h.InstanceType, h.Region)
-	if err != nil {
-		return pricing.Rate{}, false
-	}
-	return r, true
+	return pricing.SpotRate(c, runleaseHome(), h.Provider, h.InstanceType, h.Region)
 }
 
 // leaseDuration is the full TTL the instance was launched with (expiry minus
@@ -253,7 +258,7 @@ func writeListJSON(cmd *cobra.Command, entries []*registry.Entry) error {
 		if h.ExpiresAt != nil {
 			row.ExpiresAt = h.ExpiresAt.UTC().Format(time.RFC3339)
 		}
-		if rate, ok := instanceRate(cmd.Context(), e); ok {
+		if rate, err := instanceRate(cmd.Context(), e); err == nil {
 			hourly := rate.USDPerHour
 			row.USDPerHour = &hourly
 			row.PriceApprox = rate.Approx

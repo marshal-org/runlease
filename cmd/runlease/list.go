@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/runlease/runlease/pkg/pricing"
 	"github.com/runlease/runlease/pkg/registry"
 )
 
@@ -46,7 +48,7 @@ func runList(cmd *cobra.Command, _ []string) error {
 	}
 
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 1, ' ', 0)
-	fmt.Fprintln(w, "NAME\tPROV\tID\tSTATE\tREGION\tAGE\tEXPIRES\tACCESS")
+	fmt.Fprintln(w, "NAME\tPROV\tID\tSTATE\tREGION\tAGE\tEXPIRES\t$/HR\tLEASE\tACCESS")
 	for _, e := range entries {
 		h := e.Handle
 		age := fmtAge(h.CreatedAt)
@@ -63,15 +65,69 @@ func runList(cmd *cobra.Command, _ []string) error {
 		if e.RelayAddr != "" {
 			access = "relay"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		rate, haveRate := instanceRate(cmd.Context(), e)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			h.ManifestName, h.Provider, truncateID(string(h.ID)), h.State,
-			h.Region, age, expires, access)
+			h.Region, age, expires, fmtHourlyCell(rate, haveRate),
+			fmtLeaseCell(rate, haveRate, e), access)
 	}
 	if err := w.Flush(); err != nil {
 		return err
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "\nState is cached — run 'runlease sync' to refresh")
 	return nil
+}
+
+// instanceRate fetches the spot rate for an entry, bounded by a short timeout
+// so a slow pricing API can't freeze `list`. Returns (_, false) on any failure
+// or when the entry predates instance-type tracking — the caller renders "-".
+func instanceRate(ctx context.Context, e *registry.Entry) (pricing.Rate, bool) {
+	h := e.Handle
+	if h.InstanceType == "" || h.Region == "" {
+		return pricing.Rate{}, false
+	}
+	c, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	r, err := pricing.SpotRate(c, runleaseHome(), h.Provider, h.InstanceType, h.Region)
+	if err != nil {
+		return pricing.Rate{}, false
+	}
+	return r, true
+}
+
+// leaseDuration is the full TTL the instance was launched with (expiry minus
+// creation), used to project total lease cost. Zero when there's no TTL.
+func leaseDuration(e *registry.Entry) time.Duration {
+	h := e.Handle
+	if h.ExpiresAt == nil || h.CreatedAt.IsZero() {
+		return 0
+	}
+	return h.ExpiresAt.Sub(h.CreatedAt)
+}
+
+func fmtHourlyCell(r pricing.Rate, ok bool) string {
+	if !ok {
+		return "-"
+	}
+	return fmtPriceCell(r.USDPerHour, r.Approx)
+}
+
+func fmtLeaseCell(r pricing.Rate, ok bool, e *registry.Entry) string {
+	if !ok {
+		return "-"
+	}
+	d := leaseDuration(e)
+	if d <= 0 {
+		return "-"
+	}
+	return fmtPriceCell(r.LeaseCost(d), r.Approx)
+}
+
+func fmtPriceCell(v float64, approx bool) string {
+	if approx {
+		return fmt.Sprintf("~%.3f", v)
+	}
+	return fmt.Sprintf("%.3f", v)
 }
 
 // truncateID shortens long cloud IDs (e.g. AWS "i-0988371fe8a766d47" → "i-0988371fe8…")
@@ -158,17 +214,21 @@ func matchesLabels(tags, filters map[string]string) bool {
 // stable subset of the registry entry so callers can rely on the schema even
 // if internal fields shift.
 type listJSONEntry struct {
-	Name      string            `json:"name"`
-	ID        string            `json:"id"`
-	Provider  string            `json:"provider"`
-	State     string            `json:"state"`
-	Region    string            `json:"region"`
-	PublicIP  string            `json:"publicIp,omitempty"`
-	PrivateIP string            `json:"privateIp,omitempty"`
-	Relay     string            `json:"relay,omitempty"`
-	CreatedAt string            `json:"createdAt,omitempty"`
-	ExpiresAt string            `json:"expiresAt,omitempty"`
-	Tags      map[string]string `json:"tags,omitempty"`
+	Name         string            `json:"name"`
+	ID           string            `json:"id"`
+	Provider     string            `json:"provider"`
+	InstanceType string            `json:"instanceType,omitempty"`
+	State        string            `json:"state"`
+	Region       string            `json:"region"`
+	PublicIP     string            `json:"publicIp,omitempty"`
+	PrivateIP    string            `json:"privateIp,omitempty"`
+	Relay        string            `json:"relay,omitempty"`
+	CreatedAt    string            `json:"createdAt,omitempty"`
+	ExpiresAt    string            `json:"expiresAt,omitempty"`
+	USDPerHour   *float64          `json:"usdPerHour,omitempty"`
+	LeaseCostUSD *float64          `json:"leaseCostUsd,omitempty"`
+	PriceApprox  bool              `json:"priceApprox,omitempty"`
+	Tags         map[string]string `json:"tags,omitempty"`
 }
 
 func writeListJSON(cmd *cobra.Command, entries []*registry.Entry) error {
@@ -176,21 +236,31 @@ func writeListJSON(cmd *cobra.Command, entries []*registry.Entry) error {
 	for _, e := range entries {
 		h := e.Handle
 		row := listJSONEntry{
-			Name:      h.ManifestName,
-			ID:        string(h.ID),
-			Provider:  string(h.Provider),
-			State:     string(h.State),
-			Region:    h.Region,
-			PublicIP:  h.PublicIP,
-			PrivateIP: h.PrivateIP,
-			Relay:     e.RelayAddr,
-			Tags:      h.Tags,
+			Name:         h.ManifestName,
+			ID:           string(h.ID),
+			Provider:     string(h.Provider),
+			InstanceType: h.InstanceType,
+			State:        string(h.State),
+			Region:       h.Region,
+			PublicIP:     h.PublicIP,
+			PrivateIP:    h.PrivateIP,
+			Relay:        e.RelayAddr,
+			Tags:         h.Tags,
 		}
 		if !h.CreatedAt.IsZero() {
 			row.CreatedAt = h.CreatedAt.UTC().Format(time.RFC3339)
 		}
 		if h.ExpiresAt != nil {
 			row.ExpiresAt = h.ExpiresAt.UTC().Format(time.RFC3339)
+		}
+		if rate, ok := instanceRate(cmd.Context(), e); ok {
+			hourly := rate.USDPerHour
+			row.USDPerHour = &hourly
+			row.PriceApprox = rate.Approx
+			if d := leaseDuration(e); d > 0 {
+				lease := rate.LeaseCost(d)
+				row.LeaseCostUSD = &lease
+			}
 		}
 		out = append(out, row)
 	}

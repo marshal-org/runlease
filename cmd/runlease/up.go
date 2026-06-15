@@ -24,6 +24,7 @@ import (
 	"github.com/runlease/runlease/pkg/credential"
 	"github.com/runlease/runlease/pkg/instanceclass"
 	"github.com/runlease/runlease/pkg/manifest"
+	"github.com/runlease/runlease/pkg/pricing"
 	"github.com/runlease/runlease/pkg/provider"
 	awsprovider "github.com/runlease/runlease/pkg/provider/aws"
 	gcpprovider "github.com/runlease/runlease/pkg/provider/gcp"
@@ -243,6 +244,7 @@ func runUp(cmd *cobra.Command, _ []string) error {
 	// Restore fields that DescribeInstances doesn't return.
 	running.ManifestName = m.Name
 	running.Tags = m.Tags
+	running.InstanceType = instanceType
 
 	// Set expiry from TTL, anchored to when the instance was created.
 	if m.Reclaim.TTL != "" {
@@ -265,9 +267,19 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("updating registry: %w", err)
 	}
 
+	// Best-effort spot pricing — bounded so a slow/failed pricing API can never
+	// hold up or fail the launch. Any error just means "no price shown".
+	var leaseDur time.Duration
+	if m.Reclaim.TTL != "" {
+		leaseDur, _ = m.Reclaim.TTLDuration()
+	}
+	priceCtx, priceCancel := context.WithTimeout(ctx, 15*time.Second)
+	rate, rateErr := pricing.SpotRate(priceCtx, runleaseHome(), provider.ProviderType(m.Provider), instanceType, m.Region)
+	priceCancel()
+
 	out := cmd.OutOrStdout()
 	if jsonOutput() {
-		if err := writeUpJSON(cmd, m, running); err != nil {
+		if err := writeUpJSON(cmd, m, running, rate, rateErr, leaseDur); err != nil {
 			return err
 		}
 		if detach {
@@ -283,6 +295,15 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		}
 		if running.ExpiresAt != nil {
 			fmt.Fprintf(out, "   Expires:   %s (%s)\n", running.ExpiresAt.Format(time.RFC3339), time.Until(*running.ExpiresAt).Round(time.Second))
+		}
+		if rateErr != nil {
+			fmt.Fprintf(out, "   Rate:      unavailable — %s\n", pricingErrSummary(rateErr))
+		} else {
+			line := pricing.FormatHourly(rate)
+			if leaseDur > 0 {
+				line += fmt.Sprintf(" · %s for the %s lease", pricing.FormatLease(rate, leaseDur), fmtDuration(leaseDur))
+			}
+			fmt.Fprintf(out, "   Rate:      %s\n", line)
 		}
 		if m.Relay.Addr != "" {
 			fmt.Fprintf(out, "\n🔌 Connect via relay:\n\n   runlease connect %s\n", m.Name)
@@ -683,33 +704,62 @@ func manifestToRegistryForwards(in []manifest.ForwardSpec) []registry.ForwardSpe
 }
 
 // writeUpJSON emits a compact, stable JSON record describing the new instance.
-// Used by CI/scripts via `runlease up --output json`.
-func writeUpJSON(cmd *cobra.Command, m *manifest.Manifest, running *provider.InstanceHandle) error {
+// Used by CI/scripts via `runlease up --output json`. Pricing fields are
+// omitted when pricing was unavailable.
+func writeUpJSON(cmd *cobra.Command, m *manifest.Manifest, running *provider.InstanceHandle, rate pricing.Rate, rateErr error, leaseDur time.Duration) error {
 	type rec struct {
-		Name      string `json:"name"`
-		ID        string `json:"id"`
-		Provider  string `json:"provider"`
-		Region    string `json:"region"`
-		PublicIP  string `json:"publicIp,omitempty"`
-		PrivateIP string `json:"privateIp,omitempty"`
-		Relay     string `json:"relay,omitempty"`
-		ExpiresAt string `json:"expiresAt,omitempty"`
+		Name         string   `json:"name"`
+		ID           string   `json:"id"`
+		Provider     string   `json:"provider"`
+		InstanceType string   `json:"instanceType,omitempty"`
+		Region       string   `json:"region"`
+		PublicIP     string   `json:"publicIp,omitempty"`
+		PrivateIP    string   `json:"privateIp,omitempty"`
+		Relay        string   `json:"relay,omitempty"`
+		ExpiresAt    string   `json:"expiresAt,omitempty"`
+		USDPerHour   *float64 `json:"usdPerHour,omitempty"`
+		LeaseCostUSD *float64 `json:"leaseCostUsd,omitempty"`
+		PriceApprox  bool     `json:"priceApprox,omitempty"`
 	}
 	r := rec{
-		Name:      m.Name,
-		ID:        string(running.ID),
-		Provider:  m.Provider,
-		Region:    m.Region,
-		PublicIP:  running.PublicIP,
-		PrivateIP: running.PrivateIP,
-		Relay:     m.Relay.Addr,
+		Name:         m.Name,
+		ID:           string(running.ID),
+		Provider:     m.Provider,
+		InstanceType: running.InstanceType,
+		Region:       m.Region,
+		PublicIP:     running.PublicIP,
+		PrivateIP:    running.PrivateIP,
+		Relay:        m.Relay.Addr,
 	}
 	if running.ExpiresAt != nil {
 		r.ExpiresAt = running.ExpiresAt.UTC().Format(time.RFC3339)
 	}
+	if rateErr == nil {
+		hourly := rate.USDPerHour
+		r.USDPerHour = &hourly
+		r.PriceApprox = rate.Approx
+		if leaseDur > 0 {
+			lease := rate.LeaseCost(leaseDur)
+			r.LeaseCostUSD = &lease
+		}
+	}
 	enc := json.NewEncoder(cmd.OutOrStdout())
 	enc.SetIndent("", "  ")
 	return enc.Encode(r)
+}
+
+// pricingErrSummary condenses a pricing error to a single short line for the
+// status output (full errors can be multi-clause from wrapped SDK messages).
+func pricingErrSummary(err error) string {
+	msg := err.Error()
+	if i := strings.IndexAny(msg, "\n"); i >= 0 {
+		msg = msg[:i]
+	}
+	const max = 80
+	if len(msg) > max {
+		msg = msg[:max] + "…"
+	}
+	return msg
 }
 
 // toUserdataSteps converts manifest setup steps into the simpler shape the

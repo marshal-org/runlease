@@ -26,36 +26,53 @@ func fetchAWSSpot(ctx context.Context, instanceType, region string) (float64, bo
 	out, err := client.DescribeSpotPriceHistory(ctx, &ec2.DescribeSpotPriceHistoryInput{
 		InstanceTypes:       []types.InstanceType{types.InstanceType(instanceType)},
 		ProductDescriptions: []string{"Linux/UNIX"},
-		// StartTime = now asks for the prices currently in effect rather than a
-		// historical window.
-		StartTime: awssdk.Time(time.Now()),
+		// StartTime bounds the response to the price currently in effect rather
+		// than up to 90 days of history. AWS returns the price valid at StartTime
+		// (it does not require a price-change event exactly at this instant), so
+		// a small lookback guarantees we capture the latest change even if the
+		// price has been stable.
+		StartTime: awssdk.Time(time.Now().Add(-6 * time.Hour)),
 	})
 	if err != nil {
 		return 0, false, fmt.Errorf("DescribeSpotPriceHistory: %w", err)
 	}
 
-	prices := make([]string, 0, len(out.SpotPriceHistory))
+	entries := make([]spotEntry, 0, len(out.SpotPriceHistory))
 	for _, p := range out.SpotPriceHistory {
-		prices = append(prices, awssdk.ToString(p.SpotPrice))
+		v, err := strconv.ParseFloat(awssdk.ToString(p.SpotPrice), 64)
+		if err != nil || v <= 0 {
+			continue
+		}
+		entries = append(entries, spotEntry{az: awssdk.ToString(p.AvailabilityZone), price: v, ts: awssdk.ToTime(p.Timestamp)})
 	}
-	usd, err := lowestSpot(prices)
+	usd, err := currentLowest(entries)
 	if err != nil {
 		return 0, false, fmt.Errorf("aws spot price for %s in %s: %w", instanceType, region, err)
 	}
 	return usd, false, nil
 }
 
-// lowestSpot parses spot-price strings and returns the lowest positive value.
-// Factored out for testing without hitting EC2.
-func lowestSpot(prices []string) (float64, error) {
-	best := -1.0
-	for _, s := range prices {
-		v, err := strconv.ParseFloat(s, 64)
-		if err != nil || v <= 0 {
-			continue
+type spotEntry struct {
+	az    string
+	price float64
+	ts    time.Time
+}
+
+// currentLowest returns the lowest *current* spot price across AZs: it first
+// reduces each AZ to its most recent entry (history can contain several entries
+// per AZ over the lookback window), then takes the minimum of those. Factored
+// out for testing without hitting EC2.
+func currentLowest(entries []spotEntry) (float64, error) {
+	latest := make(map[string]spotEntry)
+	for _, e := range entries {
+		if cur, ok := latest[e.az]; !ok || e.ts.After(cur.ts) {
+			latest[e.az] = e
 		}
-		if best < 0 || v < best {
-			best = v
+	}
+	best := -1.0
+	for _, e := range latest {
+		if best < 0 || e.price < best {
+			best = e.price
 		}
 	}
 	if best < 0 {

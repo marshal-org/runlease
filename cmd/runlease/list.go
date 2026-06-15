@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -39,8 +40,13 @@ func runList(cmd *cobra.Command, _ []string) error {
 	}
 
 	entries := filterEntries(reg.List(), filters)
+	// Resolve spot rates for all instances concurrently. Each lookup is cached
+	// (24h) and bounded by its own timeout, so a cold cache or a slow/credential-
+	// less provider can't make `list` hang for timeout×N — the table waits at
+	// most one timeout regardless of how many instances are listed.
+	rates := fetchRates(cmd.Context(), entries)
 	if jsonOutput() {
-		return writeListJSON(cmd, entries)
+		return writeListJSON(cmd, entries, rates)
 	}
 	if len(entries) == 0 {
 		fmt.Fprintln(cmd.OutOrStdout(), "No active instances.")
@@ -50,7 +56,7 @@ func runList(cmd *cobra.Command, _ []string) error {
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 1, ' ', 0)
 	fmt.Fprintln(w, "NAME\tPROV\tID\tSTATE\tREGION\tAGE\tEXPIRES\t$/HR\tLEASE\tACCESS")
 	var priceHint string
-	for _, e := range entries {
+	for i, e := range entries {
 		h := e.Handle
 		age := fmtAge(h.CreatedAt)
 		expires := "-"
@@ -66,7 +72,7 @@ func runList(cmd *cobra.Command, _ []string) error {
 		if e.RelayAddr != "" {
 			access = "relay"
 		}
-		rate, rateErr := instanceRate(cmd.Context(), e)
+		rate, rateErr := rates[i].rate, rates[i].err
 		haveRate := rateErr == nil
 		if rateErr != nil && priceHint == "" {
 			priceHint = pricing.RemediationHint(rateErr)
@@ -84,6 +90,30 @@ func runList(cmd *cobra.Command, _ []string) error {
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "\nState is cached — run 'runlease sync' to refresh")
 	return nil
+}
+
+// rateResult pairs a resolved rate with the error (if any) from its lookup.
+type rateResult struct {
+	rate pricing.Rate
+	err  error
+}
+
+// fetchRates resolves spot rates for all entries concurrently, returning
+// results aligned by index. Each goroutine writes its own slot, so there's no
+// shared-state race; the pricing cache it touches is itself mutex-guarded.
+func fetchRates(ctx context.Context, entries []*registry.Entry) []rateResult {
+	results := make([]rateResult, len(entries))
+	var wg sync.WaitGroup
+	for i, e := range entries {
+		wg.Add(1)
+		go func(i int, e *registry.Entry) {
+			defer wg.Done()
+			r, err := instanceRate(ctx, e)
+			results[i] = rateResult{rate: r, err: err}
+		}(i, e)
+	}
+	wg.Wait()
+	return results
 }
 
 // instanceRate fetches the spot rate for an entry, bounded by a timeout so a
@@ -236,9 +266,9 @@ type listJSONEntry struct {
 	Tags         map[string]string `json:"tags,omitempty"`
 }
 
-func writeListJSON(cmd *cobra.Command, entries []*registry.Entry) error {
+func writeListJSON(cmd *cobra.Command, entries []*registry.Entry, rates []rateResult) error {
 	out := make([]listJSONEntry, 0, len(entries))
-	for _, e := range entries {
+	for i, e := range entries {
 		h := e.Handle
 		row := listJSONEntry{
 			Name:         h.ManifestName,
@@ -258,7 +288,8 @@ func writeListJSON(cmd *cobra.Command, entries []*registry.Entry) error {
 		if h.ExpiresAt != nil {
 			row.ExpiresAt = h.ExpiresAt.UTC().Format(time.RFC3339)
 		}
-		if rate, err := instanceRate(cmd.Context(), e); err == nil {
+		if rates[i].err == nil {
+			rate := rates[i].rate
 			hourly := rate.USDPerHour
 			row.USDPerHour = &hourly
 			row.PriceApprox = rate.Approx

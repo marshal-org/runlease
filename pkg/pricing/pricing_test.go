@@ -8,22 +8,30 @@ import (
 	"github.com/runlease/runlease/pkg/provider"
 )
 
-func TestLowestSpot(t *testing.T) {
+func TestCurrentLowest(t *testing.T) {
+	t1 := time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC)
+	t2 := t1.Add(time.Hour) // newer
 	tests := []struct {
 		name    string
-		in      []string
+		in      []spotEntry
 		want    float64
 		wantErr bool
 	}{
-		{"single", []string{"0.0123"}, 0.0123, false},
-		{"lowest across azs", []string{"0.05", "0.0123", "0.09"}, 0.0123, false},
-		{"skips junk and zero", []string{"oops", "0", "0.02"}, 0.02, false},
-		{"all invalid", []string{"oops", "0", "-1"}, 0, true},
+		{"single", []spotEntry{{az: "a", price: 0.0123, ts: t1}}, 0.0123, false},
+		{"lowest across azs", []spotEntry{
+			{az: "a", price: 0.05, ts: t1}, {az: "b", price: 0.0123, ts: t1}, {az: "c", price: 0.09, ts: t1},
+		}, 0.0123, false},
+		{"per-az latest wins, then min", []spotEntry{
+			// AZ a: stale-cheap then current-expensive — must use current (0.04).
+			{az: "a", price: 0.01, ts: t1}, {az: "a", price: 0.04, ts: t2},
+			// AZ b: current 0.05.
+			{az: "b", price: 0.05, ts: t2},
+		}, 0.04, false},
 		{"empty", nil, 0, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := lowestSpot(tt.in)
+			got, err := currentLowest(tt.in)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got %v", got)
@@ -33,7 +41,7 @@ func TestLowestSpot(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if got != tt.want {
+			if !approxEq(got, tt.want) {
 				t.Fatalf("got %v, want %v", got, tt.want)
 			}
 		})

@@ -4,10 +4,17 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/runlease/runlease/pkg/provider"
 )
+
+// cacheMu guards the in-process read-modify-write of the cache file so
+// concurrent SpotRate calls (e.g. list fetching rates in parallel) can't race
+// on the map or clobber each other's writes. Cross-process safety relies on the
+// atomic temp-file rename in cacheStore.
+var cacheMu sync.Mutex
 
 // cacheFileName is the on-disk cache, stored alongside the registry under the
 // runlease home dir.
@@ -43,6 +50,8 @@ func loadCache(home string) map[string]cachedRate {
 // than maxAge. A maxAge of 0 disables the freshness check, used for stale
 // fallback after a failed live fetch.
 func cacheLookup(home string, prov provider.ProviderType, instanceType, region string, maxAge time.Duration) (Rate, bool) {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
 	c := loadCache(home)
 	cr, ok := c[cacheKey(prov, instanceType, region)]
 	if !ok {
@@ -62,8 +71,12 @@ func cacheLookup(home string, prov provider.ProviderType, instanceType, region s
 }
 
 // cacheStore writes a rate back to the cache. Errors are ignored — failing to
-// persist the cache must never break the parent command.
+// persist the cache must never break the parent command. The write goes to a
+// temp file and is atomically renamed so a concurrent runlease process can
+// never observe (or be left with) a half-written cache file.
 func cacheStore(home string, r Rate) {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
 	c := loadCache(home)
 	c[cacheKey(r.Provider, r.InstanceType, r.Region)] = cachedRate{
 		USDPerHour: r.USDPerHour,
@@ -77,5 +90,21 @@ func cacheStore(home string, r Rate) {
 	if err := os.MkdirAll(home, 0700); err != nil {
 		return
 	}
-	_ = os.WriteFile(cachePath(home), raw, 0600)
+	tmp, err := os.CreateTemp(home, ".pricing-cache-*.tmp")
+	if err != nil {
+		return
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(raw); err != nil {
+		tmp.Close()
+		_ = os.Remove(tmpName)
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return
+	}
+	if err := os.Rename(tmpName, cachePath(home)); err != nil {
+		_ = os.Remove(tmpName)
+	}
 }

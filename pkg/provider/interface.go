@@ -41,6 +41,7 @@ type InstanceSpec struct {
 type InstanceHandle struct {
 	ID           InstanceID
 	Provider     ProviderType
+	InstanceType string
 	Region       string
 	PublicIP     string
 	PrivateIP    string

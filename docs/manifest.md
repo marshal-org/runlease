@@ -120,8 +120,22 @@ Persisted to the registry at `up` time so `forward --all` doesn't need to re-rea
 
 | Field | Type | Notes |
 |---|---|---|
-| `gcp.serviceAccount` | string | SA email to attach. Needed for `selfTermination: true` (the script uses the metadata server to issue the delete call). |
+| `gcp.serviceAccount` | string | SA email to attach. Needed for `selfTermination: true` (the script uses the metadata server to issue the delete call). The SA must hold the `compute.instances.delete` **IAM permission** — the `cloud-platform` scope runlease grants is necessary but not sufficient; without the IAM grant the self-delete returns 403 and the VM merely powers off, lingering in a `TERMINATED` state. See note below. |
 | `gcp.networkTags` | []string | GCE network tags — typically firewall selectors. |
+
+> **Self-termination needs a delete grant — scope it tightly.** When you attach a custom `serviceAccount`, that SA — not the project default — is the principal the self-delete API call runs as. Grant it `compute.instances.delete`, but constrain the grant to runlease-managed VMs rather than handing it project-wide instance-admin. IAM can't express "delete only itself" (the SA isn't bound to one VM), but a name-prefix condition on the `rl-` convention gets close:
+>
+> ```bash
+> gcloud iam roles create runleaseSelfDelete --project PROJECT \
+>   --permissions compute.instances.delete
+>
+> gcloud projects add-iam-policy-binding PROJECT \
+>   --member "serviceAccount:SA_EMAIL" \
+>   --role "projects/PROJECT/roles/runleaseSelfDelete" \
+>   --condition='title=runlease-vms-only,expression=resource.name.matches("projects/PROJECT/zones/[^/]+/instances/rl-.*")'
+> ```
+>
+> For a grant that can't be defeated by name collisions, attach a GCP secure tag at create time and condition on `resource.matchTag(...)` instead.
 
 ---
 

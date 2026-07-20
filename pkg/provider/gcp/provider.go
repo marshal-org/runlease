@@ -82,7 +82,7 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 			},
 		},
 		NetworkInterfaces: []*compute.NetworkInterface{
-			gcpNetworkInterface(spec.NetworkID, spec.SubnetID, spec.PublicIP),
+			gcpNetworkInterface(spec.NetworkID, spec.SubnetID, p.zone, spec.PublicIP),
 		},
 		Metadata: &compute.Metadata{
 			Items: []*compute.MetadataItems{
@@ -264,13 +264,18 @@ func generateInstanceName(manifestName string) string {
 // network and subnetwork leaves GCP to pick the auto-mode "default" network;
 // custom-mode VPCs (no "default") require at least the subnetwork to be set —
 // GCP infers the network from it, so passing network alone is optional.
-func gcpNetworkInterface(network, subnetwork string, publicIP bool) *compute.NetworkInterface {
+//
+// Bare names are expanded to the partial resource paths the Compute API
+// requires: a subnetwork is regional (the region is inferred from the instance
+// zone) and a network is global. A value already containing "/" (a full or
+// partial self-link) is passed through untouched.
+func gcpNetworkInterface(network, subnetwork, zone string, publicIP bool) *compute.NetworkInterface {
 	ni := &compute.NetworkInterface{}
 	if network != "" {
-		ni.Network = network
+		ni.Network = qualifyNetwork(network)
 	}
 	if subnetwork != "" {
-		ni.Subnetwork = subnetwork
+		ni.Subnetwork = qualifySubnetwork(subnetwork, zone)
 	}
 	if publicIP {
 		ni.AccessConfigs = []*compute.AccessConfig{
@@ -278,6 +283,30 @@ func gcpNetworkInterface(network, subnetwork string, publicIP bool) *compute.Net
 		}
 	}
 	return ni
+}
+
+// qualifyNetwork expands a bare VPC network name to the global partial resource
+// path the Compute API expects. Values already containing "/" pass through.
+func qualifyNetwork(network string) string {
+	if strings.Contains(network, "/") {
+		return network
+	}
+	return "global/networks/" + network
+}
+
+// qualifySubnetwork expands a bare subnetwork name to a regional partial
+// resource path, inferring the region from the instance zone (e.g.
+// europe-west1-b → europe-west1). Values already containing "/", or names with
+// no zone to derive a region from, pass through unchanged.
+func qualifySubnetwork(subnetwork, zone string) string {
+	if strings.Contains(subnetwork, "/") || zone == "" {
+		return subnetwork
+	}
+	region := zone
+	if idx := strings.LastIndex(zone, "-"); idx >= 0 {
+		region = zone[:idx]
+	}
+	return fmt.Sprintf("regions/%s/subnetworks/%s", region, subnetwork)
 }
 
 func resolveProjectID(ctx context.Context) (string, error) {

@@ -462,13 +462,17 @@ func pollAndConnectViaRelay(cmd *cobra.Command, relayAddr, token, name string, c
 }
 
 // subnetForProvider resolves the single InstanceSpec.SubnetID field from the
-// provider-specific manifest section. A valid manifest is single-provider, so
-// AWS reads aws.subnetID and everything else (GCP) reads gcp.subnetwork.
+// provider-specific manifest section. A valid manifest is single-provider:
+// AWS reads aws.subnetID, GCP reads gcp.subnetwork, anything else has none.
 func subnetForProvider(m *manifest.Manifest) string {
-	if provider.ProviderType(m.Provider) == provider.ProviderGCP {
+	switch provider.ProviderType(m.Provider) {
+	case provider.ProviderGCP:
 		return m.GCP.Subnetwork
+	case provider.ProviderAWS:
+		return m.AWS.SubnetID
+	default:
+		return ""
 	}
-	return m.AWS.SubnetID
 }
 
 func buildQuickManifest() (*manifest.Manifest, error) {
@@ -526,12 +530,17 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 		relayAddr = cfg.Relay.Addr
 	}
 
+	if quickProvider != "gcp" && quickNetwork != "" {
+		return nil, fmt.Errorf("--network is only supported for GCP")
+	}
+
 	// --subnet targets the provider's subnet: GCP subnetwork or AWS subnet ID.
 	gcp := manifest.GCPConfig{ServiceAccount: quickServiceAccount, Network: quickNetwork}
 	aws := manifest.AWSConfig{InstanceProfile: quickInstanceProfile}
-	if quickProvider == "aws" {
+	switch quickProvider {
+	case "aws":
 		aws.SubnetID = quickSubnet
-	} else {
+	case "gcp":
 		gcp.Subnetwork = quickSubnet
 	}
 

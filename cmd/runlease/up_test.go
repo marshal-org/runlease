@@ -35,6 +35,11 @@ func TestSubnetForProvider(t *testing.T) {
 			m:    &manifest.Manifest{Provider: "gcp"},
 			want: "",
 		},
+		{
+			name: "other providers have no subnet",
+			m:    &manifest.Manifest{Provider: "azure"},
+			want: "",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -122,6 +127,16 @@ func TestBuildQuickManifest_networkRouting(t *testing.T) {
 		}
 		if m.GCP.Network != "" || m.GCP.Subnetwork != "" {
 			t.Errorf("expected empty network/subnetwork, got network=%q subnetwork=%q", m.GCP.Network, m.GCP.Subnetwork)
+		}
+	})
+
+	t.Run("--network with aws is rejected", func(t *testing.T) {
+		resetQuickFlags(t)
+		quickProvider = "aws"
+		quickNetwork = "my-vpc"
+
+		if _, err := buildQuickManifest(); err == nil {
+			t.Fatal("expected error for --network with aws, got nil")
 		}
 	})
 }

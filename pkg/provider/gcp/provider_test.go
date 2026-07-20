@@ -7,6 +7,7 @@ func TestGCPNetworkInterface(t *testing.T) {
 		name       string
 		network    string
 		subnetwork string
+		zone       string
 		publicIP   bool
 		wantNet    string
 		wantSubnet string
@@ -16,16 +17,34 @@ func TestGCPNetworkInterface(t *testing.T) {
 			name: "defaults to auto-mode network (both empty)",
 		},
 		{
-			name:       "subnetwork only — custom-mode VPC",
+			name:       "full self-link subnetwork passes through",
 			subnetwork: "projects/p/regions/europe-west1/subnetworks/my-subnet",
+			zone:       "europe-west1-b",
 			wantSubnet: "projects/p/regions/europe-west1/subnetworks/my-subnet",
 		},
 		{
-			name:       "network and subnetwork both set",
+			name:       "bare subnetwork name qualified with region from zone",
+			subnetwork: "my-subnet",
+			zone:       "europe-west1-b",
+			wantSubnet: "regions/europe-west1/subnetworks/my-subnet",
+		},
+		{
+			name:       "bare subnetwork with no zone passes through unqualified",
+			subnetwork: "my-subnet",
+			wantSubnet: "my-subnet",
+		},
+		{
+			name:       "bare network name qualified to global path",
 			network:    "my-vpc",
 			subnetwork: "my-subnet",
-			wantNet:    "my-vpc",
-			wantSubnet: "my-subnet",
+			zone:       "us-central1-a",
+			wantNet:    "global/networks/my-vpc",
+			wantSubnet: "regions/us-central1/subnetworks/my-subnet",
+		},
+		{
+			name:    "full self-link network passes through",
+			network: "projects/p/global/networks/my-vpc",
+			wantNet: "projects/p/global/networks/my-vpc",
 		},
 		{
 			name:     "public IP adds a one-to-one NAT access config",
@@ -35,7 +54,7 @@ func TestGCPNetworkInterface(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ni := gcpNetworkInterface(tc.network, tc.subnetwork, tc.publicIP)
+			ni := gcpNetworkInterface(tc.network, tc.subnetwork, tc.zone, tc.publicIP)
 			if ni.Network != tc.wantNet {
 				t.Errorf("Network = %q, want %q", ni.Network, tc.wantNet)
 			}

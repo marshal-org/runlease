@@ -131,6 +131,8 @@ reclaim:
 # ── GCP-specific ───────────────────────────────────────────────────────────
 # gcp:
 #   serviceAccount: deployer@my-project.iam.gserviceaccount.com
+#     # for selfTermination, this SA needs the compute.instances.delete IAM
+#     # permission (scope alone is not enough) - see docs/manifest.md
 #   networkTags:
 #     - allow-egress-only
 `

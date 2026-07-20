@@ -4,6 +4,13 @@ All notable changes to this project will be documented here.
 
 ---
 
+## [0.4.0](https://github.com/marshal-org/runlease/compare/v0.3.0...v0.4.0) (2026-07-20)
+
+
+### Features
+
+* **manifest:** target custom GCP VPC/subnetwork ([#13](https://github.com/marshal-org/runlease/issues/13)) ([10f4519](https://github.com/marshal-org/runlease/commit/10f4519410981707fbcc386b4b12c921c8ff8571))
+
 ## [0.3.0](https://github.com/marshal-org/runlease/compare/v0.2.0...v0.3.0) (2026-06-15)
 
 

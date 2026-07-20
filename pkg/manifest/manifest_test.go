@@ -143,6 +143,8 @@ gcp:
   networkTags:
     - allow-ssh
     - runlease
+  network: my-vpc
+  subnetwork: my-subnet
 relay:
   addr: relay.example.com:7777
 `
@@ -161,6 +163,12 @@ func TestLoad_gcpFields(t *testing.T) {
 	}
 	if len(m.GCP.NetworkTags) != 2 || m.GCP.NetworkTags[0] != "allow-ssh" {
 		t.Errorf("gcp.networkTags = %v", m.GCP.NetworkTags)
+	}
+	if m.GCP.Network != "my-vpc" {
+		t.Errorf("gcp.network = %q, want my-vpc", m.GCP.Network)
+	}
+	if m.GCP.Subnetwork != "my-subnet" {
+		t.Errorf("gcp.subnetwork = %q, want my-subnet", m.GCP.Subnetwork)
 	}
 	if m.Relay.Addr != "relay.example.com:7777" {
 		t.Errorf("relay.addr = %q", m.Relay.Addr)

@@ -81,6 +81,8 @@ type AWSConfig struct {
 type GCPConfig struct {
 	NetworkTags    []string `yaml:"networkTags"`
 	ServiceAccount string   `yaml:"serviceAccount"`
+	Network        string   `yaml:"network"`    // VPC network name or self-link; empty → GCP "default"
+	Subnetwork     string   `yaml:"subnetwork"` // subnetwork name or self-link; required for custom-mode VPCs
 }
 
 // WantsPublicIP returns the effective public IP setting (default true).

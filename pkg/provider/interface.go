@@ -27,7 +27,8 @@ type InstanceSpec struct {
 	Region             string
 	ImageID            string
 	SecurityGroupIDs   []string          // AWS: security group IDs
-	SubnetID           string            // AWS: subnet ID; GCP: subnetwork self-link
+	SubnetID           string            // AWS: subnet ID; GCP: subnetwork name or self-link
+	NetworkID          string            // GCP only: VPC network name or self-link (subnetwork alone usually suffices)
 	UserData           string            // raw script; provider is responsible for encoding
 	Tags               map[string]string // AWS: instance tags; GCP: labels
 	InstanceProfileARN string            // AWS only: IAM instance profile (enables SSM)

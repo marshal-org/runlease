@@ -135,6 +135,8 @@ reclaim:
 #     # permission (scope alone is not enough) - see docs/manifest.md
 #   networkTags:
 #     - allow-egress-only
+#   network: my-vpc              # VPC network; omit for the auto-mode "default"
+#   subnetwork: my-subnet        # required for custom-mode VPCs (no "default" network)
 `
 
 // manifestNewCmd is the canonical name; "init" is kept as an alias so old

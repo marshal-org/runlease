@@ -49,6 +49,8 @@ var (
 	quickSelfTerminate  bool
 	quickServiceAccount string
 	quickInstanceProfile string
+	quickNetwork         string
+	quickSubnet          string
 )
 
 func init() {
@@ -67,6 +69,8 @@ func init() {
 	upCmd.Flags().BoolVar(&quickSelfTerminate, "self-terminate", true, "allow the instance to delete itself (required for TTL to work)")
 	upCmd.Flags().StringVar(&quickServiceAccount, "service-account", "", "GCP service account email to attach (quick mode)")
 	upCmd.Flags().StringVar(&quickInstanceProfile, "instance-profile", "", "AWS IAM instance profile ARN to attach (quick mode)")
+	upCmd.Flags().StringVar(&quickNetwork, "network", "", "GCP VPC network name or self-link (quick mode)")
+	upCmd.Flags().StringVar(&quickSubnet, "subnet", "", "subnetwork (GCP) or subnet ID (AWS) name/self-link (quick mode; required for custom-mode GCP VPCs)")
 	rootCmd.AddCommand(upCmd)
 }
 
@@ -207,7 +211,8 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		Region:              m.Region,
 		ImageID:             m.BaseImage,
 		SecurityGroupIDs:    m.AWS.SecurityGroupIDs,
-		SubnetID:            m.AWS.SubnetID,
+		SubnetID:            subnetForProvider(m),
+		NetworkID:           m.GCP.Network,
 		UserData:            ud,
 		Tags:                m.Tags,
 		InstanceProfileARN:  m.AWS.InstanceProfile,
@@ -456,6 +461,16 @@ func pollAndConnectViaRelay(cmd *cobra.Command, relayAddr, token, name string, c
 	}
 }
 
+// subnetForProvider resolves the single InstanceSpec.SubnetID field from the
+// provider-specific manifest section. A valid manifest is single-provider, so
+// AWS reads aws.subnetID and everything else (GCP) reads gcp.subnetwork.
+func subnetForProvider(m *manifest.Manifest) string {
+	if provider.ProviderType(m.Provider) == provider.ProviderGCP {
+		return m.GCP.Subnetwork
+	}
+	return m.AWS.SubnetID
+}
+
 func buildQuickManifest() (*manifest.Manifest, error) {
 	cfg, _ := rlconfig.Load(defaultConfigPath())
 	if cfg == nil {
@@ -511,6 +526,15 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 		relayAddr = cfg.Relay.Addr
 	}
 
+	// --subnet targets the provider's subnet: GCP subnetwork or AWS subnet ID.
+	gcp := manifest.GCPConfig{ServiceAccount: quickServiceAccount, Network: quickNetwork}
+	aws := manifest.AWSConfig{InstanceProfile: quickInstanceProfile}
+	if quickProvider == "aws" {
+		aws.SubnetID = quickSubnet
+	} else {
+		gcp.Subnetwork = quickSubnet
+	}
+
 	m := &manifest.Manifest{
 		Name:          name,
 		Provider:      quickProvider,
@@ -519,8 +543,8 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 		BaseImage:     image,
 		DiskSizeGb:    quickDiskSize,
 		Reclaim:       manifest.ReclaimPolicy{TTL: ttl, SelfTermination: quickSelfTerminate},
-		GCP:           manifest.GCPConfig{ServiceAccount: quickServiceAccount},
-		AWS:           manifest.AWSConfig{InstanceProfile: quickInstanceProfile},
+		GCP:           gcp,
+		AWS:           aws,
 	}
 	if relayAddr != "" {
 		m.Relay = manifest.RelayConfig{Addr: relayAddr}

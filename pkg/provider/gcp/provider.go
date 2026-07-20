@@ -82,7 +82,7 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 			},
 		},
 		NetworkInterfaces: []*compute.NetworkInterface{
-			gcpNetworkInterface(spec.PublicIP),
+			gcpNetworkInterface(spec.NetworkID, spec.SubnetID, spec.PublicIP),
 		},
 		Metadata: &compute.Metadata{
 			Items: []*compute.MetadataItems{
@@ -91,9 +91,6 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 		},
 	}
 
-	if spec.SubnetID != "" {
-		inst.NetworkInterfaces[0].Subnetwork = spec.SubnetID
-	}
 	if len(spec.NetworkTags) > 0 {
 		inst.Tags = &compute.Tags{Items: spec.NetworkTags}
 	}
@@ -263,8 +260,18 @@ func generateInstanceName(manifestName string) string {
 	return fmt.Sprintf("rl-%s-%s", sanitized, hex.EncodeToString(b))
 }
 
-func gcpNetworkInterface(publicIP bool) *compute.NetworkInterface {
+// gcpNetworkInterface builds the single NIC attached to the instance. An empty
+// network and subnetwork leaves GCP to pick the auto-mode "default" network;
+// custom-mode VPCs (no "default") require at least the subnetwork to be set —
+// GCP infers the network from it, so passing network alone is optional.
+func gcpNetworkInterface(network, subnetwork string, publicIP bool) *compute.NetworkInterface {
 	ni := &compute.NetworkInterface{}
+	if network != "" {
+		ni.Network = network
+	}
+	if subnetwork != "" {
+		ni.Subnetwork = subnetwork
+	}
 	if publicIP {
 		ni.AccessConfigs = []*compute.AccessConfig{
 			{Type: "ONE_TO_ONE_NAT", Name: "External NAT"},

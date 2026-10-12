@@ -16,9 +16,10 @@ import (
 
 // mockProvider returns statuses from a sequence, repeating the last entry.
 type mockProvider struct {
-	statuses    []provider.InstanceStatus
-	statusIdx   int
-	terminateCh chan struct{}
+	statuses     []provider.InstanceStatus
+	statusIdx    int
+	terminateCh  chan struct{}
+	terminateErr error
 }
 
 func newMock(status provider.InstanceStatus) *mockProvider {
@@ -38,7 +39,7 @@ func (m *mockProvider) Terminate(_ context.Context, _ provider.InstanceID) error
 	default:
 		close(m.terminateCh)
 	}
-	return nil
+	return m.terminateErr
 }
 func (m *mockProvider) Status(_ context.Context, _ provider.InstanceID) (provider.InstanceStatus, error) {
 	idx := m.statusIdx
@@ -90,7 +91,7 @@ func futureExpiry(d time.Duration) *time.Time { t := time.Now().Add(d); return &
 func pastExpiry() *time.Time                  { t := time.Now().Add(-time.Minute); return &t }
 
 func managerWith(reg *registry.Registry, mock *mockProvider) *Manager {
-	factory := func(_ context.Context, _ provider.ProviderType, _ string) (provider.CloudProvider, error) {
+	factory := func(_ context.Context, _ provider.ProviderType, _, _ string) (provider.CloudProvider, error) {
 		return mock, nil
 	}
 	return &Manager{reg: reg, factory: factory, log: silentLogger(), pollInterval: time.Millisecond}
@@ -212,5 +213,16 @@ func TestWatch_cleansUpOnSpotInterruption(t *testing.T) {
 	wg.Wait()
 	if _, err := reg.Get("spot-runner"); err == nil {
 		t.Error("spot-interrupted instance should have been removed from registry")
+	}
+}
+
+func TestReconcile_failedTerminateKeepsEntry(t *testing.T) {
+	e := entry(t, "stuck-runner", "i-stuck", pastExpiry())
+	reg := setupRegistry(t, e)
+	mock := newMock(provider.StatusRunning)
+	mock.terminateErr = errors.New("instance still exists")
+	reconcile(managerWith(reg, mock))
+	if _, err := reg.Get("stuck-runner"); err != nil {
+		t.Error("entry must be kept when Terminate fails — the VM may still be running")
 	}
 }

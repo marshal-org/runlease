@@ -2,12 +2,14 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/runlease/runlease/pkg/credential"
+	"github.com/runlease/runlease/pkg/provider"
 )
 
 var downYes bool
@@ -53,14 +55,25 @@ func runDown(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := cmd.Context()
-	p, err := newProvider(ctx, entry.Handle.Provider, entry.Handle.Region)
+	p, err := providerForEntry(ctx, entry.Handle, cmd.ErrOrStderr())
 	if err != nil {
 		return fmt.Errorf("initializing provider: %w", err)
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "🗑️  Terminating %s (%s)...\n", entry.Handle.ManifestName, entry.Handle.ID)
+	done := "✅ Terminated."
 	if err := p.Terminate(ctx, entry.Handle.ID); err != nil {
-		return fmt.Errorf("terminating instance: %w", err)
+		// Not found is only proof the instance is gone when we looked where it
+		// was created. Without a recorded project we may have looked in the
+		// wrong one, so keep the entry rather than lose track of a live VM.
+		if !errors.Is(err, provider.ErrNotFound) {
+			return fmt.Errorf("terminating instance: %w\nRegistry entry kept — the instance may still be running", err)
+		}
+		if legacyGCPEntry(entry.Handle) {
+			return fmt.Errorf("terminating instance: %w\nRegistry entry kept — it may be running in another project. "+
+				"Re-run with GOOGLE_CLOUD_PROJECT=<project it was launched in>", err)
+		}
+		done = fmt.Sprintf("⚠️  %v — already gone? Removed it from the registry.", err)
 	}
 
 	_ = credential.Delete(entry.CredDir, string(entry.Handle.ID))
@@ -69,6 +82,6 @@ func runDown(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("updating registry: %w", err)
 	}
 
-	fmt.Fprintln(cmd.OutOrStdout(), "✅ Terminated.")
+	fmt.Fprintln(cmd.OutOrStdout(), done)
 	return nil
 }

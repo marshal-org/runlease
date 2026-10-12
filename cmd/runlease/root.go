@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -102,16 +103,42 @@ func resolveInstance(cmd *cobra.Command, reg *registry.Registry, args []string, 
 	}
 }
 
-// newProvider is the central dispatch used by all commands and the lifecycle manager.
-func newProvider(ctx context.Context, pt provider.ProviderType, region string) (provider.CloudProvider, error) {
+// newProvider is the central dispatch used by all commands and the lifecycle
+// manager. project is GCP-only; empty resolves it from env / gcloud config.
+// A var so tests can swap in a fake.
+var newProvider = func(ctx context.Context, pt provider.ProviderType, region, project string) (provider.CloudProvider, error) {
 	switch pt {
 	case provider.ProviderAWS:
 		return awsprovider.New(ctx, region)
 	case provider.ProviderGCP:
-		return gcpprovider.New(ctx, region)
+		return gcpprovider.New(ctx, region, project)
 	case provider.ProviderAzure:
 		return azureprovider.New(ctx, region)
 	default:
 		return nil, fmt.Errorf("unknown provider %q", pt)
 	}
+}
+
+// providerForEntry builds the provider for an existing instance, in the GCP
+// project recorded at `up` time. Entries written before the project was
+// recorded fall back to the env / gcloud project, with a warning on w.
+func providerForEntry(ctx context.Context, h provider.InstanceHandle, w io.Writer) (provider.CloudProvider, error) {
+	p, err := newProvider(ctx, h.Provider, h.Region, h.Project)
+	if err != nil {
+		return nil, err
+	}
+	if legacyGCPEntry(h) {
+		project := "?"
+		if pp, ok := p.(interface{ ProjectID() string }); ok {
+			project = pp.ProjectID()
+		}
+		fmt.Fprintf(w, "⚠️  %s has no recorded GCP project (launched by an older runlease); using %s from GOOGLE_CLOUD_PROJECT / gcloud config.\n",
+			h.ManifestName, project)
+	}
+	return p, nil
+}
+
+// legacyGCPEntry reports a GCP handle written before the project was recorded.
+func legacyGCPEntry(h provider.InstanceHandle) bool {
+	return h.Provider == provider.ProviderGCP && h.Project == ""
 }

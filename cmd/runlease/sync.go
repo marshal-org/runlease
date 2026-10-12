@@ -35,7 +35,7 @@ func runSync(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()
 	for _, e := range entries {
 		name := e.Handle.ManifestName
-		p, err := newProvider(ctx, e.Handle.Provider, e.Handle.Region)
+		p, err := providerForEntry(ctx, e.Handle, cmd.ErrOrStderr())
 		if err != nil {
 			fmt.Fprintf(out, "%-22s  error initializing provider: %v\n", name, err)
 			continue

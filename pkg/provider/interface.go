@@ -2,8 +2,14 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrNotFound is returned (wrapped) by Terminate when the instance does not
+// exist in the location the provider looked in. It is NOT proof the instance
+// was deleted: a provider pointed at the wrong project/region also gets it.
+var ErrNotFound = errors.New("instance not found")
 
 type ProviderType string
 type InstanceID string
@@ -44,6 +50,7 @@ type InstanceHandle struct {
 	Provider     ProviderType
 	InstanceType string
 	Region       string
+	Project      string // GCP only: project the instance was created in
 	PublicIP     string
 	PrivateIP    string
 	State        InstanceStatus

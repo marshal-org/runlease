@@ -4,6 +4,13 @@ All notable changes to this project will be documented here.
 
 ---
 
+## [0.4.1](https://github.com/marshal-org/runlease/compare/v0.4.0...v0.4.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* **down:** use the instance's own GCP project and confirm the VM is gone ([#17](https://github.com/marshal-org/runlease/issues/17)) ([c90b1d0](https://github.com/marshal-org/runlease/commit/c90b1d0a2b8a95450c1a5d3e91f49d6b88c947b5))
+
 ## [0.4.0](https://github.com/marshal-org/runlease/compare/v0.3.0...v0.4.0) (2026-07-20)
 
 

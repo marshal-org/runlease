@@ -33,28 +33,39 @@ const DefaultImageFamily = "projects/debian-cloud/global/images/family/debian-12
 //
 // The manifest `region` field is treated as a GCP zone (e.g. "us-central1-a").
 type Provider struct {
-	svc          *compute.Service
-	projectID    string
-	zone         string
-	pollInterval time.Duration
+	svc           *compute.Service
+	projectID     string
+	zone          string
+	pollInterval  time.Duration
+	deleteTimeout time.Duration // how long Terminate waits for the instance to disappear
 }
 
-func New(ctx context.Context, zone string) (*Provider, error) {
-	projectID, err := resolveProjectID(ctx)
-	if err != nil {
-		return nil, err
+// New returns a provider for zone in project. Pass the project recorded in the
+// instance's registry handle; an empty project is resolved from the
+// environment / gcloud config (used by `up`, and by registry entries written
+// before the project was recorded).
+func New(ctx context.Context, zone, project string) (*Provider, error) {
+	if project == "" {
+		var err error
+		if project, err = resolveProjectID(ctx); err != nil {
+			return nil, err
+		}
 	}
 	svc, err := compute.NewService(ctx, option.WithScopes(compute.ComputeScope))
 	if err != nil {
 		return nil, fmt.Errorf("creating compute service: %w", err)
 	}
 	return &Provider{
-		svc:          svc,
-		projectID:    projectID,
-		zone:         zone,
-		pollInterval: 5 * time.Second,
+		svc:           svc,
+		projectID:     project,
+		zone:          zone,
+		pollInterval:  5 * time.Second,
+		deleteTimeout: 3 * time.Minute,
 	}, nil
 }
+
+// ProjectID is the GCP project this provider operates in.
+func (p *Provider) ProjectID() string { return p.projectID }
 
 func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) (*provider.InstanceHandle, error) {
 	name := generateInstanceName(spec.ManifestName)
@@ -125,6 +136,7 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 		Provider:     provider.ProviderGCP,
 		InstanceType: spec.InstanceType,
 		Region:       p.zone,
+		Project:      p.projectID,
 		State:        provider.StatusPending,
 		ManifestName: spec.ManifestName,
 		CreatedAt:    time.Now().UTC(),
@@ -132,15 +144,47 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 	}, nil
 }
 
+// Terminate deletes the instance and returns nil only once a Get in the same
+// project and zone returns 404. A 404 on the Delete itself is reported as a
+// wrapped provider.ErrNotFound, never as success: it is also what a wrong
+// project or zone looks like.
 func (p *Provider) Terminate(ctx context.Context, id provider.InstanceID) error {
 	op, err := p.svc.Instances.Delete(p.projectID, p.zone, string(id)).Context(ctx).Do()
 	if err != nil {
 		if isNotFound(err) {
-			return nil
+			return fmt.Errorf("instance %s not found in project %s, zone %s: %w",
+				id, p.projectID, p.zone, provider.ErrNotFound)
 		}
 		return fmt.Errorf("delete instance: %w", err)
 	}
-	return p.waitForZoneOp(ctx, op.Name)
+	if err := p.waitForZoneOp(ctx, op.Name); err != nil {
+		return fmt.Errorf("delete instance: %w", err)
+	}
+	return p.waitUntilGone(ctx, id)
+}
+
+// waitUntilGone polls Get until the instance returns 404 or deleteTimeout
+// passes. Other Get errors (network, rate limit) are retried until the deadline.
+func (p *Provider) waitUntilGone(ctx context.Context, id provider.InstanceID) error {
+	deadline := time.Now().Add(p.deleteTimeout)
+	for {
+		inst, err := p.svc.Instances.Get(p.projectID, p.zone, string(id)).Context(ctx).Do()
+		if err != nil && isNotFound(err) {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			if err != nil {
+				return fmt.Errorf("confirming deletion of %s in project %s, zone %s: %w", id, p.projectID, p.zone, err)
+			}
+			return fmt.Errorf("instance %s still exists in project %s, zone %s (status %s) %s after the delete completed",
+				id, p.projectID, p.zone, inst.Status, p.deleteTimeout)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(p.pollInterval):
+		}
+	}
 }
 
 func (p *Provider) Status(ctx context.Context, id provider.InstanceID) (provider.InstanceStatus, error) {

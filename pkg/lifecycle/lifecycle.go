@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -13,7 +14,7 @@ import (
 
 // ProviderFactory matches the signature of newProvider in cmd/runlease/root.go,
 // allowing the manager to be tested without real cloud credentials.
-type ProviderFactory func(ctx context.Context, pt provider.ProviderType, region string) (provider.CloudProvider, error)
+type ProviderFactory func(ctx context.Context, pt provider.ProviderType, region, project string) (provider.CloudProvider, error)
 
 type Manager struct {
 	reg          *registry.Registry
@@ -52,7 +53,7 @@ func (m *Manager) Reconcile(ctx context.Context, wg *sync.WaitGroup) {
 
 	for _, e := range entries {
 		e := e
-		p, err := m.factory(ctx, e.Handle.Provider, e.Handle.Region)
+		p, err := m.factory(ctx, e.Handle.Provider, e.Handle.Region, e.Handle.Project)
 		if err != nil {
 			m.log.Error("creating provider", "provider", e.Handle.Provider, "err", err)
 			continue
@@ -64,6 +65,13 @@ func (m *Manager) Reconcile(ctx context.Context, wg *sync.WaitGroup) {
 		}
 		switch status {
 		case provider.StatusTerminated, provider.StatusStopped:
+			if status == provider.StatusTerminated && e.Handle.ProjectUnknown() {
+				// Status maps a 404 to terminated; without a recorded project
+				// that may just be the wrong project.
+				m.log.Warn("instance not found in the default project and no project recorded, keeping registry entry",
+					"id", e.Handle.ID, "name", e.Handle.ManifestName)
+				continue
+			}
 			m.log.Info("cleaning up terminated instance", "id", e.Handle.ID, "name", e.Handle.ManifestName)
 			m.cleanup(e)
 		case provider.StatusRunning, provider.StatusPending:
@@ -154,8 +162,12 @@ func stopTimer(t *time.Timer) {
 }
 
 func (m *Manager) terminate(ctx context.Context, p provider.CloudProvider, e *registry.Entry) {
-	if err := p.Terminate(ctx, e.Handle.ID); err != nil {
-		m.log.Error("terminating instance", "id", e.Handle.ID, "err", err)
+	if err := p.Terminate(ctx, e.Handle.ID); err != nil &&
+		(!errors.Is(err, provider.ErrNotFound) || e.Handle.ProjectUnknown()) {
+		// Keep the entry: dropping it would lose track of a VM that may still
+		// run (a not-found without a recorded project may be the wrong project).
+		m.log.Error("terminating instance, keeping registry entry", "id", e.Handle.ID, "err", err)
+		return
 	}
 	m.cleanup(e)
 }

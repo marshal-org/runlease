@@ -193,7 +193,7 @@ func runUp(cmd *cobra.Command, _ []string) error {
 	}
 
 	ctx := cmd.Context()
-	p, err := newProvider(ctx, provider.ProviderType(m.Provider), m.Region)
+	p, err := newProvider(ctx, provider.ProviderType(m.Provider), m.Region, "")
 	if err != nil {
 		return fmt.Errorf("initializing provider: %w", err)
 	}
@@ -253,6 +253,9 @@ func runUp(cmd *cobra.Command, _ []string) error {
 	running.Tags = m.Tags
 	running.InstanceType = instanceType
 	running.CreatedAt = handle.CreatedAt
+	// The project the instance was created in: later commands must use it, not
+	// whatever the env / gcloud config says at that time.
+	running.Project = handle.Project
 
 	// Set expiry from TTL, anchored to when the instance was created.
 	if m.Reclaim.TTL != "" {

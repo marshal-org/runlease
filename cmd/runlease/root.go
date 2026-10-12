@@ -127,7 +127,7 @@ func providerForEntry(ctx context.Context, h provider.InstanceHandle, w io.Write
 	if err != nil {
 		return nil, err
 	}
-	if legacyGCPEntry(h) {
+	if h.ProjectUnknown() {
 		project := "?"
 		if pp, ok := p.(interface{ ProjectID() string }); ok {
 			project = pp.ProjectID()
@@ -136,9 +136,4 @@ func providerForEntry(ctx context.Context, h provider.InstanceHandle, w io.Write
 			h.ManifestName, project)
 	}
 	return p, nil
-}
-
-// legacyGCPEntry reports a GCP handle written before the project was recorded.
-func legacyGCPEntry(h provider.InstanceHandle) bool {
-	return h.Provider == provider.ProviderGCP && h.Project == ""
 }

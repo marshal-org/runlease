@@ -65,6 +65,13 @@ func (m *Manager) Reconcile(ctx context.Context, wg *sync.WaitGroup) {
 		}
 		switch status {
 		case provider.StatusTerminated, provider.StatusStopped:
+			if status == provider.StatusTerminated && e.Handle.ProjectUnknown() {
+				// Status maps a 404 to terminated; without a recorded project
+				// that may just be the wrong project.
+				m.log.Warn("instance not found in the default project and no project recorded, keeping registry entry",
+					"id", e.Handle.ID, "name", e.Handle.ManifestName)
+				continue
+			}
 			m.log.Info("cleaning up terminated instance", "id", e.Handle.ID, "name", e.Handle.ManifestName)
 			m.cleanup(e)
 		case provider.StatusRunning, provider.StatusPending:
@@ -155,8 +162,10 @@ func stopTimer(t *time.Timer) {
 }
 
 func (m *Manager) terminate(ctx context.Context, p provider.CloudProvider, e *registry.Entry) {
-	if err := p.Terminate(ctx, e.Handle.ID); err != nil && !errors.Is(err, provider.ErrNotFound) {
-		// Keep the entry: dropping it would lose track of a VM that may still run.
+	if err := p.Terminate(ctx, e.Handle.ID); err != nil &&
+		(!errors.Is(err, provider.ErrNotFound) || e.Handle.ProjectUnknown()) {
+		// Keep the entry: dropping it would lose track of a VM that may still
+		// run (a not-found without a recorded project may be the wrong project).
 		m.log.Error("terminating instance, keeping registry entry", "id", e.Handle.ID, "err", err)
 		return
 	}

@@ -24,6 +24,7 @@ type fakeCompute struct {
 	mu        sync.Mutex
 	instances map[string]string // key → status
 	sticky    bool
+	getErrors int      // fail this many GETs with a 503 before answering
 	calls     []string // "METHOD project/zone/name"
 }
 
@@ -53,6 +54,12 @@ func (f *fakeCompute) handler(w http.ResponseWriter, r *http.Request) {
 	case parts[4] == "instances" && len(parts) == 6:
 		key := project + "/" + zone + "/" + parts[5]
 		f.calls = append(f.calls, r.Method+" "+key)
+		if r.Method == http.MethodGet && f.getErrors > 0 {
+			f.getErrors--
+			w.WriteHeader(http.StatusServiceUnavailable)
+			writeJSON(w, map[string]any{"error": map[string]any{"code": 503, "message": "backend error"}})
+			return
+		}
 		status, ok := f.instances[key]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -148,5 +155,22 @@ func TestTerminate_instanceStillPresentAfterDeleteOpIsError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "still exists") {
 		t.Fatalf("err = %v, want it to say the instance still exists", err)
+	}
+}
+
+func TestTerminate_retriesTransientGetErrors(t *testing.T) {
+	f, svc := newFake(t, map[string]string{"proj-a/europe-west1-b/rl-x": "RUNNING"})
+	f.getErrors = 2
+	if err := testProvider(svc, "proj-a", "europe-west1-b").Terminate(context.Background(), "rl-x"); err != nil {
+		t.Fatalf("Terminate should ride out transient Get errors: %v", err)
+	}
+}
+
+func TestTerminate_persistentGetErrorFailsAtDeadline(t *testing.T) {
+	f, svc := newFake(t, map[string]string{"proj-a/europe-west1-b/rl-x": "RUNNING"})
+	f.getErrors = 1 << 20
+	err := testProvider(svc, "proj-a", "europe-west1-b").Terminate(context.Background(), "rl-x")
+	if err == nil || !strings.Contains(err.Error(), "confirming deletion") {
+		t.Fatalf("err = %v, want a confirming-deletion error", err)
 	}
 }

@@ -52,6 +52,13 @@ func runSync(cmd *cobra.Command, _ []string) error {
 
 		old := e.Handle.State
 		isDead := newState == provider.StatusTerminated || newState == provider.StatusStopped
+		if newState == provider.StatusTerminated && e.Handle.ProjectUnknown() {
+			// A 404 reads as terminated, but without a recorded project we may
+			// have looked in the wrong one. Keep the entry.
+			fmt.Fprintf(out, "%-22s  not found in the default project; kept (no recorded project) — "+
+				"run `GOOGLE_CLOUD_PROJECT=<project> runlease down %s`\n", name, name)
+			continue
+		}
 		if isDead {
 			if err := credential.Delete(e.CredDir, string(e.Handle.ID)); err != nil {
 				fmt.Fprintf(out, "%-22s  warning: could not delete credentials: %v\n", name, err)

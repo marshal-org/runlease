@@ -69,7 +69,7 @@ func runDown(cmd *cobra.Command, args []string) error {
 		if !errors.Is(err, provider.ErrNotFound) {
 			return fmt.Errorf("terminating instance: %w\nRegistry entry kept — the instance may still be running", err)
 		}
-		if legacyGCPEntry(entry.Handle) {
+		if entry.Handle.ProjectUnknown() {
 			return fmt.Errorf("terminating instance: %w\nRegistry entry kept — it may be running in another project. "+
 				"Re-run with GOOGLE_CLOUD_PROJECT=<project it was launched in>", err)
 		}

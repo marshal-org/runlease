@@ -15,6 +15,7 @@ import (
 type fakeDownProvider struct {
 	terminateErr error
 	terminated   bool
+	status       provider.InstanceStatus
 }
 
 func (f *fakeDownProvider) RequestSpot(context.Context, provider.InstanceSpec) (*provider.InstanceHandle, error) {
@@ -25,7 +26,7 @@ func (f *fakeDownProvider) Terminate(context.Context, provider.InstanceID) error
 	return f.terminateErr
 }
 func (f *fakeDownProvider) Status(context.Context, provider.InstanceID) (provider.InstanceStatus, error) {
-	return provider.StatusUnknown, nil
+	return f.status, nil
 }
 func (f *fakeDownProvider) WaitUntilRunning(context.Context, provider.InstanceID) (*provider.InstanceHandle, error) {
 	return nil, errors.New("not implemented")
@@ -115,5 +116,40 @@ func TestDown_notFoundInRecordedProjectSaysSo(t *testing.T) {
 	}
 	if kept || strings.Contains(out, "Terminated.") || !strings.Contains(out, "not found in project proj-a") {
 		t.Fatalf("want entry removed + not-found message; kept=%v out=%q", kept, out)
+	}
+}
+
+// sync maps a 404 to terminated. Without a recorded project that may be the
+// wrong project, so the entry must stay; with one, it is removed.
+func TestSync_notFoundRemovesOnlyWithRecordedProject(t *testing.T) {
+	for _, tc := range []struct {
+		project  string
+		wantKept bool
+	}{{"", true}, {"proj-a", false}} {
+		t.Setenv("RUNLEASE_HOME", t.TempDir())
+		reg, _ := loadRegistry()
+		_ = reg.Add(&registry.Entry{Handle: provider.InstanceHandle{
+			ID: "rl-box-abc123", ManifestName: "box", Provider: provider.ProviderGCP,
+			Region: "europe-west1-b", Project: tc.project, State: provider.StatusRunning,
+		}, CredDir: t.TempDir()})
+
+		orig := newProvider
+		newProvider = func(context.Context, provider.ProviderType, string, string) (provider.CloudProvider, error) {
+			return &fakeDownProvider{status: provider.StatusTerminated}, nil
+		}
+		var buf bytes.Buffer
+		syncCmd.SetOut(&buf)
+		syncCmd.SetErr(&buf)
+		syncCmd.SetContext(context.Background())
+		err := runSync(syncCmd, nil)
+		newProvider = orig
+		if err != nil {
+			t.Fatalf("sync: %v", err)
+		}
+		reg2, _ := loadRegistry()
+		_, gerr := reg2.Get("box")
+		if kept := gerr == nil; kept != tc.wantKept {
+			t.Errorf("project=%q: kept=%v, want %v; out=%q", tc.project, kept, tc.wantKept, buf.String())
+		}
 	}
 }

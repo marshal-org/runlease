@@ -68,3 +68,10 @@ type CloudProvider interface {
 	Status(ctx context.Context, id InstanceID) (InstanceStatus, error)
 	WaitUntilRunning(ctx context.Context, id InstanceID) (*InstanceHandle, error)
 }
+
+// ProjectUnknown reports a GCP handle written before runlease recorded the
+// project. Its commands use the env / gcloud project, so a 404 may only mean
+// "wrong project": never treat it as proof the VM is gone.
+func (h InstanceHandle) ProjectUnknown() bool {
+	return h.Provider == ProviderGCP && h.Project == ""
+}

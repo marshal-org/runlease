@@ -163,18 +163,19 @@ func (p *Provider) Terminate(ctx context.Context, id provider.InstanceID) error 
 	return p.waitUntilGone(ctx, id)
 }
 
-// waitUntilGone polls Get until the instance returns 404 or deleteTimeout passes.
+// waitUntilGone polls Get until the instance returns 404 or deleteTimeout
+// passes. Other Get errors (network, rate limit) are retried until the deadline.
 func (p *Provider) waitUntilGone(ctx context.Context, id provider.InstanceID) error {
 	deadline := time.Now().Add(p.deleteTimeout)
 	for {
 		inst, err := p.svc.Instances.Get(p.projectID, p.zone, string(id)).Context(ctx).Do()
-		if err != nil {
-			if isNotFound(err) {
-				return nil
-			}
-			return fmt.Errorf("confirming deletion: %w", err)
+		if err != nil && isNotFound(err) {
+			return nil
 		}
 		if time.Now().After(deadline) {
+			if err != nil {
+				return fmt.Errorf("confirming deletion of %s in project %s, zone %s: %w", id, p.projectID, p.zone, err)
+			}
 			return fmt.Errorf("instance %s still exists in project %s, zone %s (status %s) %s after the delete completed",
 				id, p.projectID, p.zone, inst.Status, p.deleteTimeout)
 		}

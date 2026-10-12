@@ -72,12 +72,16 @@ func runIAPSession(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(cmd.OutOrStdout(), "Starting IAP tunnel to %s (%s) on localhost:%d...\n",
 		entry.Handle.ManifestName, instanceName, localPort)
 
-	tunnel := exec.CommandContext(cmd.Context(), "gcloud", "compute", "start-iap-tunnel",
+	tunnelArgs := []string{"compute", "start-iap-tunnel",
 		instanceName,
 		"22",
 		fmt.Sprintf("--zone=%s", zone),
 		fmt.Sprintf("--local-host-port=localhost:%d", localPort),
-	)
+	}
+	if entry.Handle.Project != "" {
+		tunnelArgs = append(tunnelArgs, "--project="+entry.Handle.Project)
+	}
+	tunnel := exec.CommandContext(cmd.Context(), "gcloud", tunnelArgs...)
 	tunnel.Stderr = os.Stderr
 
 	if err := tunnel.Start(); err != nil {

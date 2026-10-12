@@ -2,8 +2,14 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrNotFound is returned (wrapped) by Terminate when the instance does not
+// exist in the location the provider looked in. It is NOT proof the instance
+// was deleted: a provider pointed at the wrong project/region also gets it.
+var ErrNotFound = errors.New("instance not found")
 
 type ProviderType string
 type InstanceID string
@@ -44,6 +50,7 @@ type InstanceHandle struct {
 	Provider     ProviderType
 	InstanceType string
 	Region       string
+	Project      string // GCP only: project the instance was created in
 	PublicIP     string
 	PrivateIP    string
 	State        InstanceStatus
@@ -60,4 +67,11 @@ type CloudProvider interface {
 	Terminate(ctx context.Context, id InstanceID) error
 	Status(ctx context.Context, id InstanceID) (InstanceStatus, error)
 	WaitUntilRunning(ctx context.Context, id InstanceID) (*InstanceHandle, error)
+}
+
+// ProjectUnknown reports a GCP handle written before runlease recorded the
+// project. Its commands use the env / gcloud project, so a 404 may only mean
+// "wrong project": never treat it as proof the VM is gone.
+func (h InstanceHandle) ProjectUnknown() bool {
+	return h.Provider == ProviderGCP && h.Project == ""
 }

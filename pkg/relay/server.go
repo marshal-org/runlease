@@ -21,7 +21,39 @@ import (
 const (
 	handshakeTimeout = 30 * time.Second
 	tokenTTL         = 24 * time.Hour
+
+	// Slot tokens are bearer secrets chosen by the CLI. The relay refuses
+	// anything too short to be unguessable, and anything that is not plain
+	// token characters, before it touches the slot table or the logs.
+	minTokenLen = 32
+	maxTokenLen = 128
 )
+
+// validToken reports whether tok is an acceptable slot token: 32 to 128
+// characters from [A-Za-z0-9_-]. The CLI sends 64 hex characters.
+func validToken(tok string) bool {
+	if len(tok) < minTokenLen || len(tok) > maxTokenLen {
+		return false
+	}
+	for i := 0; i < len(tok); i++ {
+		c := tok[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '-', c == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// shortTok returns a log-safe prefix of a token. It never panics, whatever
+// the length of its input.
+func shortTok(tok string) string {
+	if len(tok) > 8 {
+		return tok[:8] + "…"
+	}
+	return "…"
+}
 
 // Server is a WebSocket relay server that implements http.Handler.
 //
@@ -45,6 +77,10 @@ const (
 type Config struct {
 	AgentPath string     // path to runlease-agent binary served at GET /agent; empty disables
 	Auth      AuthConfig // Google OAuth allow-list; zero value disables auth
+	// MaxSlots caps the number of live slots. Registration is refused once the
+	// cap is reached, so one caller cannot exhaust the relay's memory. Zero
+	// means no cap.
+	MaxSlots int
 }
 
 type Server struct {
@@ -163,8 +199,13 @@ func (s *Server) dispatch(conn net.Conn, bearer string) {
 	hs, err := readMsg(conn)
 	conn.SetDeadline(time.Time{}) //nolint:errcheck
 
-	if err != nil || hs.Token == "" {
+	if err != nil {
 		writeMsg(conn, wireMsg{Status: "error", Message: "invalid handshake"}) //nolint:errcheck
+		conn.Close()
+		return
+	}
+	if !validToken(hs.Token) {
+		writeMsg(conn, wireMsg{Status: "error", Message: "invalid token: want 32 to 128 characters of [A-Za-z0-9_-]"}) //nolint:errcheck
 		conn.Close()
 		return
 	}
@@ -197,6 +238,12 @@ func (s *Server) handleRegister(conn net.Conn, token, bearer string) {
 		writeMsg(conn, wireMsg{Status: "error", Message: "token already registered"}) //nolint:errcheck
 		return
 	}
+	if s.cfg.MaxSlots > 0 && len(s.slots) >= s.cfg.MaxSlots {
+		s.mu.Unlock()
+		s.log.Warn("register rejected: relay at slot capacity", "max_slots", s.cfg.MaxSlots)
+		writeMsg(conn, wireMsg{Status: "error", Message: "relay is at capacity, try again later"}) //nolint:errcheck
+		return
+	}
 	sl := &slot{
 		expiresAt:  time.Now().Add(tokenTTL),
 		instanceCh: make(chan net.Conn, 1),
@@ -208,7 +255,7 @@ func (s *Server) handleRegister(conn net.Conn, token, bearer string) {
 
 	s.startCoordinator(token, sl)
 	writeMsg(conn, wireMsg{Status: "ok"}) //nolint:errcheck
-	s.log.Info("token registered", "token", token[:8]+"…")
+	s.log.Info("token registered", "token", shortTok(token))
 }
 
 func (s *Server) handleInstance(conn net.Conn, token string) {
@@ -281,7 +328,7 @@ func (s *Server) startCoordinator(token string, sl *slot) {
 				sl.instanceClaimed.Store(false)
 				continue
 			}
-			s.log.Info("instance registered", "token", token[:8]+"…")
+			s.log.Info("instance registered", "token", shortTok(token))
 
 			s.runMuxSession(ctx, token, sl, instanceConn)
 			sl.instanceReady.Store(false)
@@ -296,7 +343,7 @@ func (s *Server) startCoordinator(token string, sl *slot) {
 func (s *Server) runMuxSession(ctx context.Context, token string, sl *slot, instanceConn net.Conn) {
 	session, err := yamux.Client(instanceConn, yamuxConfig())
 	if err != nil {
-		s.log.Warn("yamux.Client init failed", "token", token[:8]+"…", "err", err)
+		s.log.Warn("yamux.Client init failed", "token", shortTok(token), "err", err)
 		instanceConn.Close()
 		return
 	}
@@ -305,7 +352,7 @@ func (s *Server) runMuxSession(ctx context.Context, token string, sl *slot, inst
 	// As soon as the mux session is up, clients may connect — they no longer
 	// need a per-session "ready" ack from the agent.
 	sl.instanceReady.Store(true)
-	s.log.Info("mux session active", "token", token[:8]+"…")
+	s.log.Info("mux session active", "token", shortTok(token))
 
 	for {
 		select {
@@ -313,7 +360,7 @@ func (s *Server) runMuxSession(ctx context.Context, token string, sl *slot, inst
 			drainClose(sl.clientCh)
 			return
 		case <-session.CloseChan():
-			s.log.Info("mux session ended, awaiting agent reconnect", "token", token[:8]+"…")
+			s.log.Info("mux session ended, awaiting agent reconnect", "token", shortTok(token))
 			drainClose(sl.clientCh)
 			return
 		case clientConn := <-sl.clientCh:
@@ -325,7 +372,7 @@ func (s *Server) runMuxSession(ctx context.Context, token string, sl *slot, inst
 func (s *Server) handleMuxClient(session *yamux.Session, clientConn net.Conn, token string) {
 	stream, err := session.OpenStream()
 	if err != nil {
-		s.log.Warn("yamux OpenStream failed", "token", token[:8]+"…", "err", err)
+		s.log.Warn("yamux OpenStream failed", "token", shortTok(token), "err", err)
 		writeMsg(clientConn, wireMsg{Status: "error", Message: "mux open failed"}) //nolint:errcheck
 		clientConn.Close()
 		return

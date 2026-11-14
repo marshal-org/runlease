@@ -52,6 +52,11 @@ func (a *AuthConfig) verify(ctx context.Context, rawToken string) error {
 	if email == "" {
 		return fmt.Errorf("ID token missing email claim")
 	}
+	// An unverified address proves nothing about who holds the account, so it
+	// must not be matched against the allow-list.
+	if verified, ok := payload.Claims["email_verified"].(bool); !ok || !verified {
+		return fmt.Errorf("ID token email %q is not verified", email)
+	}
 	if !a.allows(email) {
 		return fmt.Errorf("identity %q is not permitted on this relay", email)
 	}

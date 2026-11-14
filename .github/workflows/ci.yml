@@ -50,11 +50,12 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test -count=1 ./...
-      - name: Cross-compile every release target
+      # The release builds all five targets. Here we only prove the code still
+      # compiles on the two operating systems the test job does not run on.
+      - name: Cross-compile for macOS and Windows
         run: |
-          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
-            GOOS="${target%/*}" GOARCH="${target#*/}" CGO_ENABLED=0 go build -o /dev/null ./cmd/runlease
-          done
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null ./cmd/runlease
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o /dev/null ./cmd/runlease
 
   policy:
     name: Workflow policy

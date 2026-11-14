@@ -22,6 +22,9 @@ pkg/config/           ~/.runlease/config.yaml — user defaults
 pkg/provider/         Cloud provider interface + aws/, gcp/, azure/ implementations
 pkg/instanceclass/    compute.small → e2-standard-2 etc. catalog resolver
 pkg/lifecycle/        Reclaim daemon (TTL expiry sweeper)
+pkg/signin/           `runlease login`: Google device sign-in flow + saved session (~/.runlease/auth.json)
+deploy/relay/         Terraform module for a relay VM (gcp/) + tiers.example.yaml
+site/                 Project website, published by .github/workflows/pages.yml
 docs/                 Reference + integration docs (Mermaid only — no ASCII diagrams)
                       - manifest.md            full schema reference (CLI: `runlease manifest schema`)
                       - private-ar-k3s.md      kubelet CredentialProvider pattern for private GCP AR pulls

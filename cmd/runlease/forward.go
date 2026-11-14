@@ -17,7 +17,6 @@ import (
 	cryptossh "golang.org/x/crypto/ssh"
 
 	"github.com/marshal-org/runlease/pkg/credential"
-	"github.com/marshal-org/runlease/pkg/manifest"
 	"github.com/marshal-org/runlease/pkg/registry"
 )
 
@@ -372,12 +371,6 @@ func parseForwardSpecs(raw []string, dir forwardDirection) []forwardSpec {
 		out = append(out, s)
 	}
 	return out
-}
-
-// manifestForwardSpec converts a declarative manifest.ForwardSpec into the
-// internal forwardSpec used by the listener machinery.
-func manifestForwardSpec(f manifest.ForwardSpec) forwardSpec {
-	return forwardSpecFromShared(f.Direction, f.Bind, f.Local, f.Remote, f.Host)
 }
 
 // registryForwardsToSpecs is the registry-side equivalent — used by

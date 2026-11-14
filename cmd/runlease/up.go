@@ -176,7 +176,16 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	agentDigest, err := resolveAgentSHA256(m.Relay.AgentSHA256, agentSHA256)
+	if err != nil {
+		return err
+	}
+	if m.Relay.Addr != "" && agentDigest == "" {
+		fmt.Fprintf(cmd.ErrOrStderr(), "⚠  The agent binary served by the relay will not be verified. Set relay.agentSha256 in the manifest, or use a release build of runlease.\n")
+	}
+
 	ud, err := userdata.Build(userdata.Params{
+		AgentSHA256:       agentDigest,
 		PublicKeySSH:      cred.PublicKeySSH,
 		HostPrivateKeyPEM: cred.HostPrivateKeyPEM,
 		HostPublicKeySSH:  cred.HostPublicKeySSH,
@@ -828,4 +837,34 @@ func currentUsername() string {
 		return name
 	}
 	return "unknown"
+}
+
+// agentSHA256 is the SHA-256 of the linux/amd64 runlease-agent built from the
+// same release as this CLI. Release builds set it with
+// -ldflags "-X main.agentSHA256=<hex>"; it is empty in a plain "go build".
+var agentSHA256 string
+
+// agentUnverified is the manifest value that turns the agent check off on
+// purpose, for a relay that serves a self-built agent.
+const agentUnverified = "unverified"
+
+// resolveAgentSHA256 picks the digest the boot script checks the relay-served
+// agent against. A manifest value wins over the build-time one. It returns ""
+// when the check is skipped: either the manifest says "unverified", or neither
+// source has a digest (a development build).
+func resolveAgentSHA256(fromManifest, fromBuild string) (string, error) {
+	v := strings.ToLower(strings.TrimSpace(fromManifest))
+	if v == agentUnverified {
+		return "", nil
+	}
+	if v == "" {
+		v = strings.ToLower(strings.TrimSpace(fromBuild))
+	}
+	if v == "" {
+		return "", nil
+	}
+	if len(v) != 64 || strings.Trim(v, "0123456789abcdef") != "" {
+		return "", fmt.Errorf("relay.agentSha256 must be 64 hex characters or %q", agentUnverified)
+	}
+	return v, nil
 }

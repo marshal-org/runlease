@@ -1,0 +1,147 @@
+#!/bin/bash
+# Boot script for a Runlease relay VM. Rendered by Terraform; runs on every boot
+# and is safe to run again.
+set -euo pipefail
+
+log() { echo "runlease-relay-setup: $*"; }
+
+# Fetch $1 to $2. https:// is fetched directly; gs:// through the storage API
+# with the VM's own short-lived token.
+fetch() {
+  local src="$1" dst="$2"
+  case "$src" in
+    https://*)
+      curl -fsSL --retry 5 --retry-delay 2 "$src" -o "$dst"
+      ;;
+    gs://*)
+      local rest="$${src#gs://}" bucket object token
+      bucket="$${rest%%/*}"
+      object="$${rest#*/}"
+      object="$(printf '%s' "$object" | sed 's|/|%2F|g')"
+      token="$(curl -fsS -H 'Metadata-Flavor: Google' \
+        'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' \
+        | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')"
+      curl -fsSL --retry 5 --retry-delay 2 -H "Authorization: Bearer $token" \
+        "https://storage.googleapis.com/storage/v1/b/$bucket/o/$object?alt=media" -o "$dst"
+      ;;
+    *)
+      log "unsupported binary URL: $src"; exit 1 ;;
+  esac
+}
+
+# Download, verify, then install. Nothing unverified is ever made executable.
+install_verified() {
+  local src="$1" sha="$2" dst="$3" tmp
+  if [ -x "$dst" ] && echo "$sha  $dst" | sha256sum -c - >/dev/null 2>&1; then
+    log "$dst is already the expected build"
+    return
+  fi
+  tmp="$(mktemp)"
+  fetch "$src" "$tmp"
+  if ! echo "$sha  $tmp" | sha256sum -c - >/dev/null 2>&1; then
+    rm -f "$tmp"
+    log "SHA-256 mismatch for $src, refusing to install"
+    exit 1
+  fi
+  install -m 0755 -o root -g root "$tmp" "$dst"
+  rm -f "$tmp"
+  log "installed $dst"
+}
+
+export DEBIAN_FRONTEND=noninteractive
+if ! command -v caddy >/dev/null 2>&1; then
+  apt-get update -qq
+  apt-get install -y -qq caddy unattended-upgrades ca-certificates curl
+fi
+
+install_verified '${relay_url}' '${relay_sha256}' /usr/local/bin/runlease-relay
+install_verified '${agent_url}' '${agent_sha256}' /usr/local/bin/runlease-agent
+
+install -d -m 0755 /etc/runlease
+echo '${tiers_yaml_b64}' | base64 -d > /etc/runlease/tiers.yaml
+chmod 0644 /etc/runlease/tiers.yaml
+
+# The client secret is published by the relay to every CLI that signs in, so it
+# is not confidential. It still goes in an environment file, not a command line.
+cat > /etc/runlease/relay.env <<'ENVEOF'
+RUNLEASE_GOOGLE_CLIENT_SECRET=${google_client_secret}
+ENVEOF
+chmod 0640 /etc/runlease/relay.env
+
+cat > /etc/systemd/system/runlease-relay.service <<'UNITEOF'
+[Unit]
+Description=Runlease relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/runlease/relay.env
+ExecStart=/usr/local/bin/runlease-relay \
+  --addr 127.0.0.1:7777 \
+  --agent-binary /usr/local/bin/runlease-agent \
+  --tiers-file /etc/runlease/tiers.yaml \
+  --max-slots ${max_slots}%{ if audience != "" } \
+  --audience ${audience}%{ endif }%{ if google_client_id != "" } \
+  --google-client-id ${google_client_id}%{ endif }%{ if allowed_emails != "" } \
+  --allowed-emails ${allowed_emails}%{ endif }%{ if allowed_domains != "" } \
+  --allowed-domains ${allowed_domains}%{ endif }
+Restart=always
+RestartSec=2
+DynamicUser=yes
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+MemoryMax=768M
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+UNITEOF
+
+# Caddy terminates TLS with an automatically issued certificate and passes
+# everything, WebSocket upgrades included, to the relay on localhost.
+cat > /etc/caddy/Caddyfile <<'CADDYEOF'
+{
+	email ${acme_email}
+}
+
+${hostname} {
+	reverse_proxy 127.0.0.1:7777 {
+		flush_interval -1
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+	log {
+		output stdout
+		format json
+	}
+}
+CADDYEOF
+
+systemctl daemon-reload
+systemctl enable runlease-relay caddy >/dev/null 2>&1
+systemctl restart runlease-relay
+systemctl reload caddy 2>/dev/null || systemctl restart caddy
+
+for _ in $(seq 1 20); do
+  if curl -fsS -m 2 http://127.0.0.1:7777/health >/dev/null; then
+    log "relay is healthy"
+    exit 0
+  fi
+  sleep 1
+done
+log "relay did not become healthy"
+journalctl -u runlease-relay -n 30 --no-pager || true
+exit 1

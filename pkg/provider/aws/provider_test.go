@@ -263,3 +263,17 @@ func TestWaitUntilRunning_contextCancel(t *testing.T) {
 		t.Errorf("expected DeadlineExceeded, got %v", err)
 	}
 }
+
+func TestRequestSpot_requiresIMDSv2(t *testing.T) {
+	mock := &mockEC2{runOut: runOut("i-imds")}
+	p := newProvider(mock)
+	if _, err := p.RequestSpot(context.Background(), provider.InstanceSpec{
+		ManifestName: "imds", InstanceType: "t3.small", ImageID: "ami-123", UserData: "#!/bin/bash",
+	}); err != nil {
+		t.Fatalf("RequestSpot: %v", err)
+	}
+	mo := mock.lastRunInput.MetadataOptions
+	if mo == nil || mo.HttpTokens != types.HttpTokensStateRequired {
+		t.Fatalf("instance must require IMDSv2 session tokens, got %+v", mo)
+	}
+}

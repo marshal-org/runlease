@@ -11,7 +11,10 @@ name: Website
 
 on:
   push:
-    branches: [main]
+    # PRE-LAUNCH: public-relay is listed so the site can be published before
+    # this branch is merged. Remove it (and the branch's entry in the
+    # github-pages environment) when the branch merges.
+    branches: [main, public-relay]
     paths:
       - "site/**"
       - ".github/workflows/pages.yml"

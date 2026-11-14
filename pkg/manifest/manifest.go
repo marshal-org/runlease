@@ -19,8 +19,9 @@ type Manifest struct {
 	// DiskSizeGb overrides the boot disk size in GB. 0 (default) uses the
 	// image's own size. Must be >= the image's minimum on both clouds.
 	DiskSizeGb int `yaml:"diskSizeGb"`
-	// PublicIP controls whether a public IP is assigned. Nil = auto: true when
-	// no relay is configured (direct SSH needs it), false when relay is set.
+	// PublicIP controls whether a public IP is assigned. Nil means true: the VM
+	// needs a route out to reach the relay, and a public IP is the one that
+	// works without extra network setup. Set false where the subnet has NAT.
 	PublicIP *bool             `yaml:"publicIp"`
 	Relay    RelayConfig       `yaml:"relay"`
 	Reclaim  ReclaimPolicy     `yaml:"reclaim"`

@@ -1,8 +1,10 @@
+<p align="center"><img src="site/logo.svg" alt="" width="72" height="72"></p>
+
 <h1 align="center">runlease</h1>
 
 <p align="center">
-  <strong>Disposable cloud machines for coding agents.</strong><br>
-  Secure, cheap spot VMs in your own cloud account, with the whole lifecycle managed for you.
+  <strong>Spot machines for coding agents. Cheap, safe, and in your own cloud.</strong><br>
+  Your keys never leave your machine, the relay cannot read your traffic, and every machine deletes itself.
 </p>
 
 <p align="center">
@@ -13,13 +15,13 @@
 </p>
 
 ```bash
-runlease up --provider gcp --size compute.large --ttl 2h   # a spot VM, no public IP
+runlease up --provider gcp --size compute.large --ttl 2h   # a spot VM in your account
 runlease exec <name> -- make test                          # run something on it
 runlease down <name> --yes                                 # or let the lease delete it
 ```
 
 One command gives an agent, a CI job or you a real Linux machine. It runs in **your** cloud
-account at spot prices, has **no inbound ports**, and **deletes itself** when its lease runs out.
+account at spot prices, needs **no inbound ports**, and **deletes itself** when its lease runs out.
 
 ---
 
@@ -32,15 +34,19 @@ break something and try again. A laptop is the wrong place and a long-lived dev 
 |---|---|
 | **Yours** | The VM runs in your own GCP or AWS account, on your network, under your IAM. Nothing is hosted for you and nothing leaves your account. |
 | **Cheap** | Spot capacity. `runlease up` shows the hourly price and the projected cost of the lease before it launches. |
-| **Closed** | No public IP and no inbound firewall rule. The VM dials out to a relay; you reach it through that tunnel. |
+| **Closed** | Runlease needs no inbound firewall rule. The VM dials out to a relay; you reach it through that tunnel. With `publicIp: false` it has no public address at all. |
 | **Private** | The relay carries SSH. It holds no keys and cannot read, alter or impersonate a session. [How that works](docs/security.md). |
 | **Managed** | Every machine has a lease. It deletes itself at the end of it, whether or not your laptop is still online. |
 | **Scriptable** | `--output json` on every command, non-interactive `exec`, `push`, `pull` and `forward`. Built to be driven by an agent. |
 
 ## Install
 
-Download a binary from the [releases page](https://github.com/marshal-org/runlease/releases)
-and check it against `checksums.txt`:
+```bash
+curl -fsSL https://runlease.online/install.sh | sh
+```
+
+The [script](site/install.sh) downloads the release for your machine, checks its SHA-256 against
+`checksums.txt`, and puts `runlease` in `~/.local/bin`. It uses no sudo. To do the same by hand:
 
 ```bash
 VERSION=v0.5.0   # pick the latest
@@ -48,7 +54,7 @@ OS=linux ARCH=amd64   # or darwin / arm64
 curl -fsSLO "https://github.com/marshal-org/runlease/releases/download/${VERSION}/runlease-${OS}-${ARCH}"
 curl -fsSLO "https://github.com/marshal-org/runlease/releases/download/${VERSION}/checksums.txt"
 sha256sum --check --ignore-missing checksums.txt
-install -m 0755 "runlease-${OS}-${ARCH}" /usr/local/bin/runlease
+install -m 0755 "runlease-${OS}-${ARCH}" ~/.local/bin/runlease
 ```
 
 Releases are signed. See [verifying a release](docs/security.md#verifying-a-release).
@@ -116,7 +122,7 @@ flowchart LR
     end
     R[("Relay<br/>holds no keys")]
     subgraph Cloud["Your cloud account"]
-        subgraph VM["Spot VM, no public IP"]
+        subgraph VM["Spot VM, dials out"]
             A["runlease-agent"] --> S["sshd"]
         end
     end
@@ -126,7 +132,7 @@ flowchart LR
 
 1. `runlease up` generates two key pairs on your machine: one to log in with, and the VM's SSH
    **host key**. It also picks a random 256-bit slot token and registers it with the relay.
-2. The VM boots with no public address. Its agent dials **out** to the relay and claims the slot.
+2. The VM boots. Its agent dials **out** to the relay and claims the slot.
 3. Every command you run opens an SSH session through the relay to the VM's `sshd`. The CLI
    accepts only the host key it generated in step 1, so the relay cannot stand in for the VM.
 4. A timer inside the VM deletes the instance when the lease ends.

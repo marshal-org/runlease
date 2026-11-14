@@ -16,7 +16,7 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
-	"github.com/runlease/runlease/pkg/provider"
+	"github.com/marshal-org/runlease/pkg/provider"
 )
 
 // DefaultImageFamily is the GCP image resolved at instance creation when no

@@ -18,7 +18,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/runlease/runlease/pkg/agent"
+	"github.com/marshal-org/runlease/pkg/agent"
 )
 
 func main() {

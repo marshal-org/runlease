@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/runlease/runlease/pkg/relay"
+	"github.com/marshal-org/runlease/pkg/relay"
 )
 
 func main() {

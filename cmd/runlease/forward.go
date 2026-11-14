@@ -16,9 +16,9 @@ import (
 	"github.com/spf13/cobra"
 	cryptossh "golang.org/x/crypto/ssh"
 
-	"github.com/runlease/runlease/pkg/credential"
-	"github.com/runlease/runlease/pkg/manifest"
-	"github.com/runlease/runlease/pkg/registry"
+	"github.com/marshal-org/runlease/pkg/credential"
+	"github.com/marshal-org/runlease/pkg/manifest"
+	"github.com/marshal-org/runlease/pkg/registry"
 )
 
 var (

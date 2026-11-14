@@ -14,7 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/hashicorp/yamux"
 
-	"github.com/runlease/runlease/pkg/relay"
+	"github.com/marshal-org/runlease/pkg/relay"
 )
 
 // Config controls a single agent's behaviour.

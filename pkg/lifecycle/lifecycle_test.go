@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/runlease/runlease/pkg/provider"
-	"github.com/runlease/runlease/pkg/registry"
+	"github.com/marshal-org/runlease/pkg/provider"
+	"github.com/marshal-org/runlease/pkg/registry"
 )
 
 // mockProvider returns statuses from a sequence, repeating the last entry.

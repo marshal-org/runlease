@@ -1,4 +1,4 @@
-module github.com/runlease/runlease
+module github.com/marshal-org/runlease
 
 go 1.26.2
 

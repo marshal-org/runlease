@@ -29,7 +29,7 @@ docs/                 Reference + integration docs (Mermaid only — no ASCII di
 examples/manifests/   Sample manifest YAMLs
 ```
 
-Single Go module: `github.com/runlease/runlease` (Go 1.26+).
+Single Go module: `github.com/marshal-org/runlease` (Go 1.26+).
 
 ---
 

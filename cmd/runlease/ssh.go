@@ -10,7 +10,7 @@ import (
 	cryptossh "golang.org/x/crypto/ssh"
 	"golang.org/x/term"
 
-	"github.com/runlease/runlease/pkg/credential"
+	"github.com/marshal-org/runlease/pkg/credential"
 )
 
 func init() {

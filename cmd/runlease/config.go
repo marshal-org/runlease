@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	rlconfig "github.com/runlease/runlease/pkg/config"
+	rlconfig "github.com/marshal-org/runlease/pkg/config"
 )
 
 func init() {

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/runlease/runlease/pkg/provider"
+	"github.com/marshal-org/runlease/pkg/provider"
 )
 
 type Entry struct {

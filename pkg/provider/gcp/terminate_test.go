@@ -14,7 +14,7 @@ import (
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/option"
 
-	"github.com/runlease/runlease/pkg/provider"
+	"github.com/marshal-org/runlease/pkg/provider"
 )
 
 // fakeCompute is a minimal in-memory Compute Engine API: instances keyed by

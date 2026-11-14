@@ -42,6 +42,7 @@ flowchart TD
 |---|---|
 | Build and test | `gofmt`, `go mod tidy` is clean, `go build`, `go vet`, `go test`, and a cross-compile of every release target |
 | Static analysis | `staticcheck` |
+| Workflow policy | `scripts/check-workflows.sh`: hosted runners only, no secrets, pinned actions, safe triggers |
 | Known vulnerabilities | `govulncheck`, which fails only on vulnerabilities the code can actually reach |
 | Secret scan | `gitleaks` over the full history |
 | Dependency review | Fails a pull request that adds a dependency with a known vulnerability |
@@ -55,9 +56,9 @@ All of them are required before merge.
 - **`pull_request`, never `pull_request_target`.** A fork's workflow run gets a read-only token and
   no secrets. `pull_request_target` would run with the base repository's secrets, and is the cause
   of most CI compromises in open source. It is not used anywhere in this repository.
-- **GitHub-hosted runners.** `runs-on` in the untrusted lane resolves to `ubuntu-latest` whenever
-  the repository is public. A self-hosted runner that executes fork code is a foothold on your
-  network that survives the job.
+- **GitHub-hosted runners.** Every job runs on `ubuntu-latest`: a fresh virtual machine that is
+  destroyed after the job. A self-hosted runner that executes fork code is a foothold on your
+  network that survives the job, so none is used.
 - **First-time contributors need approval.** A maintainer clicks "approve and run" before a new
   contributor's workflow starts.
 - **Actions are pinned to a commit SHA.** A tag can be moved to point at new code; a SHA cannot.
@@ -135,13 +136,37 @@ in the GitHub UI:
 | Secret scanning and push protection | On |
 | Dependency graph, Dependabot alerts | On |
 | Environment `e2e` | Required reviewer, restricted to `main` |
-| Repository variable `RUNNER` | **Unset** on a public repository |
+| Actions: require actions to be pinned to a full-length commit SHA | On |
+
+## Isolation from the rest of the organisation
+
+The repository lives in a GitHub organisation that also holds private projects. Its pipelines are
+built so that nothing belonging to those projects is reachable from here, by a contributor or by
+a compromised workflow.
+
+**In this repository**
+
+- Every job runs on a GitHub-hosted runner. No job can select a self-hosted runner, directly or
+  through a variable.
+- No workflow references a secret other than the built-in `GITHUB_TOKEN`, and no variable other
+  than the end-to-end test's own `E2E_*`, which are set on this repository's `e2e` environment.
+- `scripts/check-workflows.sh` enforces this, plus action pinning, the trigger rules and the
+  permissions block, on every pull request. A change that breaks the isolation fails CI.
+
+**In the organisation** (settings, not files)
+
+| Asset | Setting that keeps it out of reach |
+|---|---|
+| Organisation secrets and variables | Visibility "selected repositories", and this repository is not selected |
+| Self-hosted runner groups | Limited to selected repositories, with "allow public repositories" off |
+| Cloud workload identity | The provider's condition names the repositories allowed to use it. This one is not among them |
+| The end-to-end test's cloud project | A separate project with nothing else in it, trusting only `repo:marshal-org/runlease:environment:e2e` |
+| GitHub Apps | Installed on selected repositories. Only apps that this project needs are installed here |
 
 ## While the repository is private
 
-GitHub-hosted minutes, code scanning and the dependency graph are free only for public
-repositories. Until then:
-
-- `runs-on` uses the `RUNNER` variable when it is set, so jobs can use the organisation's runner.
-- CodeQL, dependency review, Scorecard, signing and attestation skip themselves. Each has an
-  `if:` on the repository's visibility, so they switch on by themselves the day it goes public.
+GitHub-hosted minutes for a private repository come out of the organisation's plan; for a public
+one they are free. Code scanning and the dependency graph are free only for public repositories,
+and Sigstore signing and attestation write the repository's identity to a public log. So CodeQL,
+dependency review, Scorecard, signing and attestation each carry an `if:` on the repository's
+visibility: they skip while it is private and switch on by themselves the day it goes public.

@@ -3,12 +3,12 @@ name: CI
 # Runs on every pull request, including pull requests from forks.
 #
 # Trust model (see docs/ci.md):
-#   - Triggered by `pull_request`, never `pull_request_target`, so code from a
-#     fork runs with a read-only token and no secrets.
-#   - While the repository is private it may use the organisation's own runner.
-#     The moment the repository is public, `runs-on` resolves to a GitHub-hosted
-#     runner, so untrusted code never executes on infrastructure we own.
+#   - Triggered by `pull_request`, so code from a fork runs with a read-only
+#     token and no secrets.
+#   - GitHub-hosted runners only. Nothing here runs on infrastructure we own,
+#     and no organisation secret or variable is referenced.
 #   - Every action is pinned to a full commit SHA.
+#   - scripts/check-workflows.sh enforces all of the above on every change.
 
 on:
   pull_request:
@@ -25,7 +25,7 @@ concurrency:
 jobs:
   test:
     name: Build and test
-    runs-on: ${{ github.event.repository.private && vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -56,9 +56,19 @@ jobs:
             GOOS="${target%/*}" GOARCH="${target#*/}" CGO_ENABLED=0 go build -o /dev/null ./cmd/runlease
           done
 
+  policy:
+    name: Workflow policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: scripts/check-workflows.sh
+
   lint:
     name: Static analysis
-    runs-on: ${{ github.event.repository.private && vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -72,7 +82,7 @@ jobs:
 
   vulnerabilities:
     name: Known vulnerabilities
-    runs-on: ${{ github.event.repository.private && vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -86,7 +96,7 @@ jobs:
 
   secrets:
     name: Secret scan
-    runs-on: ${{ github.event.repository.private && vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

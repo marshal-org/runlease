@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- PRE-LAUNCH: remove this line when the repository goes public. -->
+<meta name="robots" content="noindex">
+<meta name="description" content="Install the runlease CLI: one verified binary in your home directory, with no sudo and no package manager.">
+<title>Install Runlease</title>
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<link rel="stylesheet" href="page.css">
+</head>
+<body>
+<div class="wrap wide">
+<header>
+  <a class="mark" href="./"><img src="logo.svg" alt="" width="26" height="26">runlease</a>
+  <nav aria-label="Main">
+    <a href="how-it-works.html">How it works</a>
+    <a href="security.html">Security</a>
+    <a href="install.html" aria-current="page">Install</a>
+    <a href="relay.html">Relay</a>
+    <a href="https://github.com/marshal-org/runlease">GitHub</a>
+  </nav>
+</header>
+<main>
+<p class="eyebrow">Install</p>
+<h1>One verified binary, in your home directory.</h1>
+<p class="lede">The installer downloads the release for your machine, checks its SHA-256, and puts <code>runlease</code> in <code>~/.local/bin</code>. No sudo, no package manager, no background service.</p>
+
+<div class="note warn"><p><b>Before launch:</b> public releases are not published yet, so the commands on this page will report that no release was found. They start working when the repository opens.</p></div>
+
+<h2 id="script">Install</h2>
+<pre><span class="p">$</span> curl -fsSL https://runlease.online/install.sh | sh</pre>
+<p class="measure">Works on Linux and macOS, on Intel and Arm. If you would rather read a script before running it, which is a good habit for a tool that holds SSH keys:</p>
+<pre><span class="p">$</span> curl -fsSL https://runlease.online/install.sh -o install.sh
+<span class="p">$</span> less install.sh
+<span class="p">$</span> sh install.sh</pre>
+
+<h3>What the script does</h3>
+<ol class="seq">
+  <li><span class="who">01</span><p>Works out your operating system and CPU.</p></li>
+  <li><span class="who">02</span><p>Downloads that binary and <code>checksums.txt</code> from the GitHub release.</p></li>
+  <li><span class="who">03</span><p>Checks the binary's SHA-256 against <code>checksums.txt</code>, and stops without installing on a mismatch.</p></li>
+  <li><span class="who">04</span><p>If <a href="https://docs.sigstore.dev/cosign/system_config/installation/">cosign</a> is installed, also checks the signature on <code>checksums.txt</code>.</p></li>
+  <li><span class="who">05</span><p>Copies the binary to <code>~/.local/bin/runlease</code>. Nothing else on your system changes.</p></li>
+</ol>
+<div class="scroll"><table>
+  <tr><th>Setting</th><th>Default</th><th>Meaning</th></tr>
+  <tr><td><code>RUNLEASE_VERSION</code></td><td><code>latest</code></td><td>A specific release, for example <code>v0.5.0</code></td></tr>
+  <tr><td><code>RUNLEASE_INSTALL_DIR</code></td><td><code>~/.local/bin</code></td><td>Where the binary goes</td></tr>
+</table></div>
+
+<h2 id="manual">Install by hand</h2>
+<p class="measure">The script is a convenience. These are the same steps, and they are the way to install on Windows.</p>
+<pre><span class="c"># pick the latest release, and your platform</span>
+<span class="p">$</span> VERSION=v0.5.0
+<span class="p">$</span> OS=linux ARCH=amd64      <span class="c"># or darwin / arm64</span>
+<span class="p">$</span> BASE=https://github.com/marshal-org/runlease/releases/download/$VERSION
+
+<span class="p">$</span> curl -fsSLO $BASE/runlease-$OS-$ARCH
+<span class="p">$</span> curl -fsSLO $BASE/checksums.txt
+<span class="p">$</span> sha256sum --check --ignore-missing checksums.txt
+<span class="p">$</span> install -m 0755 runlease-$OS-$ARCH ~/.local/bin/runlease</pre>
+<p class="measure">To also check the signature and the build provenance, see <a href="security.html#releases">verify a release</a>.</p>
+
+<h2 id="source">Why not <code>go install</code>?</h2>
+<p class="measure">You can build from source, and it works. It is not the recommended way to install, for a security reason.</p>
+<p class="measure">A release build of the CLI has the SHA-256 of its matching agent compiled in. Every VM you launch checks the agent it downloads from the relay against that value before running it. A binary from <code>go install</code> has no such value, so that check is off, and the CLI warns you at every <code>up</code>.</p>
+<pre><span class="c"># Go 1.26 or newer. Fine for development, and against a relay you run yourself.</span>
+<span class="p">$</span> go install github.com/marshal-org/runlease/cmd/runlease@latest</pre>
+<p class="measure">If you do use a source build against a relay you do not run, pin the agent's digest in each manifest with <code>relay.agentSha256</code>. <a href="security.html#guarantees">How agent verification works</a>.</p>
+
+<h2 id="start">First launch</h2>
+<p class="measure">You need credentials for one cloud. Runlease uses the ones your cloud's own tools use, and stores none of its own.</p>
+<div class="opts">
+  <div><h3>Google Cloud</h3>
+<pre><span class="p">$</span> gcloud auth application-default login
+<span class="p">$</span> gcloud config set project MY_PROJECT</pre>
+  </div>
+  <div><h3>AWS</h3>
+    <p>The usual credential chain: environment variables, a profile, or SSO.</p>
+<pre><span class="p">$</span> aws sso login</pre>
+  </div>
+</div>
+
+<p class="measure">Then choose a relay. The quickest start is the free public one:</p>
+<pre><span class="p">$</span> runlease config set relay.addr wss://connect.runlease.online
+<span class="p">$</span> runlease login                 <span class="c"># approve a short code in any browser</span>
+
+<span class="p">$</span> runlease configure             <span class="c"># provider, region, default size and lease</span>
+<span class="p">$</span> runlease up                    <span class="c"># launch with your defaults</span>
+<span class="p">$</span> runlease exec NAME -- uname -a <span class="c"># run something on it</span>
+<span class="p">$</span> runlease down NAME --yes       <span class="c"># or let the lease delete it</span></pre>
+
+<div class="note"><p><b>The machine is yours.</b> It runs in your cloud account, on your bill. The relay only connects you to it. <a href="relay.html">What the public relay allows, and how to run your own</a>.</p></div>
+
+<h2 id="remove">Uninstall</h2>
+<pre><span class="p">$</span> rm ~/.local/bin/runlease
+<span class="p">$</span> rm -r ~/.runlease              <span class="c"># saved keys, settings and sign-in</span></pre>
+<p class="measure">Run <code>runlease list</code> first and take down anything still running, because the second command deletes the keys you would need to reach it. The machines still delete themselves when their leases end.</p>
+
+<div class="next">
+  <a class="btn" href="how-it-works.html">How it works</a>
+  <a class="btn" href="security.html">Security</a>
+</div>
+</main>
+<footer>
+  <span>Built by the team behind <a href="https://marshal.codes">Marshal</a>. Apache-2.0.</span>
+  <a href="how-it-works.html">How it works</a>
+  <a href="security.html">Security</a>
+  <a href="install.html">Install</a>
+  <a href="relay.html">Relay</a>
+  <a href="privacy.html">Privacy</a>
+  <a href="terms.html">Terms</a>
+</footer>
+</div>
+</body>
+</html>

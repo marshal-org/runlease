@@ -40,7 +40,7 @@ flowchart TD
 
 | Job | Checks |
 |---|---|
-| Build and test | `gofmt`, `go mod tidy` is clean, `go build`, `go vet`, `go test`, and a cross-compile of every release target |
+| Build and test | `gofmt`, `go mod tidy` is clean, `go build`, `go vet`, `go test`, and a cross-compile for macOS and Windows |
 | Static analysis | `staticcheck` |
 | Workflow policy | `scripts/check-workflows.sh`: hosted runners only, no secrets, pinned actions, safe triggers |
 | Known vulnerabilities | `govulncheck`, which fails only on vulnerabilities the code can actually reach |

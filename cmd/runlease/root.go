@@ -67,11 +67,10 @@ func runleaseHome() string {
 	return filepath.Join(home, ".runlease")
 }
 
-func defaultCredDir() string        { return filepath.Join(runleaseHome(), "credentials") }
-func defaultRegistryPath() string   { return filepath.Join(runleaseHome(), "registry.json") }
-func defaultMasterKeyPath() string  { return filepath.Join(runleaseHome(), "master.key") }
-func defaultConfigPath() string     { return filepath.Join(runleaseHome(), "config.yaml") }
-
+func defaultCredDir() string       { return filepath.Join(runleaseHome(), "credentials") }
+func defaultRegistryPath() string  { return filepath.Join(runleaseHome(), "registry.json") }
+func defaultMasterKeyPath() string { return filepath.Join(runleaseHome(), "master.key") }
+func defaultConfigPath() string    { return filepath.Join(runleaseHome(), "config.yaml") }
 
 func loadRegistry() (*registry.Registry, error) {
 	return registry.Load(defaultRegistryPath())

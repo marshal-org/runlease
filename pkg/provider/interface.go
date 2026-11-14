@@ -28,21 +28,21 @@ const (
 )
 
 type InstanceSpec struct {
-	ManifestName       string
-	InstanceType       string
-	Region             string
-	ImageID            string
-	SecurityGroupIDs   []string          // AWS: security group IDs
-	SubnetID           string            // AWS: subnet ID; GCP: subnetwork name or self-link
-	NetworkID          string            // GCP only: VPC network name or self-link (subnetwork alone usually suffices)
-	UserData           string            // raw script; provider is responsible for encoding
-	Tags               map[string]string // AWS: instance tags; GCP: labels
-	InstanceProfileARN string            // AWS only: IAM instance profile (enables SSM)
-	ServiceAccountEmail string           // GCP only: service account email (enables IAP etc.)
-	NetworkTags        []string          // GCP only: network tags for firewall rule matching
-	PublicIP           bool              // assign a public IP; default false (relay mode) or true (direct SSH)
-	SelfTermination    bool              // install runlease-terminate and grant compute-delete scope (GCP)
-	DiskSizeGb         int               // boot disk size in GB; 0 = use the image's default
+	ManifestName        string
+	InstanceType        string
+	Region              string
+	ImageID             string
+	SecurityGroupIDs    []string          // AWS: security group IDs
+	SubnetID            string            // AWS: subnet ID; GCP: subnetwork name or self-link
+	NetworkID           string            // GCP only: VPC network name or self-link (subnetwork alone usually suffices)
+	UserData            string            // raw script; provider is responsible for encoding
+	Tags                map[string]string // AWS: instance tags; GCP: labels
+	InstanceProfileARN  string            // AWS only: IAM instance profile (enables SSM)
+	ServiceAccountEmail string            // GCP only: service account email (enables IAP etc.)
+	NetworkTags         []string          // GCP only: network tags for firewall rule matching
+	PublicIP            bool              // assign a public IP; default false (relay mode) or true (direct SSH)
+	SelfTermination     bool              // install runlease-terminate and grant compute-delete scope (GCP)
+	DiskSizeGb          int               // boot disk size in GB; 0 = use the image's default
 }
 
 type InstanceHandle struct {

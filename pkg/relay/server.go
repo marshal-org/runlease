@@ -40,6 +40,7 @@ const (
 //  1. CLI (runlease up)      → relay: register token  (pre-authorises the slot)
 //  2. Instance (agent)       → relay: claim the slot with that token
 //  3. CLI (runlease connect) → relay: join the slot
+//
 // Config holds relay server configuration.
 type Config struct {
 	AgentPath string     // path to runlease-agent binary served at GET /agent; empty disables
@@ -57,7 +58,7 @@ type Server struct {
 type slot struct {
 	expiresAt       time.Time
 	instanceClaimed atomic.Bool
-	instanceReady   atomic.Bool   // set true once the yamux session is established
+	instanceReady   atomic.Bool // set true once the yamux session is established
 	instanceCh      chan net.Conn
 	clientCh        chan net.Conn // clients queue here for the coordinator to pick up
 	done            chan struct{} // closed when the coordinator goroutine exits

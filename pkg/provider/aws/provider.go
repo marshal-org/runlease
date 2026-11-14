@@ -59,6 +59,13 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 		// Terminate (not stop) when the OS shuts down, so the TTL-triggered
 		// shutdown -h in the startup script terminates the instance.
 		InstanceInitiatedShutdownBehavior: types.ShutdownBehaviorTerminate,
+		// Require IMDSv2. The session-token handshake stops a plain forwarded
+		// request (the usual SSRF path) from reading instance credentials or the
+		// user-data, which holds the SSH host key and the relay token.
+		MetadataOptions: &types.InstanceMetadataOptionsRequest{
+			HttpTokens:   types.HttpTokensStateRequired,
+			HttpEndpoint: types.InstanceMetadataEndpointStateEnabled,
+		},
 		TagSpecifications: []types.TagSpecification{
 			{ResourceType: types.ResourceTypeInstance, Tags: tags},
 		},

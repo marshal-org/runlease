@@ -117,7 +117,18 @@ chmod 440 /etc/sudoers.d/runlease-agent-full
 
 # ── runlease relay agent ──────────────────────────────────────────────────────
 curl -fsSL --retry 3 '{{ .RelayAgentURL }}' -o /usr/local/bin/runlease-agent
-chmod +x /usr/local/bin/runlease-agent
+{{- if .AgentSHA256 }}
+# The agent is fetched from the relay, which is not trusted. Check it against
+# the digest the CLI was built with before it is ever executed. On a mismatch
+# the binary is removed and bootstrap stops; the self-termination timer armed
+# above still fires.
+if ! echo '{{ .AgentSHA256 }}  /usr/local/bin/runlease-agent' | sha256sum -c - >/dev/null 2>&1; then
+  rm -f /usr/local/bin/runlease-agent
+  echo 'runlease: agent binary from the relay does not match the expected SHA-256, refusing to run it' >&2
+  exit 1
+fi
+{{- end }}
+chmod 755 /usr/local/bin/runlease-agent
 
 cat > /etc/runlease-agent.env << 'ENVEOF'
 RUNLEASE_RELAY_ADDR={{ .RelayAddr }}
@@ -135,6 +146,22 @@ EnvironmentFile=/etc/runlease-agent.env
 ExecStart=/usr/local/bin/runlease-agent
 Restart=always
 RestartSec=5
+# The agent only dials out to the relay and to sshd on localhost. It needs no
+# root, no capabilities and no write access to the system.
+User=runlease-agent
+Group=runlease-agent
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
 
 [Install]
 WantedBy=multi-user.target
@@ -176,6 +203,11 @@ type Params struct {
 	// Optional relay fields; relay setup is skipped when RelayAddr is empty.
 	RelayAddr  string
 	RelayToken string
+	// AgentSHA256 is the expected SHA-256 (64 lowercase hex characters) of the
+	// agent binary the relay serves. When set, the boot script verifies the
+	// download before running it, so a compromised relay cannot run code on
+	// the instance. Empty skips the check.
+	AgentSHA256 string
 	// The runlease-terminate script + dedicated sudoers drop-in are always
 	// installed (manual escape hatch for the operator). Only the systemd-run
 	// auto-fire timer is gated: it requires BOTH SelfTermination=true and
@@ -207,6 +239,7 @@ type templateData struct {
 	RelayAddr        string
 	RelayToken       string
 	RelayAgentURL    string // derived: http://<RelayAddr>/agent
+	AgentSHA256      string
 	Provider         string
 	SelfTermination  bool
 	TTLSeconds       int
@@ -234,6 +267,9 @@ func Build(p Params) (string, error) {
 	if len(p.HostPrivateKeyPEM) == 0 {
 		return "", fmt.Errorf("HostPrivateKeyPEM is required")
 	}
+	if p.AgentSHA256 != "" && !isSHA256Hex(p.AgentSHA256) {
+		return "", fmt.Errorf("AgentSHA256 must be 64 lowercase hex characters")
+	}
 	agentURL := ""
 	if p.RelayAddr != "" {
 		agentURL = relayHTTPBase(p.RelayAddr) + "/agent"
@@ -245,6 +281,7 @@ func Build(p Params) (string, error) {
 		RelayAddr:        p.RelayAddr,
 		RelayToken:       p.RelayToken,
 		RelayAgentURL:    agentURL,
+		AgentSHA256:      p.AgentSHA256,
 		Provider:         p.Provider,
 		SelfTermination:  p.SelfTermination,
 		TTLSeconds:       p.TTLSeconds,
@@ -256,4 +293,19 @@ func Build(p Params) (string, error) {
 		return "", fmt.Errorf("rendering user-data: %w", err)
 	}
 	return buf.String(), nil
+}
+
+// isSHA256Hex reports whether s is exactly 64 lowercase hex characters. The
+// value is spliced into a shell script, so nothing else is accepted.
+func isSHA256Hex(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }

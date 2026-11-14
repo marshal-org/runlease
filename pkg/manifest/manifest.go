@@ -98,6 +98,11 @@ func (m *Manifest) WantsPublicIP() bool {
 // outbound, so you can reach them without a public IP or open inbound firewall rules.
 type RelayConfig struct {
 	Addr string `yaml:"addr"` // host:port of the relay TCP server (e.g. "relay.example.com:7777")
+	// AgentSHA256 pins the agent binary the relay serves. Release builds of the
+	// CLI carry the digest of the matching agent, so this is only needed for a
+	// self-built relay: set it to the SHA-256 of your agent binary, or to
+	// "unverified" to skip the check on purpose.
+	AgentSHA256 string `yaml:"agentSha256,omitempty"`
 }
 
 type ReclaimPolicy struct {

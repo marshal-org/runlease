@@ -1,6 +1,7 @@
 package userdata
 
 import (
+	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -342,5 +343,88 @@ func TestBuild_autoFireTimerGated(t *testing.T) {
 				t.Errorf("auto-fire timer presence = %v, want %v", has, tc.wantTimer)
 			}
 		})
+	}
+}
+
+func relayParams() Params {
+	p := fullParams()
+	p.RelayAddr = "wss://relay.example.com"
+	p.RelayToken = strings.Repeat("ab", 32)
+	p.Provider = "gcp"
+	return p
+}
+
+func TestBuild_agentDigestIsVerifiedBeforeUse(t *testing.T) {
+	p := relayParams()
+	p.AgentSHA256 = strings.Repeat("0f", 32)
+	out, err := Build(p)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	check := strings.Index(out, p.AgentSHA256+"  /usr/local/bin/runlease-agent' | sha256sum -c -")
+	download := strings.Index(out, "-o /usr/local/bin/runlease-agent")
+	start := strings.Index(out, "systemctl enable --now runlease-agent")
+	if check < 0 {
+		t.Fatal("boot script does not verify the agent digest")
+	}
+	if !(download < check && check < start) {
+		t.Errorf("want download < verify < start, got %d %d %d", download, check, start)
+	}
+}
+
+func TestBuild_noDigestMeansNoCheck(t *testing.T) {
+	out, err := Build(relayParams())
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if strings.Contains(out, "sha256sum") {
+		t.Error("digest check emitted although no digest was given")
+	}
+}
+
+func TestBuild_rejectsMalformedDigest(t *testing.T) {
+	for _, bad := range []string{"abc", strings.Repeat("Z", 64), strings.Repeat("a", 63) + "'", strings.Repeat("A", 64)} {
+		p := relayParams()
+		p.AgentSHA256 = bad
+		if _, err := Build(p); err == nil {
+			t.Errorf("Build accepted malformed digest %q", bad)
+		}
+	}
+}
+
+func TestBuild_agentServiceRunsUnprivileged(t *testing.T) {
+	out, err := Build(relayParams())
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, want := range []string{"User=runlease-agent", "NoNewPrivileges=true", "CapabilityBoundingSet=\n", "ProtectSystem=strict"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("agent unit is missing %q", want)
+		}
+	}
+}
+
+// The rendered script must at least parse, with and without the optional parts.
+func TestBuild_scriptParses(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not available")
+	}
+	withAll := relayParams()
+	withAll.AgentSHA256 = strings.Repeat("0f", 32)
+	withAll.SelfTermination = true
+	withAll.TTLSeconds = 3600
+	withAll.PasswordlessSudo = true
+	withAll.SetupSteps = []SetupStep{{Name: "hello", Run: "echo hi"}}
+	for name, p := range map[string]Params{"minimal": fullParams(), "relay": relayParams(), "everything": withAll} {
+		out, err := Build(p)
+		if err != nil {
+			t.Fatalf("%s: Build: %v", name, err)
+		}
+		cmd := exec.Command(bash, "-n")
+		cmd.Stdin = strings.NewReader(out)
+		if msg, err := cmd.CombinedOutput(); err != nil {
+			t.Errorf("%s: bash -n: %v\n%s", name, err, msg)
+		}
 	}
 }

@@ -16,7 +16,7 @@ instanceClass: compute.small
 reclaim:
   ttl: 2h
 relay:
-  addr: wss://relay.runlease.online
+  addr: wss://relay.example.com
 ```
 
 Launch with `runlease up -m my-runner-manifest.yaml`.
@@ -47,6 +47,7 @@ Launch with `runlease up -m my-runner-manifest.yaml`.
 |---|---|---|---|
 | `publicIp` | bool | `true` (or `false` if `relay.addr` is set) | Attach a public IP. When `false` on GCP, ensure Cloud NAT is set up so the instance can reach the relay. |
 | `relay.addr` | string | — | `wss://…` or `host:port`. Enables the relay tunnel. With this set, no inbound firewall rule is needed. |
+| `relay.agentSha256` | string | digest built into release CLIs | SHA-256 the VM checks the relay-served agent against before running it. Set it when your relay serves an agent you built yourself. `unverified` skips the check on purpose. See [agent verification](security.md#the-agent-binary-is-verified-before-it-runs). |
 
 ### Lifecycle
 
@@ -154,7 +155,7 @@ baseImage: projects/debian-cloud/global/images/family/debian-12
 
 publicIp: false                      # relay-only access
 relay:
-  addr: wss://relay.runlease.online
+  addr: wss://relay.example.com
 
 reclaim:
   ttl: 4h

@@ -1,0 +1,7 @@
+# Secret-scan configuration. Extends the default rule set.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholder key in a unit test. It is the literal word 'fake' between PEM markers."
+paths = ['''pkg/userdata/userdata_test\.go''']

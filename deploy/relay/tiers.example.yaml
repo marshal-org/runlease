@@ -1,0 +1,27 @@
+# Tiers for a relay: who gets how much.
+#
+# Pass this file to the relay with --tiers-file. Without one, there are no
+# per-identity limits.
+#
+# Every signed-in identity lands in the `default` tier unless an assignment
+# below names another. An exact email wins over a domain.
+
+default: free
+
+tiers:
+  free:
+    maxSlots: 2      # machines one person may have connected at once
+    slotTTL: 8h      # a slot lives this long at most
+    idleTTL: 15m     # a slot whose machine has been gone this long is given back
+
+  # Example of a larger tier. Nothing is assigned to it until you say so below.
+  team:
+    maxSlots: 20
+    slotTTL: 24h
+    idleTTL: 1h
+
+assign:
+  emails: {}
+  #   someone@example.com: team
+  domains: {}
+  #   example.com: team

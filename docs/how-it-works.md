@@ -60,12 +60,20 @@ connection is a plain byte stream.
 
 | Role | Sent by | First message | Reply | Then |
 |---|---|---|---|---|
-| `register` | CLI at `up` | `{"role":"register","token":"…"}` plus `Authorization: Bearer <ID token>` | `{"status":"ok"}` | Closed |
+| `register` | CLI at `up` | `{"role":"register","token":"…"}` plus `Authorization: Bearer <ID token>` | `{"status":"ok"}`, or `limit` when the identity's tier is full | Closed |
+| `release` | CLI at `down` | `{"role":"release","token":"…"}` | `{"status":"ok"}` | Closed. The slot is freed at once |
 | `instance` | Agent at boot | `{"role":"instance","token":"…"}` | `{"status":"registered"}` | The agent runs a [yamux](https://github.com/hashicorp/yamux) server on this socket |
 | `client` | CLI, every command | `{"role":"client","token":"…"}` | `{"status":"connected"}` | Raw bytes, bridged to a new yamux stream on the agent's socket |
 
-Two HTTP endpoints sit beside it: `GET /agent` serves the agent binary, and `GET /ready` (token in
-the `X-Relay-Token` header) reports whether a slot's agent is connected.
+HTTP endpoints sit beside it:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /agent` | Serves the agent binary |
+| `GET /ready` | Whether a slot's agent is connected (token in the `X-Relay-Token` header) |
+| `GET /.well-known/runlease-relay` | How to sign in to this relay, and what its default tier allows |
+| `GET /me` | The caller's identity, tier and usage (same bearer token as `register`) |
+| `GET /health` | Liveness |
 
 ```mermaid
 flowchart LR
@@ -89,8 +97,22 @@ flowchart LR
 One agent socket carries any number of sessions. That is why you can hold a port forward open in
 one terminal and run `exec`, `push` and `pull` from others at the same time.
 
-A slot lives for 24 hours. If the agent's connection drops it reconnects and reclaims the same
-slot; only one agent can hold a slot at a time.
+A slot lives for at most 24 hours, or less if the owner's tier says so. If the agent's connection
+drops it reconnects and reclaims the same slot; only one agent can hold a slot at a time. A tier
+can also give a slot back when its agent has stayed away, which is how a machine that was deleted
+without `runlease down` stops counting against its owner.
+
+## Signing in
+
+A relay decides who may open a slot from a Google ID token.
+
+- `runlease login` uses the OAuth device flow: the CLI shows a code, you approve it in a browser
+  on any device, and the CLI stores the session in `~/.runlease/auth.json`. It refreshes itself.
+- Without a saved session the CLI falls back to an identity token from a service account or from
+  `gcloud`, which is what a private relay configured with an audience expects.
+
+The relay verifies the token's signature and that the email is verified, then looks up the
+identity's tier.
 
 ## What the relay sees
 
@@ -165,3 +187,6 @@ instead.
 | `pkg/manifest/` | The manifest schema |
 | `pkg/lifecycle/` | The lease watcher behind `runlease daemon` |
 | `pkg/pricing/` | Spot price lookup |
+| `pkg/signin/` | `runlease login`: the device sign-in flow and the saved session |
+| `deploy/relay/` | Terraform to run a relay, and an example tiers file |
+| `site/` | The project website |

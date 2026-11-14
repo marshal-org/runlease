@@ -150,8 +150,16 @@ the limits we know about. To report a vulnerability, see [SECURITY.md](SECURITY.
 
 ## The relay
 
-A relay is one small Go binary. You have two choices:
+A relay is one small Go binary. You have three choices:
 
+- **Use the public one.** Free, with a Google sign-in and a limit of two machines at once:
+
+  ```bash
+  runlease config set relay.addr wss://connect.runlease.online
+  runlease login
+  ```
+
+  What it allows and what it sees: [the public relay](docs/relay-service.md).
 - **Run your own.** It takes one VM or container and a TLS endpoint. See
   [self-hosting the relay](docs/self-hosting-relay.md). This is what we recommend for real work.
 - **No relay at all.** Leave `relay.addr` empty and Runlease gives the VM a public IP and connects
@@ -175,7 +183,8 @@ concrete type per cloud. Run `runlease catalog` to see the mapping.
 | [How it works](docs/how-it-works.md) | Architecture, protocol, boot sequence, lease lifecycle |
 | [Security and threat model](docs/security.md) | What each party can do, known limits, release verification |
 | [Manifest reference](docs/manifest.md) | Every field |
-| [Self-hosting the relay](docs/self-hosting-relay.md) | Deploy, authenticate, operate |
+| [The public relay](docs/relay-service.md) | Sign in, free tier limits, what it logs |
+| [Self-hosting the relay](docs/self-hosting-relay.md) | Deploy, authenticate, set tiers, operate |
 | [CI and release pipeline](docs/ci.md) | How changes are tested and how releases are built and signed |
 | [Private registry pulls on k3s](docs/private-ar-k3s.md) | A worked recipe |
 

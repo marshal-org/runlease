@@ -235,9 +235,9 @@ setup:
 
 func TestSudoMode_defaultsAndValid(t *testing.T) {
 	cases := []struct {
-		mode    SudoMode
-		ok      bool
-		pwLess  bool
+		mode   SudoMode
+		ok     bool
+		pwLess bool
 	}{
 		{"", true, false},
 		{SudoLocked, true, false},

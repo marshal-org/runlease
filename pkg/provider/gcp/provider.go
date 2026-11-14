@@ -27,9 +27,10 @@ const DefaultImageFamily = "projects/debian-cloud/global/images/family/debian-12
 // Provider implements CloudProvider for GCP Compute Engine spot VMs.
 //
 // Authentication uses Application Default Credentials (ADC):
-//   gcloud auth application-default login     (developer workstation)
-//   GOOGLE_APPLICATION_CREDENTIALS=key.json  (service account key file)
-//   Attached service account                  (if running on GCP)
+//
+//	gcloud auth application-default login     (developer workstation)
+//	GOOGLE_APPLICATION_CREDENTIALS=key.json  (service account key file)
+//	Attached service account                  (if running on GCP)
 //
 // The manifest `region` field is treated as a GCP zone (e.g. "us-central1-a").
 type Provider struct {

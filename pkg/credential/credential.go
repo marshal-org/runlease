@@ -26,9 +26,9 @@ import (
 // controller-chosen key. The controller connects with FixedHostKey, so the
 // host identity is established before the instance boots — no TOFU window.
 type EphemeralCredential struct {
-	PrivateKeyPEM []byte    `json:"privateKeyPEM"`
-	PublicKeySSH  string    `json:"publicKeySSH"`
-	Fingerprint   string    `json:"fingerprint"`
+	PrivateKeyPEM []byte `json:"privateKeyPEM"`
+	PublicKeySSH  string `json:"publicKeySSH"`
+	Fingerprint   string `json:"fingerprint"`
 
 	HostPrivateKeyPEM []byte `json:"hostPrivateKeyPEM"`
 	HostPublicKeySSH  string `json:"hostPublicKeySSH"`

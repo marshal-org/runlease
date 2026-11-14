@@ -10,12 +10,12 @@ import (
 )
 
 type Manifest struct {
-	Name          string            `yaml:"name"`
-	Provider      string            `yaml:"provider"`
-	Region        string            `yaml:"region"`
-	InstanceClass string            `yaml:"instanceClass"`
-	InstanceType  string            `yaml:"instanceType"`
-	BaseImage     string            `yaml:"baseImage"`
+	Name          string `yaml:"name"`
+	Provider      string `yaml:"provider"`
+	Region        string `yaml:"region"`
+	InstanceClass string `yaml:"instanceClass"`
+	InstanceType  string `yaml:"instanceType"`
+	BaseImage     string `yaml:"baseImage"`
 	// DiskSizeGb overrides the boot disk size in GB. 0 (default) uses the
 	// image's own size. Must be >= the image's minimum on both clouds.
 	DiskSizeGb int `yaml:"diskSizeGb"`

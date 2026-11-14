@@ -354,9 +354,10 @@ func (s forwardSpec) targetAddr() string {
 // parseForwardSpecs parses ssh-style "-L"/"-R" specifications.
 //
 // Accepted forms:
-//   port:host:port                  bind default (127.0.0.1)
-//   bind:port:host:port             explicit bind
-//   port:port                       shorthand → port:localhost:port
+//
+//	port:host:port                  bind default (127.0.0.1)
+//	bind:port:host:port             explicit bind
+//	port:port                       shorthand → port:localhost:port
 //
 // Invalid entries trigger a fatal error via os.Exit so each forward command
 // fails loudly before any listeners are opened.

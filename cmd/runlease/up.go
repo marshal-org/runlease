@@ -34,20 +34,20 @@ import (
 )
 
 var (
-	manifestPath  string
-	upTimeout     time.Duration
-	detach        bool
-	attach        bool
-	quickProvider string
-	quickRegion   string
-	quickSize     string
-	quickDiskSize       int
-	quickImage          string
-	quickRelay          string
-	quickTTL            string
-	quickName           string
-	quickSelfTerminate  bool
-	quickServiceAccount string
+	manifestPath         string
+	upTimeout            time.Duration
+	detach               bool
+	attach               bool
+	quickProvider        string
+	quickRegion          string
+	quickSize            string
+	quickDiskSize        int
+	quickImage           string
+	quickRelay           string
+	quickTTL             string
+	quickName            string
+	quickSelfTerminate   bool
+	quickServiceAccount  string
 	quickInstanceProfile string
 	quickNetwork         string
 	quickSubnet          string

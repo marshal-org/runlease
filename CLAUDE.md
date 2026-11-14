@@ -51,7 +51,8 @@ Single Go module: `github.com/marshal-org/runlease` (Go 1.26+).
 
 **Relay (`cmd/runlease-relay`)**:
 - `--addr :7777` and `--agent-binary <path>` are flags, not env vars.
-- `--allowed-emails` (comma-separated) gates `register` handshakes; missing means open.
+- `--audience` plus `--allowed-emails` / `--allowed-domains` gate `register` handshakes. The relay refuses to start without auth unless `--insecure-no-auth` is passed.
+- `--max-slots` caps live slots (default 5000).
 
 **Agent (`cmd/runlease-agent`)**:
 - `RUNLEASE_RELAY_ADDR` — `ws://host:port` or `wss://host` or bare `host:port`.
@@ -133,7 +134,9 @@ These must hold regardless of feature work:
 2. **Host keys are pre-issued, not TOFU.** `runlease up` generates the instance's ed25519 host keypair locally; the public key is embedded in the userdata for sshd and the private key is base64'd into the userdata. The CLI side uses `cryptossh.FixedHostKey` against the known public key. Don't introduce `InsecureIgnoreHostKey` or trust-on-first-use anywhere.
 3. **sshd is hardened by the bootstrap.** `PasswordAuthentication no`, `AllowUsers runlease-agent`, `PermitRootLogin no`, only ed25519 host key offered. Don't relax this without explicit user request.
 4. **Sudo is locked by default.** Only `/usr/local/bin/runlease-terminate` and `/usr/local/bin/runlease-snooze` are NOPASSWD (the latter re-arms the named `runlease-selfterminate` timer for `runlease snooze`). `manifest.sudo: passwordless` is the opt-in. Don't add fields that quietly grant elevated privileges, and gate any new NOPASSWD entry to a single specific script.
-5. **Connection ownership.** `newSSHClient` and `execOverConn` close `conn` on every error path; callers don't double-close. SFTP/forward clients are bound to one SSH client they own end-to-end.
+5. **The agent is verified and unprivileged.** The boot script checks the relay-served agent against a SHA-256 before running it, and the agent's systemd unit runs as `runlease-agent` with no capabilities. Don't add a path that executes an unverified download or runs the agent as root.
+6. **The relay fails closed.** It validates slot tokens (32 to 128 chars of `[A-Za-z0-9_-]`), caps slots, and won't start open by accident. Never slice or log a token without going through `shortTok`.
+7. **Connection ownership.** `newSSHClient` and `execOverConn` close `conn` on every error path; callers don't double-close. SFTP/forward clients are bound to one SSH client they own end-to-end.
 
 ---
 
@@ -150,28 +153,11 @@ These must hold regardless of feature work:
 
 ## Deployment Story
 
-The relay is a singleton: one VM at `runlease-relay` in `marshal-dev-495114/us-central1-a`, exposed via `wss://relay.runlease.online` (Cloudflare in front). The agent binary served from `/agent` is what every new VM downloads at boot, so **relay version == agent version** by construction.
+The relay serves the agent binary at `/agent`, and every new VM downloads it at boot, so **relay version == agent version** by construction. Release builds of the CLI carry the SHA-256 of the matching agent and VMs refuse anything else, so a relay must run the **release** binaries (or manifests must pin `relay.agentSha256`).
 
-To deploy:
-```bash
-# 1. Cross-compile for linux/amd64 (the relay VM is x86_64 Debian/Ubuntu)
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o /tmp/runlease-relay-linux ./cmd/runlease-relay
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o /tmp/runlease-agent-linux ./cmd/runlease-agent
+How to deploy, authenticate and upgrade a relay: [`docs/self-hosting-relay.md`](docs/self-hosting-relay.md).
 
-# 2. SCP via gcloud (no public SSH port on the relay either)
-gcloud compute scp --zone us-central1-a --project marshal-dev-495114 \
-  /tmp/runlease-relay-linux /tmp/runlease-agent-linux runlease-relay:/tmp/
-
-# 3. Install atomically + restart systemd unit
-gcloud compute ssh --zone us-central1-a --project marshal-dev-495114 runlease-relay --command "
-  sudo chmod +x /tmp/runlease-relay-linux /tmp/runlease-agent-linux &&
-  sudo mv /tmp/runlease-relay-linux /usr/local/bin/runlease-relay &&
-  sudo mv /tmp/runlease-agent-linux /usr/local/bin/runlease-agent &&
-  sudo systemctl restart runlease-relay &&
-  curl -sS http://localhost:7777/health"
-```
-
-Existing VMs that booted with the previous agent are not auto-upgraded — they keep running their old agent until the spot instance dies. For a clean cutover, tear them down (`runlease down <name>`) and re-launch.
+Existing VMs that booted with the previous agent are not auto-upgraded. They keep running their old agent until the spot instance dies.
 
 ---
 
@@ -187,6 +173,5 @@ Existing VMs that booted with the previous agent are not auto-upgraded — they 
 ## Common Pitfalls
 
 - **Backticks in `pkg/userdata/userdata.go`**: the template is a Go raw string literal, so any backtick inside it is a Go syntax error. Use single-quotes in inline comments.
-- **`gh issue`/`gh pr` against the wrong remote**: this repo is `ofirmakmal/runlease`. The marshal monorepo work uses `marshal-org/marshal`. `gh` infers from cwd remotes, but if you're outside the repo, pass `--repo`.
 - **`runlease ssh` requires a TTY**: that's intentional. For non-interactive use, `runlease exec`.
 - **Concurrent CLI calls work only against the deployed yamux relay.** If the relay binary on `runlease-relay` is older than `0.0.6`, a second CLI process gets `i/o timeout` on the relay handshake while the first is active. Verify the deployed version before assuming a relay bug.

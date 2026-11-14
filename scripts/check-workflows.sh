@@ -53,9 +53,9 @@ for f in "${files[@]}"; do
   fi
 done
 
-# 7. Only the end-to-end and release workflows may ask for an OIDC token.
-report "id-token: write is only allowed in e2e.yml, release-please.yml and scorecard.yml" \
-  "$(echo "$all" | grep -E 'id-token:[[:space:]]*write' | grep -v -E '^\.github/workflows/(e2e|release-please|scorecard)\.yml:' || true)"
+# 7. Only the release, end-to-end, scorecard and website workflows may ask for an OIDC token.
+report "id-token: write is only allowed in e2e.yml, release-please.yml, scorecard.yml and pages.yml" \
+  "$(echo "$all" | grep -E 'id-token:[[:space:]]*write' | grep -v -E '^\.github/workflows/(e2e|release-please|scorecard|pages)\.yml:' || true)"
 
 if [ "$fail" -ne 0 ]; then
   echo "Workflow policy check failed. See docs/ci.md." >&2

@@ -1,0 +1,30 @@
+/* Shared by the plain text pages (privacy, terms, 404). Same tokens as index.html. */
+:root {
+  --paper: #F2F5F9; --sheet: #FFFFFF; --ink: #0C1A2B; --ink-2: #3C4D63; --ink-3: #6B7C92;
+  --rule: #CDD6E2; --signal: #1B4FD6; --lease: #B86A00;
+  --display: "Bricolage Grotesque", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --paper: #08111D; --sheet: #0F1B2B; --ink: #E6EDF6; --ink-2: #B3C1D3; --ink-3: #8193AB;
+    --rule: #24364F; --signal: #7BA2FF; --lease: #FFB547; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 17px; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+a { color: var(--signal); }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
+.wrap { max-width: 720px; margin: 0 auto; padding: 0 max(20px, env(safe-area-inset-right, 0px)) 80px max(20px, env(safe-area-inset-left, 0px)); }
+header { padding: 22px 0; border-bottom: 1px solid var(--rule); margin-bottom: 44px; }
+.mark { font-family: var(--display); font-weight: 800; font-size: 1.3rem; color: var(--ink); text-decoration: none; letter-spacing: -.03em; display: inline-flex; align-items: center; gap: 9px; }
+.mark i { width: 12px; height: 12px; background: var(--lease); display: inline-block; clip-path: polygon(0 0, 100% 0, 100% 62%, 62% 100%, 0 100%); }
+h1 { font-family: var(--display); font-size: clamp(2rem, 5vw, 2.8rem); line-height: 1.05; letter-spacing: -.02em; margin: 0 0 8px; text-wrap: balance; }
+h2 { font-family: var(--display); font-size: 1.3rem; letter-spacing: -.01em; margin: 40px 0 8px; }
+p, li { color: var(--ink-2); }
+.meta { font-family: var(--mono); font-size: .8rem; color: var(--ink-3); margin: 0 0 30px; }
+code { font-family: var(--mono); font-size: .9em; }
+table { border-collapse: collapse; width: 100%; font-size: .95rem; margin: 14px 0; }
+th, td { border: 1px solid var(--rule); padding: 9px 12px; text-align: left; vertical-align: top; color: var(--ink-2); }
+th { background: var(--sheet); color: var(--ink); font-weight: 600; }
+.scroll { overflow-x: auto; }
+footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--rule); font-size: .88rem; color: var(--ink-3); display: flex; gap: 18px; flex-wrap: wrap; }

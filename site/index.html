@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="description" content="Disposable cloud machines for coding agents. Secure, cheap spot VMs in your own cloud account, with the lifecycle managed for you.">
 <title>Runlease</title>
+<meta property="og:title" content="Runlease">
+<meta property="og:description" content="Disposable cloud machines for coding agents. Secure, cheap spot VMs in your own cloud account.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://runlease.online/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23B86A00' d='M1 1h14v9l-5 5H1z'/%3E%3C/svg%3E">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
@@ -202,6 +207,22 @@
   .use ul { margin: 22px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 14px; color: var(--ink-2); font-size: .98rem; }
   .use li b { color: var(--ink); font-weight: 600; display: block; }
 
+  /* relay plans */
+  .plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border: 1px solid var(--rule); background: var(--sheet); }
+  .plan { padding: 26px 26px 28px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .plan + .plan { border-left: 1px dashed var(--rule); }
+  .plan .k { font-family: var(--mono); font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+  .plan.on .k { color: var(--lease); }
+  .plan h3 { font-size: 1.5rem; font-weight: 700; }
+  .plan p { color: var(--ink-2); font-size: .95rem; }
+  .plan dl { margin: 0; display: grid; grid-template-columns: 1fr max-content; gap: 8px 14px; font-family: var(--mono); font-size: .82rem; font-variant-numeric: tabular-nums; border-top: 1px solid var(--rule); padding-top: 14px; }
+  .plan dt { color: var(--ink-3); }
+  .plan dd { margin: 0; text-align: right; }
+  .plan pre { margin: 0; background: var(--term-bg); color: var(--term-ink); font-family: var(--mono); font-size: .78rem; padding: 12px 14px; overflow-x: auto; line-height: 1.7; }
+  .plan pre .p { color: var(--lease); user-select: none; }
+  .plan .foot { margin-top: auto; font-size: .86rem; color: var(--ink-3); }
+  .plans-note { margin-top: 18px; color: var(--ink-3); font-size: .93rem; max-width: 62em; }
+
   /* open source */
   .oss { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 44px; align-items: start; }
   .oss p + p { margin-top: 14px; }
@@ -218,12 +239,15 @@
     .claim:nth-child(2) { border-right: 0; margin-right: 0; }
     .claim:nth-child(n+3) { border-top: 1px solid var(--rule); }
     .posture { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .plans { grid-template-columns: minmax(0, 1fr); }
+    .plan + .plan { border-left: 0; border-top: 1px dashed var(--rule); }
     section { padding-block: 54px; }
     .hero { padding-block: 44px 54px; }
   }
   @media (max-width: 560px) {
     body { font-size: 16px; }
     .claims, .cc, .posture { grid-template-columns: minmax(0, 1fr); }
+    .plan + .plan { border-left: 0; border-top: 1px dashed var(--rule); }
     .claim { border-right: 0; margin-right: 0; border-top: 1px solid var(--rule); }
     .claim:first-child { border-top: 0; }
     .cc > div + div { border-left: 0; border-top: 1px solid var(--rule); }
@@ -244,6 +268,7 @@
         <li><a href="#how">How it works</a></li>
         <li><a href="#security">Security</a></li>
         <li><a href="#use">Usage</a></li>
+        <li><a href="#relay">Relay</a></li>
         <li><a href="https://github.com/marshal-org/runlease#documentation">Docs</a></li>
         <li><a href="https://github.com/marshal-org/runlease">GitHub</a></li>
       </ul>
@@ -477,7 +502,57 @@
   </div>
 </section>
 
-<section class="alt band" aria-labelledby="oss-h">
+<section class="alt band" id="relay" aria-labelledby="relay-h">
+  <div class="wrap">
+    <div class="sec-hd">
+      <p class="eyebrow">The relay</p>
+      <h2 id="relay-h">Start on ours for free. Move to your own whenever you like.</h2>
+      <p>The relay is the one piece that needs a public address. Use the shared one with a Google sign-in, or run the same binary yourself. Either way it never holds your keys.</p>
+    </div>
+    <div class="plans">
+      <div class="plan on">
+        <span class="k">Free</span>
+        <h3>Public relay</h3>
+        <p>Sign in with Google and launch. No card, no setup.</p>
+        <dl>
+          <dt>machines at once</dt><dd>2</dd>
+          <dt>connected for up to</dt><dd>8 h</dd>
+          <dt>sign-in</dt><dd>Google</dd>
+          <dt>price</dt><dd>free</dd>
+        </dl>
+<pre><span class="p">$</span> runlease config set relay.addr \
+    wss://connect.runlease.online
+<span class="p">$</span> runlease login</pre>
+        <p class="foot">No uptime promise. <a href="https://github.com/marshal-org/runlease/blob/main/docs/relay-service.md">What it allows and what it logs</a></p>
+      </div>
+      <div class="plan">
+        <span class="k">Your own</span>
+        <h3>Self-hosted relay</h3>
+        <p>One small binary on one small VM, in your network, admitting only who you say.</p>
+        <dl>
+          <dt>machines at once</dt><dd>yours to set</dd>
+          <dt>who can sign in</dt><dd>your domain</dd>
+          <dt>connection metadata</dt><dd>stays with you</dd>
+          <dt>price</dt><dd>one small VM</dd>
+        </dl>
+        <p class="foot"><a href="https://github.com/marshal-org/runlease/blob/main/docs/self-hosting-relay.md">Self-hosting guide</a> · <a href="https://github.com/marshal-org/runlease/tree/main/deploy/relay/gcp">Terraform module</a></p>
+      </div>
+      <div class="plan">
+        <span class="k">Later</span>
+        <h3>Larger tiers</h3>
+        <p>More machines at once on the public relay, for teams that would rather not run one. Not available yet.</p>
+        <dl>
+          <dt>machines at once</dt><dd>more</dd>
+          <dt>status</dt><dd>planned</dd>
+        </dl>
+        <p class="foot">Tell us what you would need in <a href="https://github.com/marshal-org/runlease/discussions">Discussions</a>.</p>
+      </div>
+    </div>
+    <p class="plans-note">These limits are on the relay only. The machines run in your cloud account, on your bill, and Runlease does not meter them.</p>
+  </div>
+</section>
+
+<section class="band" aria-labelledby="oss-h">
   <div class="wrap">
     <div class="oss">
       <div>
@@ -514,6 +589,8 @@
       <a href="https://github.com/marshal-org/runlease/blob/main/docs/security.md">Security</a>
       <a href="https://github.com/marshal-org/runlease/blob/main/SECURITY.md">Report a vulnerability</a>
       <a href="https://github.com/marshal-org/runlease/releases">Releases</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
     </nav>
   </div>
 </footer>

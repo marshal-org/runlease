@@ -585,12 +585,14 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 func registerRelayToken(ctx context.Context, relayAddr, token string) error {
 	url := relayWSURL(relayAddr)
 
-	// Attach a Google ID token if ADC credentials are available. The relay
-	// ignores the header when auth is disabled, and rejects the request with
-	// a clear error when auth is enabled and the token is missing or invalid.
+	// Present who we are: a saved 'runlease login' session, or failing that a
+	// Google identity token from the environment or gcloud. The relay ignores
+	// the header when auth is off, and rejects the request with a clear error
+	// when auth is on and the token is missing or invalid.
 	headers := http.Header{}
-	if idTok, err := googleIDToken(ctx, relayHTTPBase(relayAddr)); err == nil {
-		headers.Set("Authorization", "Bearer "+idTok)
+	bearer, bearerErr := relayBearer(ctx, relayAddr)
+	if bearerErr == nil {
+		headers.Set("Authorization", "Bearer "+bearer)
 	}
 
 	ws, _, err := websocket.DefaultDialer.Dial(url, headers)
@@ -613,10 +615,18 @@ func registerRelayToken(ctx context.Context, relayAddr, token string) error {
 	if err := json.Unmarshal([]byte(strings.TrimRight(string(data), "\n\r")), &resp); err != nil {
 		return fmt.Errorf("parse response: %w", err)
 	}
-	if resp["status"] != "ok" {
+	switch resp["status"] {
+	case "ok":
+		return nil
+	case "unauthorized":
+		hint := "run 'runlease login' to sign in to this relay"
+		if bearerErr != nil {
+			hint += fmt.Sprintf(" (no identity was sent: %v)", bearerErr)
+		}
+		return fmt.Errorf("unauthorized: %s\n%s", resp["message"], hint)
+	default:
 		return fmt.Errorf("%s: %s", resp["status"], resp["message"])
 	}
-	return nil
 }
 
 // googleIDToken returns a Google ID token for the given audience.

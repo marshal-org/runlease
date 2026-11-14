@@ -140,7 +140,7 @@ func connectClient(t *testing.T, serverURL, token string) *websocket.Conn {
 // echo through.
 func TestRelay_singleClientRoundtrip(t *testing.T) {
 	srv := startServer(t)
-	const tok = "test-token-1"
+	const tok = "test-token-1-0123456789abcdef0123456789abcdef"
 	registerToken(t, srv, tok)
 	stop := fakeAgent(t, srv, tok, echoStream)
 	defer stop()
@@ -165,7 +165,7 @@ func TestRelay_singleClientRoundtrip(t *testing.T) {
 // independent stream, and bytes don't get crossed between streams.
 func TestRelay_concurrentClients(t *testing.T) {
 	srv := startServer(t)
-	const tok = "test-token-concurrent"
+	const tok = "test-token-concurrent-0123456789abcdef0123456789abcdef"
 	registerToken(t, srv, tok)
 	stop := fakeAgent(t, srv, tok, echoStream)
 	defer stop()
@@ -207,7 +207,7 @@ func TestRelay_concurrentClients(t *testing.T) {
 // the coordinator opens a yamux stream for it.
 func TestRelay_clientArriveFirst(t *testing.T) {
 	srv := startServer(t)
-	const tok = "test-token-early"
+	const tok = "test-token-early-0123456789abcdef0123456789abcdef"
 	registerToken(t, srv, tok)
 
 	done := make(chan error, 1)
@@ -247,7 +247,7 @@ func TestRelay_unregisteredTokenRejected(t *testing.T) {
 	srv := startServer(t)
 	for _, role := range []string{"instance", "client"} {
 		c := dialWS(t, srv)
-		sendWS(t, c, map[string]string{"role": role, "token": "ghost-token"})
+		sendWS(t, c, map[string]string{"role": role, "token": "ghost-token-0123456789abcdef0123456789abcdef"})
 		r := recvWS(t, c)
 		c.Close()
 		if r["status"] != "unauthorized" {
@@ -259,7 +259,7 @@ func TestRelay_unregisteredTokenRejected(t *testing.T) {
 // TestRelay_doubleInstanceRejected: second instance with same token gets "busy".
 func TestRelay_doubleInstanceRejected(t *testing.T) {
 	srv := startServer(t)
-	const tok = "test-token-double"
+	const tok = "test-token-double-0123456789abcdef0123456789abcdef"
 	registerToken(t, srv, tok)
 
 	inst1 := dialWS(t, srv)
@@ -278,7 +278,7 @@ func TestRelay_doubleInstanceRejected(t *testing.T) {
 // TestRelay_doubleRegisterRejected: re-registering an existing token returns error.
 func TestRelay_doubleRegisterRejected(t *testing.T) {
 	srv := startServer(t)
-	const tok = "test-token-dup"
+	const tok = "test-token-dup-0123456789abcdef0123456789abcdef"
 	registerToken(t, srv, tok)
 
 	c := dialWS(t, srv)
@@ -331,4 +331,62 @@ func getStatus(url string) (int, error) {
 	}
 	resp.Body.Close()
 	return resp.StatusCode, nil
+}
+
+// TestRelay_malformedTokenRejected: a token that is too short, too long or has
+// characters outside [A-Za-z0-9_-] is refused for every role, and the relay
+// keeps serving afterwards. A short token on "register" used to panic the
+// whole process when the relay sliced it for its log line.
+func TestRelay_malformedTokenRejected(t *testing.T) {
+	srv := startServer(t)
+	bad := []string{"abc", "short-token", strings.Repeat("a", 129), strings.Repeat("a", 31) + "\x00", strings.Repeat("a", 40) + " b"}
+	for _, role := range []string{"register", "instance", "client"} {
+		for _, tok := range bad {
+			c := dialWS(t, srv)
+			sendWS(t, c, map[string]string{"role": role, "token": tok})
+			resp := recvWS(t, c)
+			if resp["status"] != "error" {
+				t.Errorf("role=%s token=%q: want status error, got %v", role, tok, resp)
+			}
+			c.Close()
+		}
+	}
+	// The relay must still be alive and usable.
+	registerToken(t, srv, "after-malformed-0123456789abcdef0123456789abcdef")
+}
+
+// TestRelay_maxSlots: registration is refused once the slot cap is reached.
+func TestRelay_maxSlots(t *testing.T) {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	ts := httptest.NewServer(New(log, Config{MaxSlots: 2}))
+	t.Cleanup(ts.Close)
+	url := ts.URL
+
+	registerToken(t, url, "cap-one-0123456789abcdef0123456789abcdef")
+	registerToken(t, url, "cap-two-0123456789abcdef0123456789abcdef")
+
+	c := dialWS(t, url)
+	defer c.Close()
+	sendWS(t, c, map[string]string{"role": "register", "token": "cap-three-0123456789abcdef0123456789abcdef"})
+	resp := recvWS(t, c)
+	if resp["status"] != "error" || !strings.Contains(resp["message"], "capacity") {
+		t.Fatalf("want capacity error, got %v", resp)
+	}
+}
+
+func TestValidToken(t *testing.T) {
+	good := []string{strings.Repeat("a", 32), strings.Repeat("0f", 32), strings.Repeat("A-_9", 10)}
+	for _, tok := range good {
+		if !validToken(tok) {
+			t.Errorf("validToken(%q) = false, want true", tok)
+		}
+	}
+	for _, tok := range []string{"", "a", strings.Repeat("a", 31), strings.Repeat("a", 129), strings.Repeat("a", 32) + "/"} {
+		if validToken(tok) {
+			t.Errorf("validToken(%q) = true, want false", tok)
+		}
+	}
+	if got := shortTok("abc"); got != "…" {
+		t.Errorf("shortTok on a short token = %q", got)
+	}
 }

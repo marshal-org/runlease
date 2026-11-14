@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/runlease/runlease/pkg/instanceclass"
-	"github.com/runlease/runlease/pkg/provider"
+	"github.com/marshal-org/runlease/pkg/instanceclass"
+	"github.com/marshal-org/runlease/pkg/provider"
 )
 
 func init() {

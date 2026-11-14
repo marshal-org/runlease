@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/runlease/runlease/pkg/credential"
-	"github.com/runlease/runlease/pkg/provider"
-	"github.com/runlease/runlease/pkg/registry"
+	"github.com/marshal-org/runlease/pkg/credential"
+	"github.com/marshal-org/runlease/pkg/provider"
+	"github.com/marshal-org/runlease/pkg/registry"
 )
 
 // ProviderFactory matches the signature of newProvider in cmd/runlease/root.go,

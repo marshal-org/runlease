@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/runlease/runlease/pkg/credential"
-	"github.com/runlease/runlease/pkg/provider"
+	"github.com/marshal-org/runlease/pkg/credential"
+	"github.com/marshal-org/runlease/pkg/provider"
 )
 
 var downYes bool

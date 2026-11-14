@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/runlease/runlease/pkg/lifecycle"
+	"github.com/marshal-org/runlease/pkg/lifecycle"
 )
 
 func init() {

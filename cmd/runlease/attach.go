@@ -14,9 +14,9 @@ import (
 	"github.com/spf13/cobra"
 	cryptossh "golang.org/x/crypto/ssh"
 
-	"github.com/runlease/runlease/pkg/credential"
-	"github.com/runlease/runlease/pkg/manifest"
-	"github.com/runlease/runlease/pkg/provider"
+	"github.com/marshal-org/runlease/pkg/credential"
+	"github.com/marshal-org/runlease/pkg/manifest"
+	"github.com/marshal-org/runlease/pkg/provider"
 )
 
 // setupDoneMarker is the line written to /var/log/runlease-setup.log by the

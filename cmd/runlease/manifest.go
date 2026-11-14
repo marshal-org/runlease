@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	rlconfig "github.com/runlease/runlease/pkg/config"
+	rlconfig "github.com/marshal-org/runlease/pkg/config"
 )
 
 var manifestNewOutput string

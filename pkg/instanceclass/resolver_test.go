@@ -3,7 +3,7 @@ package instanceclass
 import (
 	"testing"
 
-	"github.com/runlease/runlease/pkg/provider"
+	"github.com/marshal-org/runlease/pkg/provider"
 )
 
 func resolver(t *testing.T) *Resolver {

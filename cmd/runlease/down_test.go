@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/runlease/runlease/pkg/provider"
-	"github.com/runlease/runlease/pkg/registry"
+	"github.com/marshal-org/runlease/pkg/provider"
+	"github.com/marshal-org/runlease/pkg/registry"
 )
 
 type fakeDownProvider struct {

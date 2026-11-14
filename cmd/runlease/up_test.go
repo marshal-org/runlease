@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/runlease/runlease/pkg/manifest"
+	"github.com/marshal-org/runlease/pkg/manifest"
 )
 
 func TestSubnetForProvider(t *testing.T) {

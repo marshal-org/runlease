@@ -24,7 +24,10 @@ WITH events AS (
     REGEXP_EXTRACT(textPayload, r'msg=\\?"([^"\\]+)')                 AS event,
     REGEXP_EXTRACT(textPayload, r' owner=([^\s\\]+)')                  AS owner,
     REGEXP_EXTRACT(textPayload, r' tier=([A-Za-z0-9_.-]+)')            AS tier,
-    REGEXP_EXTRACT(textPayload, r' client=\\?"([^"\\]+)')              AS client,
+    -- Quoted when it has spaces ("runlease/0.5.0 (linux/amd64)"), bare when not (other).
+    COALESCE(
+      REGEXP_EXTRACT(textPayload, r' client=\\?"([^"\\]+)'),
+      REGEXP_EXTRACT(textPayload, r' client=([^\s\\"]+)'))               AS client,
     SAFE_CAST(REGEXP_EXTRACT(textPayload, r' lived_s=(\d+)') AS INT64) AS lived_s
   FROM `PROJECT.relay_usage.serialconsole_googleapis_com_serial_port_1_output`
 )
@@ -44,7 +47,10 @@ WITH events AS (
     REGEXP_EXTRACT(textPayload, r'msg=\\?"([^"\\]+)')                 AS event,
     REGEXP_EXTRACT(textPayload, r' owner=([^\s\\]+)')                  AS owner,
     REGEXP_EXTRACT(textPayload, r' tier=([A-Za-z0-9_.-]+)')            AS tier,
-    REGEXP_EXTRACT(textPayload, r' client=\\?"([^"\\]+)')              AS client,
+    -- Quoted when it has spaces ("runlease/0.5.0 (linux/amd64)"), bare when not (other).
+    COALESCE(
+      REGEXP_EXTRACT(textPayload, r' client=\\?"([^"\\]+)'),
+      REGEXP_EXTRACT(textPayload, r' client=([^\s\\"]+)'))               AS client,
     SAFE_CAST(REGEXP_EXTRACT(textPayload, r' lived_s=(\d+)') AS INT64) AS lived_s
   FROM `PROJECT.relay_usage.serialconsole_googleapis_com_serial_port_1_output`
 )
@@ -66,7 +72,10 @@ WITH events AS (
     REGEXP_EXTRACT(textPayload, r'msg=\\?"([^"\\]+)')                 AS event,
     REGEXP_EXTRACT(textPayload, r' owner=([^\s\\]+)')                  AS owner,
     REGEXP_EXTRACT(textPayload, r' tier=([A-Za-z0-9_.-]+)')            AS tier,
-    REGEXP_EXTRACT(textPayload, r' client=\\?"([^"\\]+)')              AS client,
+    -- Quoted when it has spaces ("runlease/0.5.0 (linux/amd64)"), bare when not (other).
+    COALESCE(
+      REGEXP_EXTRACT(textPayload, r' client=\\?"([^"\\]+)'),
+      REGEXP_EXTRACT(textPayload, r' client=([^\s\\"]+)'))               AS client,
     SAFE_CAST(REGEXP_EXTRACT(textPayload, r' lived_s=(\d+)') AS INT64) AS lived_s
   FROM `PROJECT.relay_usage.serialconsole_googleapis_com_serial_port_1_output`
 )
@@ -84,7 +93,10 @@ WITH events AS (
     REGEXP_EXTRACT(textPayload, r'msg=\\?"([^"\\]+)')                 AS event,
     REGEXP_EXTRACT(textPayload, r' owner=([^\s\\]+)')                  AS owner,
     REGEXP_EXTRACT(textPayload, r' tier=([A-Za-z0-9_.-]+)')            AS tier,
-    REGEXP_EXTRACT(textPayload, r' client=\\?"([^"\\]+)')              AS client,
+    -- Quoted when it has spaces ("runlease/0.5.0 (linux/amd64)"), bare when not (other).
+    COALESCE(
+      REGEXP_EXTRACT(textPayload, r' client=\\?"([^"\\]+)'),
+      REGEXP_EXTRACT(textPayload, r' client=([^\s\\"]+)'))               AS client,
     SAFE_CAST(REGEXP_EXTRACT(textPayload, r' lived_s=(\d+)') AS INT64) AS lived_s
   FROM `PROJECT.relay_usage.serialconsole_googleapis_com_serial_port_1_output`
 )
@@ -106,7 +118,10 @@ WITH events AS (
     REGEXP_EXTRACT(textPayload, r'msg=\\?"([^"\\]+)')                 AS event,
     REGEXP_EXTRACT(textPayload, r' owner=([^\s\\]+)')                  AS owner,
     REGEXP_EXTRACT(textPayload, r' tier=([A-Za-z0-9_.-]+)')            AS tier,
-    REGEXP_EXTRACT(textPayload, r' client=\\?"([^"\\]+)')              AS client,
+    -- Quoted when it has spaces ("runlease/0.5.0 (linux/amd64)"), bare when not (other).
+    COALESCE(
+      REGEXP_EXTRACT(textPayload, r' client=\\?"([^"\\]+)'),
+      REGEXP_EXTRACT(textPayload, r' client=([^\s\\"]+)'))               AS client,
     SAFE_CAST(REGEXP_EXTRACT(textPayload, r' lived_s=(\d+)') AS INT64) AS lived_s
   FROM `PROJECT.relay_usage.serialconsole_googleapis_com_serial_port_1_output`
 )
@@ -124,7 +139,10 @@ WITH events AS (
     REGEXP_EXTRACT(textPayload, r'msg=\\?"([^"\\]+)')                 AS event,
     REGEXP_EXTRACT(textPayload, r' owner=([^\s\\]+)')                  AS owner,
     REGEXP_EXTRACT(textPayload, r' tier=([A-Za-z0-9_.-]+)')            AS tier,
-    REGEXP_EXTRACT(textPayload, r' client=\\?"([^"\\]+)')              AS client,
+    -- Quoted when it has spaces ("runlease/0.5.0 (linux/amd64)"), bare when not (other).
+    COALESCE(
+      REGEXP_EXTRACT(textPayload, r' client=\\?"([^"\\]+)'),
+      REGEXP_EXTRACT(textPayload, r' client=([^\s\\"]+)'))               AS client,
     SAFE_CAST(REGEXP_EXTRACT(textPayload, r' lived_s=(\d+)') AS INT64) AS lived_s
   FROM `PROJECT.relay_usage.serialconsole_googleapis_com_serial_port_1_output`
 )

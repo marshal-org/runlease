@@ -191,7 +191,7 @@ func TestOpenRelay_reRegistersLostSlot(t *testing.T) {
 	}()
 
 	// Not a credential: a made-up slot name for the in-process relay.
-	const lostSlot = "slot-that-the-relay-forgot"
+	const lostSlot = "slot-that-the-relay-forgot-about-in-this-test"
 	// The machine's agent: refused until the slot exists, then it gets in.
 	stop := make(chan struct{})
 	t.Cleanup(func() { close(stop) })

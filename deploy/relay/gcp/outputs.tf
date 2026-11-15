@@ -15,3 +15,8 @@ output "health_url" {
 output "service_account" {
   value = google_service_account.relay.email
 }
+
+output "instance_id" {
+  description = "The VM's numeric ID. The usage module filters the log by it."
+  value       = google_compute_instance.relay.instance_id
+}

@@ -191,7 +191,7 @@ func writeExecJSON(argv []string, exitCode int, errStr string) {
 }
 
 // quoteRemoteCommand joins argv into a single shell string. Each token is
-// single-quoted; embedded single quotes are escaped as '\”. This avoids
+// single-quoted; embedded single quotes are escaped as '\''. This avoids
 // surprises from glob/${var} expansion in the *caller's* shell — the user's
 // argv reaches the remote shell verbatim.
 func quoteRemoteCommand(argv []string) string {

@@ -17,7 +17,9 @@ const machines = atom({ plugin: 'runlease', key: 'machines' } as const, [], {
 })
 const now = atom({ plugin: 'runlease', key: 'now' } as const, 0)
 const isInstalled = atom({ plugin: 'runlease', key: 'isInstalled' } as const, true)
-const dismissed = atom({ plugin: 'runlease', key: 'dismissed' } as const, null)
+const dismissed = atom({ plugin: 'runlease', key: 'dismissed' } as const, [], {
+  shape: 'dismissed-1',
+})
 const confirming = atom({ plugin: 'runlease', key: 'confirming' } as const, null)
 
 /** What `runlease list --local --output json` prints, as far as this mod reads it. */
@@ -168,15 +170,16 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const list = await read($, machines)
     const at = await read($, now)
-    const first = soonest(list)
+    const hidden = await read($, dismissed)
+    // The soonest lease the person has not dismissed: dismissing one machine's
+    // warning must not hide another's.
+    const first = soonest(
+      (await read($, machines)).filter(machine => !hidden.includes(bandKey(machine))),
+    )
     const isSoon =
       first !== null && first.expiresAt !== null && first.expiresAt - at < SOON_MS
     if (e.props.hasSurvey || first === null || !isSoon) {
-      return next(e)
-    }
-    if ((await read($, dismissed)) === bandKey(first)) {
       return next(e)
     }
     const { Box, Button, Text } = $.ui.resolve(e)
@@ -199,7 +202,7 @@ export const register: Register = on => {
         <Button
           key="dismiss"
           label="Dismiss"
-          onPress={() => update($, dismissed, () => bandKey(first))}
+          onPress={() => update($, dismissed, keys => [...keys, bandKey(first)].slice(-50))}
         />
       </Box>
     )
@@ -224,7 +227,7 @@ export const register: Register = on => {
       <Box flexDirection="column">
         {list.length === 0 && <Text dimColor>No machines running.</Text>}
         {list.map(machine => (
-          <Box flexDirection="column">
+          <Box key={machine.name} flexDirection="column">
             <Text>
               {machine.name}{' '}
               <Text dimColor>

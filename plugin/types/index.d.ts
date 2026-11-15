@@ -16,8 +16,8 @@ declare module 'claude-code' {
       now: number
       /** False once `runlease` could not be run at all. */
       isInstalled: boolean
-      /** The band was dismissed for this machine and deadline. */
-      dismissed: string | null
+      /** Machine-and-deadline keys the band was dismissed for. */
+      dismissed: Shaped<string[]>
       /** The machine whose delete button was pressed once and awaits a second press. */
       confirming: string | null
     }

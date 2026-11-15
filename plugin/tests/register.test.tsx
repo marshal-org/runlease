@@ -98,3 +98,56 @@ test('the pane lists machines and deleting takes two presses', async ($, on) => 
     await ui.unmount()
   }
 })
+
+test('dismissing one lease warning does not hide another', async ($, on) => {
+  const two = JSON.stringify([
+    { name: 'a', state: 'running', expiresAt: '2026-11-16T10:03:00Z' },
+    { name: 'b', state: 'running', expiresAt: '2026-11-16T10:06:00Z' },
+  ])
+  on('command.register', () => ({ value: { command: 'runlease' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.status', () => ({ value: undefined }))
+  on('clock.now', () => ({ value: NOW }))
+  on('clock.every', () => ({ value: undefined }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('process.run', () => ({
+    value: {
+      exitCode: 0,
+      stdout: two,
+      stderr: '',
+      isStdoutTruncated: false,
+      isStderrTruncated: false,
+    },
+  }))
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.command.run({
+    command: 'runlease',
+    args: '',
+    origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 120 },
+  })
+
+  const BAND = {
+    plugin: 'runlease',
+    component: 'AbovePrompt',
+    surface: 'terminal',
+    props: {
+      hasSurvey: false,
+      isCollapsed: false,
+      isWorking: false,
+      maxRows: 4,
+      bodyColumns: 100,
+      scroll: { offset: 0, bodyRows: 4 },
+      view: {},
+    },
+  } as const
+  let ui = await $.ui.mount(BAND)
+  expect(await ui.find({ type: 'Text', text: /a 3m left/ })).toBeDefined()
+  await ui.press({ key: 'dismiss' })
+  await ui.unmount()
+
+  ui = await $.ui.mount(BAND)
+  expect(await ui.find({ type: 'Text', text: /b 6m left/ })).toBeDefined()
+  await ui.unmount()
+})

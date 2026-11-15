@@ -121,11 +121,12 @@ launched from another computer, or left behind stopped with a disk that still bi
 
 ```bash
 runlease list             # tracked machines, then anything found in the cloud
-runlease down --leaked    # delete the stopped and the overdue ones
+runlease down --leaked    # delete the stopped ones whose lease is over
 runlease list --local     # skip the cloud lookup
 ```
 
-`down --leaked` never deletes a machine that is running within its lease.
+`down --leaked` never deletes a running machine. It only removes machines that are stopped and
+past their lease.
 
 ## How it works
 

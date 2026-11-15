@@ -26,11 +26,26 @@ import (
 // unreachable provider delays the table by this much at most.
 const untrackedScanTimeout = 12 * time.Second
 
+// leaseGrace is how long after the time on its runlease-expires-at label a
+// running machine still counts as within its lease. The label is stamped
+// before the create request is sent, but the machine counts its lease from
+// its first boot and then needs a moment to delete itself, so for a minute or
+// two after the label it is rightly still there. The margin also covers a
+// clock on this computer that runs ahead of the cloud's.
+const leaseGrace = 5 * time.Minute
+
 // Why an untracked instance is reported.
 const (
-	// Powered off but not deleted: no compute cost, but its disk still bills.
+	// Powered off, not deleted, and past the lease on its label: no compute
+	// cost, but its disk still bills and nothing will ever remove it. This is
+	// the only kind `down --leaked` deletes.
 	problemLeaked = "leaked"
-	// Past its lease and still running: it should have deleted itself.
+	// Powered off or suspended, but not past its lease (or with no lease on
+	// record). Its disk bills too, but it may be someone's on purpose.
+	problemStopped = "stopped"
+	// Running past the lease on its label. That is not proof it is overdue:
+	// `runlease snooze` extends the lease on the machine without changing the
+	// label, so it may be well within a snoozed lease. Reported, never deleted.
 	problemExpired = "expired"
 	// Running within its lease, just not launched from (or remembered by)
 	// this computer. Not a problem by itself.
@@ -95,6 +110,10 @@ func findUntracked(ctx context.Context, reg *registry.Registry, scopes []cloudSc
 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
+	// Two scopes can be the same place: a project recorded in the registry and
+	// the default project that an entry or the config leaves unnamed. A machine
+	// found through both is one machine.
+	seen := map[string]bool{}
 	for _, s := range scopes {
 		wg.Add(1)
 		go func(s cloudScope) {
@@ -110,6 +129,11 @@ func findUntracked(ctx context.Context, reg *registry.Registry, scopes []cloudSc
 				if _, err := reg.Get(string(m.ID)); err == nil {
 					continue // tracked here
 				}
+				key := fmt.Sprintf("%s|%s|%s|%s", m.Provider, m.Project, m.Region, m.ID)
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
 				found = append(found, untrackedInstance{ManagedInstance: m, Problem: classify(m, time.Now())})
 			}
 		}(s)
@@ -138,10 +162,13 @@ func listManaged(ctx context.Context, s cloudScope) ([]provider.ManagedInstance,
 }
 
 func classify(m provider.ManagedInstance, now time.Time) string {
+	pastLease := m.ExpiresAt != nil && now.After(m.ExpiresAt.Add(leaseGrace))
 	switch {
-	case m.State == provider.StatusStopped:
+	case m.State == provider.StatusStopped && pastLease:
 		return problemLeaked
-	case m.ExpiresAt != nil && now.After(*m.ExpiresAt):
+	case m.State == provider.StatusStopped:
+		return problemStopped
+	case pastLease:
 		return problemExpired
 	default:
 		return problemElsewhere
@@ -152,18 +179,25 @@ func problemRank(p string) int {
 	switch p {
 	case problemLeaked:
 		return 0
-	case problemExpired:
+	case problemStopped:
 		return 1
-	default:
+	case problemExpired:
 		return 2
+	default:
+		return 3
 	}
 }
 
-// removable reports whether `down --leaked` should delete the instance: it is
-// stopped with a disk still billing, or it has outlived its lease. A machine
-// that is running within its lease belongs to someone and is left alone.
+// removable reports whether `down --leaked` may delete the instance. Only one
+// kind qualifies: stopped, and past the lease on its label. A stopped machine
+// cannot be mid-lease in any way that matters once that time has gone, and it
+// cannot have been snoozed into the future, because a snoozed machine runs.
+//
+// A running machine is never removable here, whatever its label says: the
+// label is not updated by `runlease snooze`, so it cannot prove the machine
+// is overdue.
 func (u untrackedInstance) removable() bool {
-	return u.Problem == problemLeaked || u.Problem == problemExpired
+	return u.Problem == problemLeaked
 }
 
 // printUntracked writes the section `list` adds below its table.
@@ -204,6 +238,9 @@ func printUntracked(out io.Writer, found []untrackedInstance, notes []string) {
 			}
 			fmt.Fprintf(out, "\n   %d should not exist any more%s. Remove them with: runlease down --leaked\n", removable, cost)
 		}
+		if others := len(found) - removable; others > 0 && removable > 0 {
+			fmt.Fprintf(out, "   The other %d are left alone by --leaked: a running machine, or a stopped one still within its lease, may be someone's.\n", others)
+		}
 	}
 	for _, n := range notes {
 		fmt.Fprintf(out, "\nnote: %s\n", n)
@@ -213,9 +250,14 @@ func printUntracked(out io.Writer, found []untrackedInstance, notes []string) {
 func explain(u untrackedInstance) string {
 	switch u.Problem {
 	case problemLeaked:
-		return "stopped, not deleted: its disk still bills"
+		return "stopped, not deleted, lease over: its disk still bills"
+	case problemStopped:
+		if u.ExpiresAt == nil {
+			return "stopped, no lease on record: its disk still bills"
+		}
+		return "stopped within its lease: its disk still bills"
 	case problemExpired:
-		return "past its lease " + fmtDuration(time.Since(*u.ExpiresAt).Round(time.Minute)) + " ago, still running"
+		return "running " + fmtDuration(time.Since(*u.ExpiresAt).Round(time.Minute)) + " past its original lease (snoozed?)"
 	default:
 		return "launched elsewhere, within its lease"
 	}

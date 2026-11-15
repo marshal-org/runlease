@@ -132,7 +132,7 @@ The registry is the only local record of a machine, so these rules keep it from 
 7. Waiting for the agent is bounded and explains itself (`waitForAgent`): the slot is gone (relay 404), the boot script failed (it writes `RUNLEASE_BOOT_FAILED stage=… exit=…` to the serial console, read through `provider.ConsoleReader`), or the time is up. A setup step that fails ends the log with `__RUNLEASE_SETUP_FAILED__`.
 8. Commands reach a machine through `openRelay`, which registers the slot again when the relay answers "unauthorized". Don't call `dialRelay` directly from a command.
 9. `up` compares the relay's agent with the digest the VM will check (`checkRelayAgent`) before it reserves a slot or creates anything.
-10. The registry is not the last word on what exists. `list` also asks the cloud for instances labelled `runlease-managed` (`provider.ManagedLister`) and reports the ones the registry does not hold: stopped (a disk still billing), past their lease, or simply launched elsewhere. `down --leaked` deletes the first two kinds and never a machine that is running within its lease.
+10. The registry is not the last word on what exists. `list` also asks the cloud for instances labelled `runlease-managed` (`provider.ManagedLister`) and reports the ones the registry does not hold. `down --leaked` deletes only those that are stopped AND past the lease on their label. It must never delete a running machine: `snooze` extends a lease on the VM without updating the label, so the label cannot prove a running machine is overdue.
 6. The daemon rescans the registry every poll, retries a failed terminate, and reads the registry again before acting on a deadline.
 
 ### What lives where

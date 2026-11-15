@@ -46,29 +46,35 @@ func runList(cmd *cobra.Command, _ []string) error {
 	}
 
 	entries := filterEntries(reg.List(), filters)
-	// Resolve spot rates for all instances concurrently. Each lookup is cached
-	// (24h) and bounded by its own timeout, so a cold cache or a slow/credential-
-	// less provider can't make `list` hang for timeout×N — the table waits at
-	// most one timeout regardless of how many instances are listed.
 	// Ask the cloud, in the background, for runlease machines the registry
 	// does not hold. The table is about what this computer tracks; this is
 	// about what it has lost. JSON output stays as it was unless asked.
-	scan := !listLocal && (!jsonOutput() || listUntracked)
 	var (
 		untracked []untrackedInstance
 		scanNotes []string
 		scanDone  = make(chan struct{})
 	)
-	go func() {
-		defer close(scanDone)
-		if scan {
+	if !listLocal && (!jsonOutput() || listUntracked) {
+		go func() {
+			defer close(scanDone)
 			untracked, scanNotes = findUntracked(cmd.Context(), reg, scanScopes(reg))
-		}
-	}()
+		}()
+	} else {
+		close(scanDone)
+	}
 
+	// Resolve spot rates for all instances concurrently. Each lookup is cached
+	// (24h) and bounded by its own timeout, so a cold cache or a slow/credential-
+	// less provider can't make `list` hang for timeout×N — the table waits at
+	// most one timeout regardless of how many instances are listed.
 	rates := fetchRates(cmd.Context(), entries)
 	<-scanDone
 	if jsonOutput() {
+		// The JSON has no place for a note, and a place that could not be
+		// checked must not read as a place with nothing untracked in it.
+		for _, n := range scanNotes {
+			fmt.Fprintf(cmd.ErrOrStderr(), "note: %s\n", n)
+		}
 		return writeListJSON(cmd, entries, rates, untracked)
 	}
 	if len(entries) == 0 {

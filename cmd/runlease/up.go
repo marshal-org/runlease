@@ -941,10 +941,10 @@ func resolveAgentSHA256(fromManifest, fromBuild string) (string, error) {
 	return v, nil
 }
 
-// checkPrivateEgress looks after a relay-mode launch that takes the default of
-// no public IP. On a network with no NAT the agent could not reach the relay,
-// and the machine would be unreachable and still billed until its lease ran
-// out, so the launch gets an outbound-only public IP instead and says so.
+// checkPrivateEgress stops a relay-mode launch that takes the default of no
+// public IP on a network with no NAT: the agent could not reach the relay, so
+// the machine would be unreachable and still billed until its lease ran out.
+// It never adds a public IP on its own: that is the user's choice to make.
 //
 // It only blocks when it is sure. A check that cannot be made (no permission to
 // list routers, a provider that has no check) prints a note and lets the launch
@@ -973,14 +973,12 @@ func checkPrivateEgress(ctx context.Context, errOut io.Writer, p provider.CloudP
 		return nil
 	}
 	if !has {
-		// Refusing here made the first launch fail on most accounts, which have
-		// no NAT gateway. An outbound-only address is the working, safe choice:
-		// sshd still listens on localhost, so nothing on the address answers.
-		yes := true
-		m.PublicIP = &yes
-		fmt.Fprintf(errOut, "ℹ  No NAT gateway on this subnet in %s, so the machine gets a public IP for outbound traffic only.\n"+
-			"   SSH still listens on localhost: nothing on that address accepts connections.\n"+
-			"   For no public address at all, add a NAT gateway. To silence this, set 'publicIp: true'.\n", m.Region)
+		return fmt.Errorf("this subnet in %s has no NAT gateway, so a machine with no public IP could not reach the relay. Nothing was created.\n\n"+
+			"Pick one:\n"+
+			"  1. Re-run with --public-ip (or 'publicIp: true' in the manifest). The address carries outbound\n"+
+			"     traffic only: SSH still listens on localhost, so nothing on it accepts connections.\n"+
+			"  2. Add a NAT gateway to the subnet and re-run as is. The machine then has no public address at all.\n"+
+			"  3. Set 'publicIp: false' in the manifest if the network gets out some other way", m.Region)
 	}
 	return nil
 }

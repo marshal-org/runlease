@@ -112,8 +112,7 @@ reads. The boot script then asks SSH what it will enforce (`sshd -T`) and stops,
 machine unreachable, if passwords are on, root login is allowed, or it would listen beyond
 localhost.
 
-If your subnet has no NAT gateway, `runlease up` notices, gives the VM a public address and says
-so (`publicIp: true` chooses that outright). The address is then used for outbound
+If your subnet has no NAT gateway, set `publicIp: true`. The address is then used for outbound
 traffic only; SSH still listens on localhost. Known limit 1 covers what that changes.
 
 ### sudo is off by default
@@ -148,9 +147,8 @@ Being honest about this matters more than the list above.
 
 These are real, and they are why the trust table above lists your cloud account as trusted.
 
-1. **Without a NAT gateway, the VM needs a public address to reach the relay.** `runlease up`
-   applies this for you when it finds no NAT gateway, and says so; `publicIp: true` chooses it
-   outright. Runlease's own SSH server still listens on localhost only, but
+1. **Without a NAT gateway, the VM needs a public address to reach the relay.** That is the
+   `publicIp: true` setting. Runlease's own SSH server still listens on localhost only, but
    anything else you start on the VM that listens on all interfaces is then exposed to whatever
    your cloud firewall allows. With no relay at all, the VM always has a public address and SSH
    listens on it: one key, one user, passwords off.

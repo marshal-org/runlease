@@ -86,6 +86,7 @@ You need credentials for one cloud: `gcloud auth application-default login` (and
 ```bash
 runlease login                          # the free public relay: approve a short code in a browser
 runlease up -p gcp -n box -d            # or -p aws: a small spot machine, gone in two hours
+                                        # no NAT gateway on the subnet? it stops and says so: add --public-ip
 runlease exec box -- uname -a           # run something
 runlease connect box                    # or open a shell
 runlease forward box -L 8080:localhost:8080   # reach a port on the VM

@@ -176,7 +176,7 @@ func TestCheckPrivateEgress(t *testing.T) {
 	}{
 		{name: "no relay: nothing to check"},
 		{name: "relay, default, NAT present", relay: relayAddr, has: true, wantCalled: true},
-		{name: "relay, default, no NAT: public IP for outbound, and say so", relay: relayAddr, wantCalled: true, wantNote: true, wantPublic: true},
+		{name: "relay, default, no NAT: refuse, never add a public IP", relay: relayAddr, wantCalled: true, wantErr: true},
 		{name: "relay, default, sign-in expired: stop", relay: relayAddr, checkErr: errors.New(`auth: "invalid_grant"`), wantCalled: true, wantErr: true},
 		{name: "relay, default, check failed: warn and go on", relay: relayAddr, checkErr: errors.New("403"), wantCalled: true, wantNote: true},
 		{name: "relay, publicIp true: has a way out", relay: relayAddr, publicIP: &yes},

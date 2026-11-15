@@ -194,7 +194,8 @@
   .cc > div + div { border-left: 1px solid var(--rule); }
   .cc h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 14px; }
   .cc ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 11px; font-size: .97rem; color: var(--ink-2); }
-  .cc li { display: grid; grid-template-columns: 22px 1fr; }
+  .cc li { position: relative; padding-left: 22px; }
+  .cc li::before { position: absolute; left: 0; top: 0; }
   .cc .y li::before { content: "\2212"; color: var(--no); font-weight: 700; font-family: var(--mono); }
   .cc .n li::before { content: "\00d7"; color: var(--ok); font-weight: 700; font-family: var(--mono); }
   .cc-note { margin-top: 18px; color: var(--ink-3); font-size: .93rem; max-width: 60em; }

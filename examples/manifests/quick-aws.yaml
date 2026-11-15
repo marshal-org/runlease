@@ -1,0 +1,11 @@
+# The same on AWS. The image defaults to the latest Amazon Linux 2023.
+#
+#   runlease up -m quick-aws.yaml
+name: scratch
+provider: aws
+region: eu-north-1             # a region
+instanceClass: compute.small   # about 2 vCPU / 2 GB
+reclaim:
+  ttl: 2h                      # the lease: the machine deletes itself after this
+relay:
+  addr: wss://connect.runlease.online

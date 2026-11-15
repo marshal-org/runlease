@@ -1,0 +1,13 @@
+# One spot GPU for a short job. Spot GPUs are reclaimed more often than CPUs,
+# so keep the work resumable. Check your GPU quota in the region first.
+#
+#   runlease up -m gpu.yaml
+name: gpu-job
+provider: gcp
+region: us-central1-a
+instanceClass: compute.gpu     # about 4-8 vCPU / 16-32 GB and one GPU
+diskSizeGb: 100
+reclaim:
+  ttl: 3h
+relay:
+  addr: wss://connect.runlease.online

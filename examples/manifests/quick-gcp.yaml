@@ -1,0 +1,12 @@
+# The smallest useful manifest: one small spot machine on Google Cloud,
+# reached through the free public relay, gone after two hours.
+#
+#   runlease up -m quick-gcp.yaml
+name: scratch
+provider: gcp
+region: us-central1-a          # a zone
+instanceClass: compute.small   # about 2 vCPU / 2 GB
+reclaim:
+  ttl: 2h                      # the lease: the machine deletes itself after this
+relay:
+  addr: wss://connect.runlease.online

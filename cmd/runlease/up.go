@@ -175,6 +175,10 @@ func runUp(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("initializing provider: %w", err)
 	}
+	// Say where this is about to happen, before anything is created.
+	if d, ok := p.(provider.AccountDescriber); ok {
+		fmt.Fprintf(cmd.OutOrStdout(), "☁  %s\n", d.DescribeAccount(ctx))
+	}
 	// One name, one machine. Launching over a name that is in use would leave
 	// the first machine running with nothing tracking it.
 	reg, err := loadRegistry()
@@ -973,12 +977,19 @@ func checkPrivateEgress(ctx context.Context, errOut io.Writer, p provider.CloudP
 		return nil
 	}
 	if !has {
+		natSteps := "Add a NAT gateway to the subnet."
+		if a, ok := p.(provider.EgressAdviser); ok {
+			natSteps = a.NATAdvice(m.GCP.Network, subnetForProvider(m))
+		}
 		return fmt.Errorf("this subnet in %s has no NAT gateway, so a machine with no public IP could not reach the relay. Nothing was created.\n\n"+
-			"Pick one:\n"+
-			"  1. Re-run with --public-ip (or 'publicIp: true' in the manifest). The address carries outbound\n"+
-			"     traffic only: SSH still listens on localhost, so nothing on it accepts connections.\n"+
-			"  2. Add a NAT gateway to the subnet and re-run as is. The machine then has no public address at all.\n"+
-			"  3. Set 'publicIp: false' in the manifest if the network gets out some other way", m.Region)
+			"Pick one:\n\n"+
+			"1. Re-run with --public-ip (or 'publicIp: true' in the manifest).\n"+
+			"   The address carries outbound traffic only: SSH still listens on localhost, so nothing on it\n"+
+			"   accepts connections. This is the quick way, and the one to use if you cannot change the network.\n\n"+
+			"2. Add a NAT gateway, then re-run as is. The machine then has no public address at all.\n%s\n\n"+
+			"3. If this network already gets out some other way (a proxy, a VPN, your own NAT machine),\n"+
+			"   set 'publicIp: false' in the manifest to skip this check",
+			m.Region, indentLines(natSteps, "   "))
 	}
 	return nil
 }
@@ -1071,4 +1082,9 @@ func regionExample(prov string) string {
 		return "AWS regions look like us-east-1"
 	}
 	return "Google Cloud zones look like us-central1-a"
+}
+
+// indentLines puts prefix in front of every line of s.
+func indentLines(s, prefix string) string {
+	return prefix + strings.ReplaceAll(s, "\n", "\n"+prefix)
 }

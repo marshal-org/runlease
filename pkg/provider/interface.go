@@ -89,6 +89,21 @@ type EgressChecker interface {
 	HasPrivateEgress(ctx context.Context, network, subnet string) (bool, error)
 }
 
+// AccountDescriber is implemented by providers that can say, in one line,
+// which project or account and which identity a launch will use. It is shown
+// before anything is created, so a machine does not land in the wrong place.
+// It is best effort: what cannot be found out is left out.
+type AccountDescriber interface {
+	DescribeAccount(ctx context.Context) string
+}
+
+// EgressAdviser is implemented by providers that can say how to give a subnet
+// a way out, for the message shown when HasPrivateEgress reports none.
+type EgressAdviser interface {
+	// NATAdvice returns ready-to-read steps, each on its own line.
+	NATAdvice(network, subnet string) string
+}
+
 // ConsoleReader is implemented by providers that can return an instance's
 // serial console output. `up` reads it while waiting for the agent, to report
 // a boot script that failed instead of waiting on a machine that will never

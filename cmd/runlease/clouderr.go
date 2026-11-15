@@ -62,6 +62,8 @@ func cloudErrorHint(s string) string {
 		return "Your AWS sign-in has expired or is missing. Sign in again (for example 'aws sso login'), then retry."
 	case strings.Contains(s, "networkInterfaces[0].network") && strings.Contains(s, "cannot be found"):
 		return "This project has no network named 'default'. Name the one to use:\n  --network NAME --subnet NAME   (or gcp.network / gcp.subnetwork in the manifest)"
+	case strings.Contains(s, "service control policy"):
+		return "Your AWS organization blocks this action here, most often because the region is not one it allows.\nTry the region your organization uses:\n  --region REGION"
 	case strings.Contains(s, "amazonaws.com") && strings.Contains(s, "no such host"):
 		return "That does not look like an AWS region, or there is no network. Pass a region, for example:\n  --region us-east-1"
 	}
@@ -144,8 +146,15 @@ func hasGCPSetup() bool {
 }
 
 func hasAWSSetup() bool {
-	if os.Getenv("AWS_ACCESS_KEY_ID") != "" || os.Getenv("AWS_PROFILE") != "" {
-		return true
+	// Every way the AWS SDK is handed credentials through the environment:
+	// keys, a profile, a role to assume (CI with OIDC), a container role.
+	for _, k := range []string{
+		"AWS_ACCESS_KEY_ID", "AWS_PROFILE", "AWS_ROLE_ARN", "AWS_WEB_IDENTITY_TOKEN_FILE",
+		"AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+	} {
+		if os.Getenv(k) != "" {
+			return true
+		}
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

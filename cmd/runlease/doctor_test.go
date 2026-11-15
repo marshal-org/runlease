@@ -42,6 +42,7 @@ func (f *fakePreflight) CheckNetwork(context.Context, string, string) (string, e
 	return f.network, f.networkErr
 }
 func (f *fakePreflight) DescribeAccount(context.Context) string { return "project env-project, as me" }
+func (f *fakePreflight) Identity(context.Context) string        { return "me@example.com" }
 func (f *fakePreflight) NATAdvice(string, string) string        { return "ADD-A-NAT" }
 
 func checksByID(checks []doctorCheck) map[string]doctorCheck {
@@ -85,57 +86,66 @@ func TestDoctorCloud(t *testing.T) {
 		{
 			name: "all good", target: gcpTarget,
 			fake: &fakePreflight{fakeEgressProvider: fakeEgressProvider{has: true}, network: "network default (us-central1)"},
-			want: "gcp.project=ok gcp.credentials=ok gcp.region=ok gcp.network=ok gcp.nat=ok",
+			want: "gcp.credentials=ok gcp.project=ok gcp.region=ok gcp.network=ok gcp.nat=ok",
 			details: map[string]string{
-				"gcp.project": "env-project", "gcp.credentials": "project env-project, as me",
+				"gcp.project": "env-project (exists", "gcp.credentials": "project env-project, as me",
 				"gcp.region": "us-central1-a (runlease's default)", "gcp.network": "network default (us-central1)",
 			},
 		},
 		{
 			name: "no NAT is a warning, with the provider's advice", target: gcpTarget,
 			fake:  &fakePreflight{network: "network default"},
-			want:  "gcp.project=ok gcp.credentials=ok gcp.region=ok gcp.network=ok gcp.nat=warn",
+			want:  "gcp.credentials=ok gcp.project=ok gcp.region=ok gcp.network=ok gcp.nat=warn",
 			fixes: map[string]string{"gcp.nat": "launch with --public-ip, or add a NAT gateway:\nADD-A-NAT"},
 		},
 		{
 			name: "a NAT check that cannot be made is a warning", target: gcpTarget,
 			fake:  &fakePreflight{fakeEgressProvider: fakeEgressProvider{err: errors.New("403 routers.list")}, network: "network default"},
-			want:  "gcp.project=ok gcp.credentials=ok gcp.region=ok gcp.network=ok gcp.nat=warn",
+			want:  "gcp.credentials=ok gcp.project=ok gcp.region=ok gcp.network=ok gcp.nat=warn",
 			fixes: map[string]string{"gcp.nat": "launch with --public-ip, or add a NAT gateway"},
 		},
 		{
 			name: "no default network is a failure, and NAT is not asked about", target: gcpTarget,
 			fake:    &fakePreflight{networkErr: fmt.Errorf("%w: project p has no network named default", provider.ErrNoNetwork)},
-			want:    "gcp.project=ok gcp.credentials=ok gcp.region=ok gcp.network=fail",
+			want:    "gcp.credentials=ok gcp.project=ok gcp.region=ok gcp.network=fail",
 			fixes:   map[string]string{"gcp.network": "--network NAME --subnet NAME"},
 			details: map[string]string{"gcp.network": "project p has no network named default"},
 		},
 		{
 			name: "a network check that cannot be made is a warning, and NAT is still checked", target: gcpTarget,
 			fake: &fakePreflight{fakeEgressProvider: fakeEgressProvider{has: true}, networkErr: errors.New("403")},
-			want: "gcp.project=ok gcp.credentials=ok gcp.region=ok gcp.network=warn gcp.nat=ok",
+			want: "gcp.credentials=ok gcp.project=ok gcp.region=ok gcp.network=warn gcp.nat=ok",
 		},
 		{
-			name: "expired Google sign-in", target: gcpTarget,
-			fake:  &fakePreflight{accessErr: errors.New(`oauth2: "invalid_grant" "reauth related error (invalid_rapt)"`)},
-			want:  "gcp.project=ok gcp.credentials=fail",
+			// The project is not said to be fine before it has been read.
+			name: "expired Google sign-in: no word on the project", target: gcpTarget,
+			fake:  &fakePreflight{accessErr: errors.New(`getting an access token: oauth2: "invalid_grant" "reauth related error (invalid_rapt)"`)},
+			want:  "gcp.credentials=fail",
 			fixes: map[string]string{"gcp.credentials": "gcloud auth application-default login"},
 		},
 		{
+			name: "a project that does not exist is a project failure, not a sign-in one", target: gcpTarget,
+			fake:    &fakePreflight{accessErr: fmt.Errorf("%w: project nope does not exist, or this sign-in may not use it: googleapi: Error 404", provider.ErrProject)},
+			want:    "gcp.credentials=ok gcp.project=fail",
+			fixes:   map[string]string{"gcp.project": "gcloud config set project PROJECT_ID   (or: export GOOGLE_CLOUD_PROJECT=PROJECT_ID)"},
+			details: map[string]string{"gcp.credentials": "work, as me@example.com", "gcp.project": "does not exist"},
+		},
+		{
 			name: "Compute Engine API off", target: gcpTarget,
-			fake:  &fakePreflight{accessErr: errors.New("googleapi: Error 403: Compute Engine API has not been used in project 1 before or it is disabled")},
-			want:  "gcp.project=ok gcp.credentials=fail",
-			fixes: map[string]string{"gcp.credentials": "gcloud services enable compute.googleapis.com --project env-project"},
+			fake:  &fakePreflight{accessErr: fmt.Errorf("%w for project env-project: googleapi: Error 403", provider.ErrServiceDisabled)},
+			want:  "gcp.credentials=ok gcp.project=fail",
+			fixes: map[string]string{"gcp.project": "gcloud services enable compute.googleapis.com --project env-project"},
 		},
 		{
 			name: "no project set", target: gcpTarget, fake: &fakePreflight{},
-			openErr: errors.New("GCP project not configured: run 'gcloud config set project <project-id>'"),
+			openErr: fmt.Errorf("%w: run 'gcloud config set project <project-id>'", provider.ErrNoProject),
 			want:    "gcp.project=fail",
 			fixes:   map[string]string{"gcp.project": "gcloud config set project PROJECT_ID"},
 		},
 		{
-			name: "no credentials file at all", target: gcpTarget, fake: &fakePreflight{},
-			openErr: errors.New("creating compute service: google: could not find default credentials"),
+			// The word "project" in an error does not make it a project problem.
+			name: "an error that only mentions a project is still about credentials", target: gcpTarget, fake: &fakePreflight{},
+			openErr: errors.New("creating compute service: google: could not find default credentials for project lookup"),
 			want:    "gcp.credentials=fail",
 			fixes:   map[string]string{"gcp.credentials": "gcloud auth application-default login"},
 		},
@@ -157,6 +167,13 @@ func TestDoctorCloud(t *testing.T) {
 			fake:  &fakePreflight{networkErr: fmt.Errorf("%w: us-east-1 has no default VPC", provider.ErrNoNetwork)},
 			want:  "aws.credentials=ok aws.region=ok aws.network=fail",
 			fixes: map[string]string{"aws.network": "--subnet SUBNET_ID"},
+		},
+		{
+			name: "a region the account has not enabled fails the region, not the sign-in", target: awsTarget,
+			fake:    &fakePreflight{regionErr: errors.New("DescribeSubnets in me-central-1: api error AuthFailure: AWS was not able to validate the provided access credentials")},
+			want:    "aws.credentials=ok aws.region=fail",
+			fixes:   map[string]string{"aws.region": "aws account enable-region --region-name us-east-1"},
+			details: map[string]string{"aws.region": "AuthFailure"},
 		},
 		{
 			name:   "a zone given to AWS is reported before any call",
@@ -360,9 +377,6 @@ func TestDoctorCLI(t *testing.T) {
 }
 
 func TestDoctorTargets(t *testing.T) {
-	orig := configuredAWSRegion
-	t.Cleanup(func() { configuredAWSRegion = orig })
-	configuredAWSRegion = func(context.Context) string { return "eu-north-1" }
 	saved := &rlconfig.Config{Defaults: rlconfig.InstanceConfig{Provider: "gcp", Region: "europe-west1-b"}}
 	show := func(ts []doctorTarget) string {
 		var s []string
@@ -372,26 +386,46 @@ func TestDoctorTargets(t *testing.T) {
 		return strings.Join(s, " ")
 	}
 	tests := []struct {
-		name                          string
-		prov, region, network, subnet string
-		cfg                           *rlconfig.Config
-		gcp, aws                      bool
-		want                          string
+		name     string
+		f        doctorFlags
+		cfg      *rlconfig.Config
+		gcp, aws bool
+		want     string
+		wantErr  string
 	}{
 		{name: "nothing set up", want: ""},
 		{name: "each cloud set up, in its default place", gcp: true, aws: true, want: "gcp/us-central1-a// aws/eu-north-1//"},
 		{name: "the saved region goes to the cloud it fits", cfg: saved, gcp: true, aws: true, want: "gcp/europe-west1-b// aws/eu-north-1//"},
 		{name: "a saved provider counts with no sign-in found", cfg: saved, want: "gcp/europe-west1-b//"},
-		{name: "a provider named: only it, with the flags", prov: "aws", region: "us-east-1", subnet: "subnet-1", gcp: true, aws: true, want: "aws/us-east-1//subnet-1"},
-		{name: "a region with no provider goes to the cloud it fits", region: "us-west-2", gcp: true, aws: true, want: "gcp/us-central1-a// aws/us-west-2//"},
-		{name: "network and a named subnetwork are Google Cloud's", network: "vpc", subnet: "apps", gcp: true, aws: true, want: "gcp/us-central1-a/vpc/apps aws/eu-north-1//"},
-		{name: "a subnet ID is AWS's", subnet: "subnet-9", gcp: true, aws: true, want: "gcp/us-central1-a// aws/eu-north-1//subnet-9"},
-		{name: "a misfit region is kept for the named provider, to be reported", prov: "aws", region: "us-central1-a", want: "aws/us-central1-a//"},
+		{name: "a provider named: only it, with the flags", f: doctorFlags{"aws", "us-east-1", "", "subnet-1"}, gcp: true, aws: true, want: "aws/us-east-1//subnet-1"},
+		{name: "a misfit region is kept for the named provider, to be reported", f: doctorFlags{provider: "aws", region: "us-central1-a"}, want: "aws/us-central1-a//"},
+
+		// With one cloud, the flags can only be its.
+		{name: "one cloud: the region is its", f: doctorFlags{region: "us-west-2"}, aws: true, want: "aws/us-west-2//"},
+		{name: "one cloud: a subnetwork named subnet-x is still Google Cloud's", f: doctorFlags{subnet: "subnet-apps"}, gcp: true, want: "gcp/us-central1-a//subnet-apps"},
+		{name: "one cloud: a region that does not fit it is kept, to be reported", f: doctorFlags{region: "us-west-2"}, gcp: true, want: "gcp/us-west-2//"},
+		{name: "one cloud: network and subnet are its", f: doctorFlags{network: "vpc", subnet: "apps"}, gcp: true, want: "gcp/us-central1-a/vpc/apps"},
+
+		// With two, or none, nothing is guessed and nothing is dropped.
+		{name: "two clouds: a region needs --provider", f: doctorFlags{region: "us-west-2"}, gcp: true, aws: true, wantErr: "need --provider"},
+		{name: "two clouds: a subnet needs --provider", f: doctorFlags{subnet: "subnet-9"}, gcp: true, aws: true, wantErr: "need --provider"},
+		{name: "two clouds: a network needs --provider", f: doctorFlags{network: "vpc"}, gcp: true, aws: true, wantErr: "need --provider"},
+		{name: "no cloud: a region needs --provider", f: doctorFlags{region: "us-west-2"}, wantErr: "no cloud sign-in was found"},
+		{name: "a network on AWS, named", f: doctorFlags{provider: "aws", network: "vpc"}, wantErr: "only supported for GCP"},
+		{name: "a network on AWS, the only cloud", f: doctorFlags{network: "vpc"}, aws: true, wantErr: "only supported for GCP"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := show(doctorTargets(tc.prov, tc.region, tc.network, tc.subnet, tc.cfg, tc.gcp, tc.aws)); got != tc.want {
-				t.Errorf("got %q, want %q", got, tc.want)
+			setUp(t, tc.gcp, tc.aws, "eu-north-1")
+			got, err := doctorTargets(tc.f, tc.cfg)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v (targets %q), want %q", err, show(got), tc.wantErr)
+				}
+				return
+			}
+			if err != nil || show(got) != tc.want {
+				t.Errorf("got %q, %v; want %q", show(got), err, tc.want)
 			}
 		})
 	}

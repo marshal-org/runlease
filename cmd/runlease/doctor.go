@@ -124,9 +124,6 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	if doctorProvider != "" && doctorProvider != "gcp" && doctorProvider != "aws" {
 		return fmt.Errorf("unknown provider %q — supported: aws, gcp", doctorProvider)
 	}
-	if doctorNetwork != "" && doctorProvider == "aws" {
-		return fmt.Errorf("--network is only supported for GCP")
-	}
 	ctx := cmd.Context()
 	cfg, cfgErr := rlconfig.Load(defaultConfigPath())
 	if cfg == nil {
@@ -144,9 +141,14 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		timeout:     doctorCheckTimeout,
 	}
 
+	// Worked out first: flags that cannot be placed are an error before any
+	// check runs, not a check quietly left out.
+	targets, err := doctorTargets(doctorFlags{doctorProvider, doctorRegion, doctorNetwork, doctorSubnet}, cfg)
+	if err != nil {
+		return err
+	}
 	checks := doctorCLI(deps)
 	checks = append(checks, doctorRelay(ctx, deps)...)
-	targets := doctorTargets(doctorProvider, doctorRegion, doctorNetwork, doctorSubnet, cfg, hasGCPSetup(), hasAWSSetup())
 	if len(targets) == 0 {
 		checks = append(checks, doctorCheck{
 			ID: "cloud", Title: "Cloud sign-in", Status: statusFail,
@@ -342,48 +344,47 @@ func describeRelayAccount(a *relayAccount) string {
 	return s
 }
 
+// doctorFlags is what --provider, --region, --network and --subnet said.
+type doctorFlags struct{ provider, region, network, subnet string }
+
 // doctorTargets works out which clouds to check and where. With a provider
-// named it is that one. Otherwise it is every cloud that looks set up on this
-// computer, plus the saved default provider. A --region that does not fit a
-// cloud it was not explicitly paired with is left to that cloud's default.
-func doctorTargets(prov, region, network, subnet string, cfg *rlconfig.Config, gcpSetup, awsSetup bool) []doctorTarget {
-	var provs []string
-	switch {
-	case prov != "":
-		provs = []string{prov}
-	default:
-		saved := ""
-		if cfg != nil {
-			saved = cfg.Defaults.Provider
+// named it is that one. Otherwise it is every applicable cloud (signed in on
+// this computer, or the saved default), each in its default place.
+//
+// --region, --network and --subnet describe one place in one cloud. Without
+// --provider they are that cloud's only when exactly one cloud applies;
+// otherwise there is no telling whose they are, and the answer is an error
+// rather than a flag that is quietly dropped.
+func doctorTargets(f doctorFlags, cfg *rlconfig.Config) ([]doctorTarget, error) {
+	clouds := applicableClouds(cfg)
+	prov := f.provider
+	if prov == "" && (f.region != "" || f.network != "" || f.subnet != "") {
+		switch len(clouds) {
+		case 1:
+			prov = clouds[0]
+		case 0:
+			return nil, fmt.Errorf("--region, --network and --subnet need --provider gcp or --provider aws: no cloud sign-in was found on this computer to apply them to")
+		default:
+			return nil, fmt.Errorf("--region, --network and --subnet need --provider gcp or --provider aws: both clouds are set up on this computer, and the flags describe a place in one")
 		}
-		if gcpSetup || saved == "gcp" {
-			provs = append(provs, "gcp")
+	}
+	if prov == "aws" && f.network != "" {
+		return nil, fmt.Errorf("--network is only supported for GCP")
+	}
+	if prov != "" {
+		t := doctorTarget{provider: prov, region: f.region, regionWhy: "from --region", network: f.network, subnet: f.subnet}
+		if t.region == "" {
+			t.region, t.regionWhy = defaultRegionFor(prov, cfg)
 		}
-		if awsSetup || saved == "aws" {
-			provs = append(provs, "aws")
-		}
+		return []doctorTarget{t}, nil
 	}
 	var targets []doctorTarget
-	for _, p := range provs {
-		t := doctorTarget{provider: p}
-		switch {
-		case region != "" && (prov != "" || regionFits(p, region)):
-			t.region, t.regionWhy = region, "from --region"
-		default:
-			t.region, t.regionWhy = defaultRegionFor(p, cfg)
-		}
-		// A subnet ID is AWS's; a name or a self-link is Google Cloud's. With
-		// the provider named, the flags are that provider's.
-		awsSubnet := strings.HasPrefix(subnet, "subnet-")
-		if prov != "" || (p == "aws") == awsSubnet {
-			t.subnet = subnet
-		}
-		if p == "gcp" {
-			t.network = network
-		}
+	for _, c := range clouds {
+		t := doctorTarget{provider: c}
+		t.region, t.regionWhy = defaultRegionFor(c, cfg)
 		targets = append(targets, t)
 	}
-	return targets
+	return targets, nil
 }
 
 // doctorCloud runs the checks for one cloud. open builds the provider; every
@@ -407,26 +408,19 @@ func doctorCloud(ctx context.Context, t doctorTarget, open func(context.Context)
 	}
 
 	cred := doctorCheck{ID: id("credentials"), Title: cloud + " credentials", Status: statusOK}
+	proj := doctorCheck{ID: id("project"), Title: cloud + " project", Status: statusOK}
+	const setProject = "gcloud config set project PROJECT_ID   (or: export GOOGLE_CLOUD_PROJECT=PROJECT_ID)"
 	octx, cancel := bounded()
 	p, err := open(octx)
 	cancel()
-	if err != nil {
-		// Google Cloud needs a project before it can be asked anything, and
-		// finding none is not a sign-in problem.
-		if t.provider == "gcp" && !isSignInError(err) && strings.Contains(strings.ToLower(err.Error()), "project") {
-			return append(checks, doctorCheck{
-				ID: id("project"), Title: cloud + " project", Status: statusFail,
-				Detail: "no project is set",
-				Fix:    "gcloud config set project PROJECT_ID   (or: export GOOGLE_CLOUD_PROJECT=PROJECT_ID)",
-			})
-		}
-		cred.Status, cred.Detail, cred.Fix = statusFail, oneLine(err), credentialsFix(t.provider, "", err)
-		return append(checks, cred)
-	}
-	project := ""
-	if pp, ok := p.(interface{ ProjectID() string }); ok && t.provider == "gcp" {
-		project = pp.ProjectID()
-		checks = append(checks, doctorCheck{ID: id("project"), Title: cloud + " project", Status: statusOK, Detail: project})
+	switch {
+	case errors.Is(err, provider.ErrNoProject):
+		// Google Cloud needs a project before it can be asked anything.
+		proj.Status, proj.Detail, proj.Fix = statusFail, "no project is set", setProject
+		return []doctorCheck{proj}
+	case err != nil:
+		cred.Status, cred.Detail, cred.Fix = statusFail, describeCheckErr(err, timeout), credentialsFix(t.provider, err)
+		return []doctorCheck{cred}
 	}
 
 	pre, ok := p.(provider.Preflighter)
@@ -434,14 +428,38 @@ func doctorCloud(ctx context.Context, t doctorTarget, open func(context.Context)
 		cred.Status = statusWarn
 		cred.Detail = "runlease has no pre-flight checks for this provider"
 		cred.Fix = "runlease up --provider " + t.provider + "   (the launch itself reports what is wrong)"
-		return append(checks, cred)
+		return []doctorCheck{cred}
+	}
+	project := ""
+	if n, ok := p.(provider.AccountNamer); ok && t.provider == "gcp" {
+		project = n.AccountName(ctx)
 	}
 	actx, cancel := bounded()
 	err = pre.CheckAccess(actx)
 	cancel()
-	if err != nil {
-		cred.Status, cred.Detail, cred.Fix = statusFail, describeCheckErr(err, timeout), credentialsFix(t.provider, project, err)
-		return append(checks, cred)
+	// The provider says which half failed: the sign-in, or the project it was
+	// pointed at. The credentials are reported as working only in the second
+	// case, and the project as usable only once it has been read.
+	projectErr := errors.Is(err, provider.ErrProject) || errors.Is(err, provider.ErrServiceDisabled)
+	if err != nil && !projectErr {
+		cred.Status, cred.Detail, cred.Fix = statusFail, describeCheckErr(err, timeout), credentialsFix(t.provider, err)
+		return []doctorCheck{cred}
+	}
+	if projectErr {
+		cred.Detail = "work"
+		if w, ok := p.(provider.IdentityDescriber); ok {
+			ictx, cancel := bounded()
+			if who := w.Identity(ictx); who != "" {
+				cred.Detail = "work, as " + who
+			}
+			cancel()
+		}
+		proj.Status, proj.Fix = statusFail, setProject
+		proj.Detail = strings.TrimPrefix(describeCheckErr(err, timeout), provider.ErrProject.Error()+": ")
+		if errors.Is(err, provider.ErrServiceDisabled) {
+			proj.Fix = "gcloud services enable compute.googleapis.com --project " + project
+		}
+		return []doctorCheck{cred, proj}
 	}
 	cred.Detail = "work"
 	if d, ok := p.(provider.AccountDescriber); ok {
@@ -450,6 +468,10 @@ func doctorCloud(ctx context.Context, t doctorTarget, open func(context.Context)
 		cancel()
 	}
 	checks = append(checks, cred)
+	if t.provider == "gcp" {
+		proj.Detail = project + " (exists, and this sign-in can use it)"
+		checks = append(checks, proj)
+	}
 
 	region := doctorCheck{ID: id("region"), Title: cloud + " " + regionWord(t.provider), Status: statusOK,
 		Detail: fmt.Sprintf("%s (%s)", t.region, t.regionWhy)}
@@ -462,8 +484,13 @@ func doctorCloud(ctx context.Context, t doctorTarget, open func(context.Context)
 		region.Detail = fmt.Sprintf("%s (%s): %s", t.region, t.regionWhy, describeCheckErr(err, timeout))
 		region.Fix = regionFix
 		// The hint ends by naming the flag; here that becomes the command.
-		if hint := cloudErrorHint(err.Error()); hint != "" {
+		if hint := cloudErrorHint(err.Error()); hint != "" && !isSignInError(err) {
 			region.Fix = strings.TrimSuffix(hint, "\n  --region REGION") + "\n" + regionFix
+		} else if t.provider == "aws" {
+			// The credentials have just been shown to work, so a refusal here
+			// is about this region: most often one the account has not enabled.
+			region.Fix = fmt.Sprintf("if %s is a region your account has not enabled: aws account enable-region --region-name %s\n"+
+				"or check another: %s", t.region, t.region, regionFix)
 		}
 		return append(checks, region)
 	}
@@ -534,26 +561,16 @@ func describeCheckErr(err error, timeout time.Duration) string {
 }
 
 // credentialsFix is the command to run when a cloud will not accept the
-// credentials, or will not let them read the project.
-func credentialsFix(prov, project string, err error) string {
+// credentials.
+func credentialsFix(prov string, err error) string {
+	if prov == "gcp" {
+		return "gcloud auth application-default login"
+	}
 	if isSignInError(err) {
-		if prov == "gcp" {
-			return "gcloud auth application-default login"
-		}
 		return "aws sso login   (or however you sign in to AWS)"
 	}
 	if hint := cloudErrorHint(err.Error()); hint != "" {
 		return hint
-	}
-	if prov == "gcp" {
-		if project == "" {
-			project = "PROJECT_ID"
-		}
-		if s := err.Error(); strings.Contains(s, "has not been used") || strings.Contains(s, "is disabled") {
-			return "gcloud services enable compute.googleapis.com --project " + project
-		}
-		return "gcloud auth application-default login   (sign in as an account that can use Compute Engine in " + project + ")\n" +
-			"or choose another project: export GOOGLE_CLOUD_PROJECT=PROJECT_ID"
 	}
 	return "aws sts get-caller-identity   (shows what AWS itself says; then sign in again, for example 'aws sso login')"
 }

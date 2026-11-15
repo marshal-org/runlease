@@ -145,12 +145,40 @@ type ManagedLister interface {
 // itself failing.
 var ErrNoNetwork = errors.New("no network to launch on")
 
+// ErrNoProject is returned (wrapped) by a provider that needs a project and
+// could not find which one to use.
+var ErrNoProject = errors.New("no project is set")
+
+// ErrProject is returned (wrapped) by Preflighter.CheckAccess when the
+// credentials work but the project or account they were pointed at does not
+// exist or may not be read with them.
+var ErrProject = errors.New("the project cannot be used")
+
+// ErrServiceDisabled is returned (wrapped) by Preflighter.CheckAccess when the
+// credentials and the project are fine but the cloud's compute API is turned
+// off for the project.
+var ErrServiceDisabled = errors.New("the compute API is turned off")
+
+// AccountNamer is implemented by providers that can name the one place they
+// act in: the Google Cloud project ID, the AWS account ID. Empty if it cannot
+// be found out.
+type AccountNamer interface {
+	AccountName(ctx context.Context) string
+}
+
+// IdentityDescriber is implemented by providers that can say who the
+// credentials belong to. Empty if it cannot be found out.
+type IdentityDescriber interface {
+	Identity(ctx context.Context) string
+}
+
 // Preflighter is implemented by providers that can check, without creating
 // anything, the things a launch depends on. `runlease doctor` runs them. Every
 // method makes read-only calls only.
 type Preflighter interface {
-	// CheckAccess makes one cheap call that proves the credentials work for
-	// the project or account this provider acts in.
+	// CheckAccess proves the credentials work, wherever the provider's region
+	// is, and then that the project or account can be read with them. The
+	// second failing is an error wrapping ErrProject or ErrServiceDisabled.
 	CheckAccess(ctx context.Context) error
 	// CheckRegion reports whether the provider's region or zone exists and
 	// may be used with these credentials.

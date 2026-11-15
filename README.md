@@ -138,7 +138,8 @@ launched from another computer, or left behind stopped with a disk that still bi
 runlease list             # tracked machines, then anything found in the cloud
 runlease down --leaked    # delete the stopped ones whose lease is over
 runlease list --local     # skip the cloud lookup
-runlease down --leaked --provider aws --region eu-north-1   # say where to look
+runlease down --leaked --provider aws --region eu-north-1   # say where to look: an AWS region
+runlease down --leaked --provider gcp --project my-project  # or a Google Cloud project, all zones
 ```
 
 `down --leaked` never deletes a running machine. It only removes machines that are stopped and
@@ -146,7 +147,12 @@ past their lease.
 
 Both look where this computer has launched before and in its saved default. With neither,
 `down --leaked` and `list --untracked` look in each cloud signed in on this computer, in its
-default region, and say so.
+default place. `down --leaked` always prints where it is looking first, by name: the project ID,
+or the region and account.
+
+It deletes without asking (`--yes`, or `--output json`) only in a place that was named: by the
+flags above, by a machine this computer tracks, or by the saved default. In a place it had to
+fill in, it lists what it found, deletes nothing, and prints the command that names the place.
 
 ### When something is not working
 

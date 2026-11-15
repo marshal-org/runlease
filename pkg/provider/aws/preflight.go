@@ -14,9 +14,11 @@ import (
 	"github.com/marshal-org/runlease/pkg/provider"
 )
 
-// CheckAccess asks STS who the caller is. AWS answers that for any valid
-// credentials, whatever their permissions and whatever the region allows, so
-// a failure here is about the sign-in and nothing else.
+// CheckAccess asks STS who the caller is, in a region every account has (see
+// identityRegion), not the one this provider launches in. AWS answers that
+// for any valid credentials, whatever their permissions, so a failure here is
+// about the sign-in and nothing else. A region the account has not enabled
+// fails CheckRegion instead.
 func (p *Provider) CheckAccess(ctx context.Context) error {
 	if p.sts == nil {
 		return nil

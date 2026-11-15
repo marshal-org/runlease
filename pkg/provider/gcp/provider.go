@@ -34,6 +34,10 @@ const DefaultImageFamily = "projects/debian-cloud/global/images/family/debian-12
 //
 // The manifest `region` field is treated as a GCP zone (e.g. "us-central1-a").
 type Provider struct {
+	// checkToken gets an access token from the application default
+	// credentials, to tell a sign-in that does not work from a project that
+	// cannot be read. Nil in tests.
+	checkToken    func(ctx context.Context) error
 	egressNetwork string // set by HasPrivateEgress: the network it checked
 	svc           *compute.Service
 	projectID     string
@@ -50,7 +54,7 @@ func New(ctx context.Context, zone, project string) (*Provider, error) {
 	if project == "" {
 		var err error
 		if project, err = resolveProjectID(ctx); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", provider.ErrNoProject, err)
 		}
 	}
 	svc, err := compute.NewService(ctx, option.WithScopes(compute.ComputeScope))
@@ -58,6 +62,7 @@ func New(ctx context.Context, zone, project string) (*Provider, error) {
 		return nil, fmt.Errorf("creating compute service: %w", err)
 	}
 	return &Provider{
+		checkToken:    adcToken,
 		svc:           svc,
 		projectID:     project,
 		zone:          zone,
@@ -68,6 +73,17 @@ func New(ctx context.Context, zone, project string) (*Provider, error) {
 
 // ProjectID is the GCP project this provider operates in.
 func (p *Provider) ProjectID() string { return p.projectID }
+
+// AccountName is the project ID.
+func (p *Provider) AccountName(context.Context) string { return p.projectID }
+
+// Identity is the email behind the application default credentials, looked
+// up for two seconds at most.
+func (p *Provider) Identity(ctx context.Context) string {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return adcIdentity(ctx)
+}
 
 func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) (*provider.InstanceHandle, error) {
 	name := generateInstanceName(spec.ManifestName)

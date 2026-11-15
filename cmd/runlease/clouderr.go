@@ -102,8 +102,7 @@ func regionFits(prov, region string) bool {
 // set up on this computer. It returns the provider and why, or "" and what it
 // found, so the caller can ask instead of guessing between two.
 func detectProvider() (prov, why string) {
-	gcp := hasGCPSetup()
-	aws := hasAWSSetup()
+	gcp, aws := cloudsSetUp()
 	switch {
 	case gcp && !aws:
 		return "gcp", "the only cloud signed in on this computer"

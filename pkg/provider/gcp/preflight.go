@@ -7,26 +7,70 @@ import (
 	"net/http"
 	"strings"
 
+	"golang.org/x/oauth2/google"
+	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 
 	"github.com/marshal-org/runlease/pkg/provider"
 )
 
-// CheckAccess reads the project. It is the cheapest call that needs working
-// credentials, a project that exists, and the Compute Engine API turned on.
+// CheckAccess gets an access token, which fails only if the sign-in does, and
+// then reads the project: the cheapest call that needs a project that exists,
+// permission to use it, and the Compute Engine API turned on.
 func (p *Provider) CheckAccess(ctx context.Context) error {
-	if _, err := p.svc.Projects.Get(p.projectID).Fields("name").Context(ctx).Do(); err != nil {
-		return fmt.Errorf("reading project %s: %w", p.projectID, err)
+	if p.checkToken != nil {
+		if err := p.checkToken(ctx); err != nil {
+			return fmt.Errorf("getting an access token: %w", err)
+		}
 	}
-	return nil
+	_, err := p.svc.Projects.Get(p.projectID).Fields("name").Context(ctx).Do()
+	var gerr *googleapi.Error
+	switch {
+	case err == nil:
+		return nil
+	case !errors.As(err, &gerr):
+		return fmt.Errorf("reading project %s: %w", p.projectID, err)
+	case apiDisabled(gerr):
+		return fmt.Errorf("%w for project %s: %w", provider.ErrServiceDisabled, p.projectID, err)
+	case gerr.Code == http.StatusNotFound || gerr.Code == http.StatusForbidden:
+		return fmt.Errorf("%w: project %s does not exist, or this sign-in may not use it: %w", provider.ErrProject, p.projectID, err)
+	}
+	return fmt.Errorf("reading project %s: %w", p.projectID, err)
+}
+
+// adcToken gets an access token from the application default credentials.
+func adcToken(ctx context.Context) error {
+	creds, err := google.FindDefaultCredentials(ctx, compute.ComputeScope)
+	if err != nil {
+		return err
+	}
+	_, err = creds.TokenSource.Token()
+	return err
+}
+
+// apiDisabled reports whether Google refused the call because the API is not
+// enabled for the project, which it also answers with a 403.
+func apiDisabled(gerr *googleapi.Error) bool {
+	for _, e := range gerr.Errors {
+		if e.Reason == "accessNotConfigured" {
+			return true
+		}
+	}
+	for _, d := range gerr.Details {
+		if m, ok := d.(map[string]any); ok && m["reason"] == "SERVICE_DISABLED" {
+			return true
+		}
+	}
+	return false
 }
 
 // CheckRegion reads the zone this provider launches in.
 func (p *Provider) CheckRegion(ctx context.Context) error {
-	if _, err := p.svc.Zones.Get(p.projectID, p.zone).Fields("name").Context(ctx).Do(); err != nil {
-		if isNotFound(err) || isBadRequest(err) {
-			return fmt.Errorf("%s is not a zone of Google Cloud that project %s can use (zones look like us-central1-a)", p.zone, p.projectID)
-		}
+	_, err := p.svc.Zones.Get(p.projectID, p.zone).Fields("name").Context(ctx).Do()
+	if isNotFound(err) {
+		return fmt.Errorf("%s is not a zone project %s can use (zones look like us-central1-a): %w", p.zone, p.projectID, err)
+	}
+	if err != nil {
 		return fmt.Errorf("reading zone %s: %w", p.zone, err)
 	}
 	return nil
@@ -84,9 +128,4 @@ func projectOfLink(link string) string {
 		}
 	}
 	return ""
-}
-
-func isBadRequest(err error) bool {
-	var gerr *googleapi.Error
-	return errors.As(err, &gerr) && gerr.Code == http.StatusBadRequest
 }

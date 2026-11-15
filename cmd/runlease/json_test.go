@@ -112,7 +112,7 @@ func TestDownLeaked_JSON(t *testing.T) {
 	}
 	var got leakedJSON
 	decode(t, stdout, &got)
-	if len(got.Scopes) != 1 || got.Scopes[0] != "gcp project proj" {
+	if len(got.Scopes) != 1 || got.Scopes[0] != "gcp project proj (all zones)" {
 		t.Errorf("scopes = %v", got.Scopes)
 	}
 	if len(got.Deleted) != 1 || got.Deleted[0].ID != "rl-leak-bbbbbb" || got.Deleted[0].Project != "proj" || got.Deleted[0].Provider != "gcp" {

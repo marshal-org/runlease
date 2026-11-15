@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	rlconfig "github.com/marshal-org/runlease/pkg/config"
 	"github.com/marshal-org/runlease/pkg/credential"
 	"github.com/marshal-org/runlease/pkg/provider"
 	"github.com/marshal-org/runlease/pkg/registry"
@@ -19,13 +20,15 @@ var (
 	downLeaked   bool
 	downProvider string
 	downRegion   string
+	downProject  string
 )
 
 func init() {
 	downCmd.Flags().BoolVarP(&downYes, "yes", "y", false, "skip confirmation prompt")
 	downCmd.Flags().BoolVar(&downLeaked, "leaked", false, "delete runlease machines found in the cloud that this computer does not track, are stopped, and are past their lease (their disks still bill). Never deletes a running machine")
 	downCmd.Flags().StringVarP(&downProvider, "provider", "p", "", "with --leaked: the cloud to look in, gcp or aws (default: where this computer has launched before, its saved default, or every cloud signed in here)")
-	downCmd.Flags().StringVarP(&downRegion, "region", "r", "", "with --leaked: the AWS region to look in, or any zone of the Google Cloud project (default: that cloud's default)")
+	downCmd.Flags().StringVarP(&downRegion, "region", "r", "", "with --leaked: the AWS region to look in. On Google Cloud a zone only says which cloud: every zone of the project is searched")
+	downCmd.Flags().StringVar(&downProject, "project", "", "with --leaked: the Google Cloud project to look in, all zones (default: the one your Google Cloud setup names)")
 	rootCmd.AddCommand(downCmd)
 }
 
@@ -64,8 +67,8 @@ func runDown(cmd *cobra.Command, args []string) error {
 		}
 		return runDownLeaked(cmd, reg)
 	}
-	if downProvider != "" || downRegion != "" {
-		return fmt.Errorf("--provider and --region go with --leaked: a tracked machine is found by its name")
+	if downProvider != "" || downRegion != "" || downProject != "" {
+		return fmt.Errorf("--provider, --region and --project go with --leaked: a tracked machine is found by its name")
 	}
 	if jsonOutput() && len(args) == 0 && len(reg.List()) != 1 {
 		return fmt.Errorf("--output json needs the name of the instance to terminate: this computer tracks %d", len(reg.List()))
@@ -171,17 +174,24 @@ func leakedRow(u untrackedInstance) leakedMachine {
 func runDownLeaked(cmd *cobra.Command, reg *registry.Registry) error {
 	out := cmd.OutOrStdout()
 	ctx := cmd.Context()
-	scopes, why, err := resolveScopes(reg, downProvider, downRegion, true)
+	// A config file that cannot be read is not an empty one: the saved default
+	// may be the place the user means.
+	cfg, err := rlconfig.Load(defaultConfigPath())
+	if err != nil {
+		return fmt.Errorf("%w\nRepair or remove %s, or say where to look with --provider, --region and --project after that", err, defaultConfigPath())
+	}
+	plan, err := resolveScopes(reg, cfg, scopeFlags{downProvider, downRegion, downProject}, true)
 	if err != nil {
 		return err
 	}
-	if len(scopes) == 0 {
+	if len(plan.scopes) == 0 {
 		return errNowhereToLook
 	}
-	if why != "" {
-		// Nobody chose these places, so say which they are.
-		fmt.Fprintf(cmd.ErrOrStderr(), "Looking in %s (%s). Choose with --provider and --region.\n", strings.Join(scopeNames(scopes), " and "), why)
-	}
+	// Before anything is listed or deleted: where, by its real name.
+	plan = locateScopes(ctx, plan)
+	scopes := plan.scopes
+	announceScopes(cmd.ErrOrStderr(), plan)
+
 	found, notes := findUntracked(ctx, reg, scopes)
 	var doomed []untrackedInstance
 	for _, u := range found {
@@ -219,6 +229,28 @@ func runDownLeaked(cmd *cobra.Command, reg *registry.Registry) error {
 		for _, u := range doomed {
 			fmt.Fprintf(out, "  %s  name %s, by %s  %s %s  %s\n", u.ID, orDash(u.Name), orDash(u.CreatedBy), u.Provider, u.Region, explain(u))
 		}
+	}
+	// Deleting needs a place somebody named or a person who has seen it. With
+	// --yes (and so with JSON output) nobody is asked, so a place that was
+	// filled in is listed and left alone.
+	if plan.unnamed != "" && (downYes || jsonOutput()) {
+		const reason = "not deleted: the place was not named, and nobody was asked"
+		for _, u := range doomed {
+			row := leakedRow(u)
+			row.Reason = reason
+			result.Kept = append(result.Kept, row)
+		}
+		if jsonOutput() {
+			if err := writeJSON(out, result); err != nil {
+				return err
+			}
+		}
+		var cmds []string
+		for _, s := range scopes {
+			cmds = append(cmds, "  runlease down --leaked --yes "+s.flags())
+		}
+		return fmt.Errorf("nothing was deleted: %s, and --yes does not confirm a place nobody named.\n"+
+			"Name the place to delete in (or run without --yes to be asked):\n%s", plan.unnamed, strings.Join(cmds, "\n"))
 	}
 	if !downYes && !confirm(cmd, "Delete them?") {
 		fmt.Fprintln(out, "Aborted.")

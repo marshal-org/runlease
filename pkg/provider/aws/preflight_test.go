@@ -65,4 +65,17 @@ func TestCheckRegion_keepsTheDenialText(t *testing.T) {
 	}
 }
 
+// Identity is asked in a region every account has, so a region that is not
+// enabled cannot make good credentials look bad.
+func TestIdentityRegion(t *testing.T) {
+	for region, want := range map[string]string{
+		"eu-north-1": "us-east-1", "me-central-1": "us-east-1", "us-east-1": "us-east-1",
+		"us-gov-east-1": "us-gov-west-1", "cn-northwest-1": "cn-north-1",
+	} {
+		if got := identityRegion(region); got != want {
+			t.Errorf("identityRegion(%s) = %s, want %s", region, got, want)
+		}
+	}
+}
+
 var _ provider.Preflighter = (*Provider)(nil)

@@ -188,6 +188,17 @@
   [data-step="5"] #b-vm { stroke: var(--lease); stroke-dasharray: 4 4; }
   [data-step="5"] #h5 { fill: var(--lease); }
 
+  /* use cases */
+  .uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 2px solid var(--ink); border-left: 1px solid var(--rule); }
+  .usecase { display: flex; flex-direction: column; min-width: 0; padding: 22px 22px 0; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); background: var(--sheet); }
+  .usecase .k { font-family: var(--mono); font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; color: var(--lease); font-weight: 600; }
+  .usecase h3 { font-size: 1.2rem; font-weight: 700; margin: 8px 0 8px; text-wrap: balance; }
+  .usecase p { color: var(--ink-2); font-size: .95rem; margin-bottom: 18px; }
+  .usecase pre { margin: auto -22px 0; padding: 14px 22px; background: var(--term-bg); color: var(--term-ink); font-family: var(--mono); font-size: .78rem; line-height: 1.7; overflow-x: auto; }
+  .usecase pre .c { color: var(--term-dim); }
+  .usecase pre .p { color: var(--lease); user-select: none; }
+  #security { border-top: 1px solid var(--rule); }
+
   /* can / cannot */
   .cc { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; border: 1px solid var(--rule); background: var(--sheet); }
   .cc > div { padding: 26px 28px; min-width: 0; }
@@ -298,6 +309,7 @@
     .unm { grid-template-columns: minmax(0, 1fr); }
     .unm-vm { border-left: 0; border-top: 1px solid var(--rule); }
     .claims { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .claim:nth-child(2) { border-right: 0; margin-right: 0; }
     .claim:nth-child(n+3) { border-top: 1px solid var(--rule); }
     .posture { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -308,7 +320,7 @@
   }
   @media (max-width: 560px) {
     body { font-size: 16px; }
-    .claims, .cc, .posture { grid-template-columns: minmax(0, 1fr); }
+    .claims, .cc, .posture, .uses { grid-template-columns: minmax(0, 1fr); }
     .plan + .plan { border-left: 0; border-top: 1px dashed var(--rule); }
     .claim { border-right: 0; margin-right: 0; border-top: 1px solid var(--rule); }
     .claim:first-child { border-top: 0; }
@@ -327,6 +339,7 @@
     <a class="mark" href="#top"><img src="logo.svg" alt="" width="28" height="28">runlease</a>
     <nav aria-label="Main">
       <ul>
+        <li><a href="#uses">Use cases</a></li>
         <li><a href="security.html">Security</a></li>
         <li><a href="how-it-works.html">How it works</a></li>
         <li><a href="relay.html">Relay</a></li>
@@ -397,6 +410,40 @@
       <div class="claim"><span class="k">Yours</span><h3>In your own cloud</h3><p>Machines run in your GCP or AWS account, in your network, under your IAM and your audit logs. No machine of yours ever lives in an account of ours.</p></div>
       <div class="claim"><span class="k">Self-managing</span><h3>Nothing to run</h3><p>No control plane and no scheduler. The lease logic is written into each machine at boot, and the machine deletes itself on time.</p></div>
     </div>
+  </div>
+</section>
+
+<section class="band" id="uses" aria-labelledby="uses-h">
+  <div class="wrap">
+    <div class="sec-hd">
+      <p class="eyebrow">What it is for</p>
+      <h2 id="uses-h">Give your agents cheap, safe machines to do their work.</h2>
+      <p>Anything an agent, a CI job or you would do on a real Linux box. Each one runs on a spot machine in your own cloud account, is reached over SSH end to end, and deletes itself when its lease ends.</p>
+    </div>
+    <div class="uses">
+      <div class="usecase"><span class="k">Coding agents</span><h3>A machine for every agent</h3><p>Each agent gets its own box to build, test and break things on. Your laptop, your keys and your other agents are not in the room.</p>
+<pre><span class="p">$</span> runlease up -n agent-7 --ttl 2h -d
+<span class="p">$</span> runlease exec agent-7 -- make test</pre></div>
+      <div class="usecase"><span class="k">Untrusted code</span><h3>Run what you would not run on your laptop</h3><p>Generated code, an unfamiliar repository, an install script from the internet. It runs on a machine that holds none of your SSH keys and is gone within the hour.</p>
+<pre><span class="p">$</span> runlease up -n sandbox --ttl 1h -d
+<span class="p">$</span> runlease push sandbox ./run.sh /tmp/run.sh
+<span class="p">$</span> runlease exec sandbox -- bash /tmp/run.sh</pre></div>
+      <div class="usecase"><span class="k">Heavy jobs</span><h3>Borrow a big machine for one build</h3><p>A full test suite, a large compile, a data crunch. Rent sixteen cores at spot prices for the twenty minutes you need them, and pay for nothing after.</p>
+<pre><span class="p">$</span> runlease up -n build -s compute.2xlarge -d
+<span class="p">$</span> runlease exec build -- make -j16 test</pre></div>
+      <div class="usecase"><span class="k">Many at once</span><h3>Fan out, then let them all end</h3><p>One machine per test shard or per task. There is no cleanup step to write, because every machine carries its own deadline. The free relay allows two at a time; on your own relay you set the limit.</p>
+<pre><span class="p">$</span> for i in 1 2; do
+    runlease up -n shard-$i --ttl 1h -d
+  done
+<span class="p">$</span> runlease list</pre></div>
+      <div class="usecase"><span class="k">GPU</span><h3>A GPU for an afternoon</h3><p>One spot GPU for an evaluation or a fine-tune, on a lease, so it cannot be left running overnight by mistake.</p>
+<pre><span class="p">$</span> runlease up -p gcp -s compute.gpu --ttl 3h
+<span class="p">$</span> runlease snooze 1h   <span class="c"># need longer</span></pre></div>
+      <div class="usecase"><span class="k">Previews</span><h3>Show a branch running</h3><p>Run the app on the machine and open it on your own localhost. It is reached through the tunnel, not through an open port.</p>
+<pre><span class="p">$</span> runlease forward demo -L 3000:localhost:3000
+<span class="c"># now open http://localhost:3000</span></pre></div>
+    </div>
+    <p class="cc-note">Starter files for these: <a href="install.html#manifests">example manifests</a>.</p>
   </div>
 </section>
 

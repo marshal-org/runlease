@@ -65,4 +65,5 @@ opened on the machine's network.
 
 - The free public relay allows two machines at once per person. `runlease whoami` shows the count.
 - A spot machine can be taken back by the cloud at any time. Keep results off it: pull them as you go.
-- `runlease list` is a local cache. `runlease sync` refreshes it from the cloud.
+- `runlease list` shows the machines this computer tracks, from a local record, plus any untracked
+  ones it finds in the cloud. The state of tracked machines is cached: `runlease sync` refreshes it.

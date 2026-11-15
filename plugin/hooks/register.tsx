@@ -106,7 +106,9 @@ const bandKey = (machine: Machine) => `${machine.name}@${machine.expiresAt}`
 /** Reads the tracked machines and redraws everything that shows them. */
 async function refresh($: EngineInterface): Promise<Machine[]> {
   const at = await $.clock.now()
-  let list: Machine[] = []
+  // One failed read must not make running machines vanish from view: the last
+  // good list stays until a read succeeds.
+  let list = await read($, machines)
   try {
     const ran = await $.process.run(
       ['runlease', 'list', '--local', '--output', 'json'],
@@ -114,13 +116,15 @@ async function refresh($: EngineInterface): Promise<Machine[]> {
     )
     if (ran.exitCode === 0) {
       list = parseList(ran.stdout)
+      await update($, machines, () => list)
     }
     await update($, isInstalled, () => true)
-  } catch {
-    // The command could not start: not installed, or not on the PATH.
-    await update($, isInstalled, () => false)
+  } catch (error) {
+    // Only "could not start" means not installed; a timeout does not.
+    if (/ENOENT|not found|no such file/i.test(String(error))) {
+      await update($, isInstalled, () => false)
+    }
   }
-  await update($, machines, () => list)
   await update($, now, () => at)
   $.ui.status(statusLine(list, at))
   return list

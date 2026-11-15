@@ -18,4 +18,8 @@
 - [ ] No host key is trusted on first use
 - [ ] Nothing secret is logged
 
+## Contributor agreement
+
+- [ ] I am listed in `CONTRIBUTORS.md`, or this pull request adds my line (see `CLA.md`)
+
 ## Notes for the reviewer

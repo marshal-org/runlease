@@ -60,7 +60,9 @@ func runConnect(cmd *cobra.Command, args []string) error {
 			// Slot missing — relay restarted or first connect after a long gap.
 			fmt.Fprintf(out, "⚠️  Relay slot missing (relay may have restarted) — re-registering...\n")
 			if rerr := registerRelayToken(cmd.Context(), entry.RelayAddr, entry.RelayToken); rerr != nil {
-				return fmt.Errorf("relay: %w", err)
+				// Report why the slot could not be opened again (signed out, at
+				// the tier limit), not the "unauthorized" that led here.
+				return fmt.Errorf("relay: re-registering the slot: %w", rerr)
 			}
 			return pollAndConnectViaRelay(cmd, entry.RelayAddr, entry.RelayToken,
 				entry.Handle.ManifestName, cred, forwards)

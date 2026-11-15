@@ -79,8 +79,9 @@ func (h InstanceHandle) ProjectUnknown() bool {
 // EgressChecker is implemented by providers that can tell, before anything is
 // created, whether an instance with no public IP would have a route out.
 type EgressChecker interface {
-	// HasPrivateEgress reports whether the network (and subnet, if given) has a
-	// NAT gateway for instances with no public IP. An error means the check
-	// could not be made, not that there is no NAT.
+	// HasPrivateEgress reports whether the subnet (or, with none given, the
+	// one the provider would pick) has a NAT gateway for instances with no
+	// public IP. network is GCP only. An error means the check could not be
+	// made, not that there is no NAT.
 	HasPrivateEgress(ctx context.Context, network, subnet string) (bool, error)
 }

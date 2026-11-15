@@ -63,6 +63,11 @@ func runSync(cmd *cobra.Command, _ []string) error {
 			if err := credential.Delete(e.CredDir, string(e.Handle.ID)); err != nil {
 				fmt.Fprintf(out, "%-22s  warning: could not delete credentials: %v\n", name, err)
 			}
+			// The token leaves with the registry entry, so this is the last
+			// chance to give the relay slot back. Best effort, as in 'down'.
+			if e.RelayAddr != "" && e.RelayToken != "" {
+				_ = releaseRelaySlot(ctx, e.RelayAddr, e.RelayToken)
+			}
 			if err := reg.Remove(name); err != nil {
 				fmt.Fprintf(out, "%-22s  error removing from registry: %v\n", name, err)
 				continue

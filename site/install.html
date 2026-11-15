@@ -93,7 +93,7 @@
 <span class="p">$</span> runlease exec NAME -- uname -a <span class="c"># run something on it</span>
 <span class="p">$</span> runlease down NAME --yes       <span class="c"># or let the lease delete it</span></pre>
 
-<div class="note warn"><p><b>Your subnet needs a way out.</b> A machine launched through a relay gets no public address, so it reaches the relay through your subnet's NAT gateway. On Google Cloud, <code>runlease up</code> checks for Cloud NAT and tells you before it creates anything. If you have none, add <code>--public-ip</code>: the address carries outbound traffic only, and SSH still listens on localhost.</p></div>
+<div class="note warn"><p><b>Your subnet needs a way out.</b> A machine launched through a relay gets no public address, so it reaches the relay through your subnet's NAT gateway. <code>runlease up</code> checks for one and tells you before it creates anything. If you have none, add <code>--public-ip</code>: the address carries outbound traffic only, and SSH still listens on localhost.</p></div>
 
 <div class="note"><p><b>The machine is yours.</b> It runs in your cloud account, on your bill. The relay only connects you to it. <a href="relay.html">What the public relay allows, and how to run your own</a>.</p></div>
 

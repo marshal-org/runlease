@@ -9,6 +9,11 @@
 #   E2E_GCP_PROJECT   project to launch in (a dedicated, empty one)
 #   E2E_GCP_ZONE      e.g. us-central1-a
 #   E2E_RELAY_ADDR    e.g. wss://relay.example.com
+#
+# Optional:
+#   E2E_PUBLIC_IP     "true" if the project's network has no Cloud NAT. A
+#                     relay-mode VM gets no public IP by default, and 'up'
+#                     refuses to launch one that could not reach the relay.
 set -euo pipefail
 
 : "${E2E_GCP_PROJECT:?}" "${E2E_GCP_ZONE:?}" "${E2E_RELAY_ADDR:?}"
@@ -53,6 +58,7 @@ trap cleanup EXIT
   echo "  selfTermination: true"
   echo "relay:"
   echo "  addr: $E2E_RELAY_ADDR"
+  if [ "${E2E_PUBLIC_IP:-}" = "true" ]; then echo "publicIp: true"; fi
   echo "tags:"
   echo "  e2e-run: $name"
 } > "$work/manifest.yaml"

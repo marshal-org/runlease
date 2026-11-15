@@ -17,7 +17,7 @@ import (
 // instance, a proxy, a VPN) reports false; `publicIp: false` in the manifest
 // skips the check for those.
 func (p *Provider) HasPrivateEgress(ctx context.Context, network, subnet string) (bool, error) {
-	project, region, subnetName := p.subnetLocation(subnet)
+	project, region, subnetName := p.subnetLocation(network, subnet)
 
 	if subnet != "" {
 		sn, err := p.svc.Subnetworks.Get(project, region, subnetName).Context(ctx).Do()
@@ -40,11 +40,15 @@ func (p *Provider) HasPrivateEgress(ctx context.Context, network, subnet string)
 
 // subnetLocation works out where the subnetwork lives. A bare name is in this
 // provider's project and the region of its zone; a self-link (as used for a
-// Shared VPC) names its own project and region. An empty subnet means the
-// auto-mode "default" network, whose subnetwork in every region is "default".
-func (p *Provider) subnetLocation(subnet string) (project, region, name string) {
+// Shared VPC) names its own project and region. An empty subnet means an
+// auto-mode network, whose subnetwork in every region carries the network's
+// own name: "default" for the default network.
+func (p *Provider) subnetLocation(network, subnet string) (project, region, name string) {
 	project, region, name = p.projectID, regionOfZone(p.zone), "default"
 	if subnet == "" {
+		if network != "" {
+			name = lastSegment(network)
+		}
 		return
 	}
 	parts := strings.Split(subnet, "/")

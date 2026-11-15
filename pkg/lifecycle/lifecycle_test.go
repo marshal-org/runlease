@@ -266,3 +266,29 @@ func TestReconcile_recordedProjectTerminateNotFoundRemovesEntry(t *testing.T) {
 		t.Error("not found in the recorded project means gone: entry should be removed")
 	}
 }
+
+// The entry carries the relay token, so the hook has to run while the entry is
+// still in the registry: afterwards nothing could release the slot.
+func TestCleanup_callsOnCleanupBeforeRemoving(t *testing.T) {
+	reg := setupRegistry(t, entry(t, "worker", "i-dead", nil))
+	mgr := managerWith(reg, newMock(provider.StatusTerminated))
+
+	var seen string
+	stillRegistered := false
+	mgr.OnCleanup = func(e *registry.Entry) {
+		seen = e.Handle.ManifestName
+		_, err := reg.Get("worker")
+		stillRegistered = err == nil
+	}
+	reconcile(mgr)
+
+	if seen != "worker" {
+		t.Fatalf("OnCleanup saw %q, want worker", seen)
+	}
+	if !stillRegistered {
+		t.Error("OnCleanup ran after the entry was removed")
+	}
+	if _, err := reg.Get("worker"); err == nil {
+		t.Error("entry was not removed after cleanup")
+	}
+}

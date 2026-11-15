@@ -3,11 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -24,29 +25,50 @@ import (
 // attach tail-loop watches for it.
 const setupDoneMarker = "__RUNLEASE_SETUP_DONE__"
 
+// setupFailedMarker is written instead when a setup step exits non-zero.
+const setupFailedMarker = "__RUNLEASE_SETUP_FAILED__"
+
+var errSetupFailed = errors.New("a setup step failed")
+
 // runAttach drives the --attach happy path after the instance is provisioned:
 // wait for SSH, tail the setup log to completion, apply manifest.forwards,
 // then block until Ctrl+C.
-func runAttach(cmd *cobra.Command, m *manifest.Manifest, running *provider.InstanceHandle, cred *credential.EphemeralCredential, relayToken string) error {
+func runAttach(cmd *cobra.Command, m *manifest.Manifest, running *provider.InstanceHandle, cred *credential.EphemeralCredential, relayToken string, bootFailure func(context.Context) string) error {
 	ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	out := cmd.OutOrStdout()
 	fmt.Fprintln(out, "\n⏳ Attaching: waiting for SSH tunnel...")
 
-	conn, addr, err := waitForTunnel(ctx, m, running, relayToken)
-	if err != nil {
-		return err
-	}
-	client, err := newSSHClient(conn, addr, cred)
-	if err != nil {
-		return fmt.Errorf("ssh: %w", err)
+	var client *cryptossh.Client
+	for {
+		conn, addr, err := waitForTunnel(ctx, out, m, running, relayToken, bootFailure)
+		if err != nil {
+			return err
+		}
+		client, err = newSSHClient(conn, addr, cred)
+		if err == nil {
+			break
+		}
+		// On a direct connection sshd answers before the boot script has put
+		// our host key in place. That is not a failure: wait and try again.
+		if m.Relay.Addr != "" || !strings.Contains(err.Error(), "host key mismatch") {
+			return fmt.Errorf("ssh: %w", err)
+		}
+		fmt.Fprintf(out, "🔄 sshd up, startup script still running — retrying in %s...\n", sshPollInterval)
+		if err := sleepCtx(ctx, sshPollInterval); err != nil {
+			return err
+		}
 	}
 	defer client.Close()
 
 	if len(m.Setup) > 0 {
 		fmt.Fprintln(out, "📜 Streaming setup logs...")
-		if err := tailSetup(ctx, client, out); err != nil && ctx.Err() == nil {
+		err := tailSetup(ctx, client, out)
+		if errors.Is(err, errSetupFailed) {
+			return fmt.Errorf("%w. The log is above, and on the machine in /var/log/runlease-setup.log", err)
+		}
+		if err != nil && ctx.Err() == nil {
 			fmt.Fprintf(out, "⚠️  setup tail ended: %v\n", err)
 		}
 	}
@@ -62,29 +84,18 @@ func runAttach(cmd *cobra.Command, m *manifest.Manifest, running *provider.Insta
 
 // waitForTunnel polls until we can open an SSH connection (direct or via relay)
 // and returns the underlying net.Conn. Cadence mirrors pollAndConnect*.
-func waitForTunnel(ctx context.Context, m *manifest.Manifest, running *provider.InstanceHandle, relayToken string) (net.Conn, string, error) {
+func waitForTunnel(ctx context.Context, out io.Writer, m *manifest.Manifest, running *provider.InstanceHandle, relayToken string, bootFailure func(context.Context) string) (net.Conn, string, error) {
 	if m.Relay.Addr != "" {
-		readyURL := relayHTTPBase(m.Relay.Addr) + "/ready"
-		for {
-			req, err := http.NewRequestWithContext(ctx, "GET", readyURL, nil)
-			if err != nil {
-				return nil, "", fmt.Errorf("building ready request: %w", err)
-			}
-			req.Header.Set("X-Relay-Token", relayToken)
-			resp, err := http.DefaultClient.Do(req)
-			if err == nil {
-				ready := resp.StatusCode == http.StatusOK
-				resp.Body.Close()
-				if ready {
-					if conn, derr := dialRelay(m.Relay.Addr, relayToken); derr == nil {
-						return conn, m.Relay.Addr, nil
-					}
-				}
-			}
-			if err := sleepCtx(ctx, sshPollInterval); err != nil {
-				return nil, "", err
-			}
+		if err := waitForAgent(ctx, out, agentWait{
+			relayAddr: m.Relay.Addr, token: relayToken, name: m.Name, timeout: upTimeout, bootFailure: bootFailure,
+		}); err != nil {
+			return nil, "", err
 		}
+		conn, err := dialRelay(m.Relay.Addr, relayToken)
+		if err != nil {
+			return nil, "", fmt.Errorf("relay: %w", err)
+		}
+		return conn, m.Relay.Addr, nil
 	}
 	if running.PublicIP == "" {
 		return nil, "", fmt.Errorf("instance has no public IP and no relay configured")
@@ -136,9 +147,12 @@ func tailSetup(ctx context.Context, client *cryptossh.Client, out io.Writer) err
 	// markerCh is signalled the moment the markerWriter sees the marker. Buffer
 	// of 1 so the writer never blocks even if we're not yet selecting on it.
 	markerCh := make(chan struct{}, 1)
+	failedCh := make(chan struct{}, 1)
 	copyDone := make(chan error, 1)
 	go func() {
-		w := &markerWriter{out: out, marker: []byte(setupDoneMarker), signal: markerCh}
+		// Two writers in a row: each watches the stream for its own marker.
+		done := &markerWriter{out: out, marker: []byte(setupDoneMarker), signal: markerCh}
+		w := &markerWriter{out: done, marker: []byte(setupFailedMarker), signal: failedCh}
 		_, err := io.Copy(w, stdout)
 		copyDone <- err
 	}()
@@ -158,6 +172,9 @@ func tailSetup(ctx context.Context, client *cryptossh.Client, out io.Writer) err
 	case <-markerCh:
 		fmt.Fprintln(out, "✅ setup completed.")
 		return nil
+	case <-failedCh:
+		// Without this the tail would wait for a done marker that never comes.
+		return errSetupFailed
 	case err := <-copyDone:
 		// Stream ended (sshd closed our channel, network drop, etc.) before we
 		// saw the marker. Surface a useful error rather than blocking forever.

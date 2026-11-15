@@ -152,9 +152,9 @@ func openTransferClient(cmd *cobra.Command, name string) (*sftp.Client, func(), 
 	var conn net.Conn
 	var addr string
 	if entry.RelayAddr != "" {
-		conn, err = dialRelay(entry.RelayAddr, entry.RelayToken)
+		conn, err = openRelay(cmd.Context(), cmd.ErrOrStderr(), entry)
 		if err != nil {
-			return nil, nil, fmt.Errorf("relay: %w", err)
+			return nil, nil, err
 		}
 		addr = entry.RelayAddr
 	} else if entry.Handle.PublicIP != "" {

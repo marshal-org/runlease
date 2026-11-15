@@ -22,6 +22,13 @@ if [ -e /var/lib/runlease/booted ]; then
 fi
 touch /var/lib/runlease/booted
 
+# ── failure signal ───────────────────────────────────────────────────────────
+# If this script stops early, say so on the serial console, with the stage it
+# was in. Nothing else can: the agent may not be up, so the CLI would only see
+# a machine that never connects. 'runlease up' reads the console for this line.
+RUNLEASE_STAGE=start
+trap 'rc=$?; if [ "$rc" -ne 0 ]; then echo "RUNLEASE_BOOT_FAILED stage=$RUNLEASE_STAGE exit=$rc" | tee /dev/console >&2 || true; fi' EXIT
+
 # ── terminate script ─────────────────────────────────────────────────────────
 # Always installed — it's a small convenience tool, not a policy. The
 # reclaim.selfTermination field only controls whether the systemd-run timer
@@ -55,6 +62,7 @@ TERM_EOF
 {{- end }}
 chmod +x /usr/local/bin/runlease-terminate
 
+RUNLEASE_STAGE=lease
 # ── lease timer ──────────────────────────────────────────────────────────────
 # The lease is a deadline stored on disk (epoch seconds). runlease-lease-arm
 # turns it into a systemd timer, and runlease-lease.service runs that at every
@@ -118,6 +126,7 @@ sync /var/lib/runlease/lease-deadline 2>/dev/null || sync
 /usr/local/bin/runlease-lease-arm
 {{- end }}
 
+RUNLEASE_STAGE=user
 # ── runlease-agent user ──────────────────────────────────────────────────────
 useradd -m -s /bin/bash runlease-agent
 mkdir -p /home/runlease-agent/.ssh
@@ -139,6 +148,7 @@ chmod 644 /etc/ssh/ssh_host_ed25519_key.pub
 # Remove auto-generated host keys so sshd only offers our ed25519 key.
 rm -f /etc/ssh/ssh_host_rsa_key* /etc/ssh/ssh_host_ecdsa_key* /etc/ssh/ssh_host_dsa_key*
 
+RUNLEASE_STAGE=sshd
 # ── sshd hardening ───────────────────────────────────────────────────────────
 # sshd keeps the FIRST value it reads for a keyword, so this block goes at the
 # top of sshd_config: ahead of the image's own settings and of any Include of
@@ -218,18 +228,23 @@ chmod 440 /etc/sudoers.d/runlease-agent-full
 {{- if .RelayAddr }}
 
 # ── runlease relay agent ──────────────────────────────────────────────────────
-curl -fsSL --retry 3 '{{ .RelayAgentURL }}' -o /usr/local/bin/runlease-agent
+RUNLEASE_STAGE=agent-download
+# A bounded connect: with no route out this fails in about a minute and a half,
+# and the failure line reaches the console while 'runlease up' is still waiting.
+curl -fsSL --connect-timeout 20 --retry 3 '{{ .RelayAgentURL }}' -o /usr/local/bin/runlease-agent
 {{- if .AgentSHA256 }}
 # The agent is fetched from the relay, which is not trusted. Check it against
 # the digest the CLI was built with before it is ever executed. On a mismatch
 # the binary is removed and bootstrap stops; the self-termination timer armed
 # above still fires.
+RUNLEASE_STAGE=agent-verify
 if ! echo '{{ .AgentSHA256 }}  /usr/local/bin/runlease-agent' | sha256sum -c - >/dev/null 2>&1; then
   rm -f /usr/local/bin/runlease-agent
   echo 'runlease: agent binary from the relay does not match the expected SHA-256, refusing to run it' >&2
   exit 1
 fi
 {{- end }}
+RUNLEASE_STAGE=agent-start
 chmod 755 /usr/local/bin/runlease-agent
 
 cat > /etc/runlease-agent.env << 'ENVEOF'
@@ -272,12 +287,18 @@ SVCEOF
 systemctl daemon-reload
 systemctl enable --now runlease-agent
 {{- end }}
+
+# Everything above is now on disk, so a hard reset from here on finds a
+# complete machine rather than half-written config.
+sync
 {{- if .SetupSteps }}
 
 # ── user setup scripts (from manifest.setup) ─────────────────────────────────
 # Each step is written to /var/lib/runlease/setup/NN-name.sh and executed with
-# its output tee'd to /var/log/runlease-setup.log. The sentinel file
-# /run/runlease-setup-done is written on success so callers can poll for it.
+# its output tee'd to /var/log/runlease-setup.log. The log ends with one of two
+# markers, so 'up --attach' always learns how it went: __RUNLEASE_SETUP_DONE__
+# (and /run/runlease-setup-done), or __RUNLEASE_SETUP_FAILED__ and the step.
+RUNLEASE_STAGE=setup
 mkdir -p /var/lib/runlease/setup
 : > /var/log/runlease-setup.log
 chmod 644 /var/log/runlease-setup.log
@@ -288,7 +309,10 @@ chmod 644 /var/log/runlease-setup.log
 {{ $s.Run }}
 RUNLEASE_SETUP_EOF
   chmod +x /var/lib/runlease/setup/{{ printf "%02d" $i }}{{ if $s.Name }}-{{ $s.Name }}{{ end }}.sh
-  bash /var/lib/runlease/setup/{{ printf "%02d" $i }}{{ if $s.Name }}-{{ $s.Name }}{{ end }}.sh
+  if ! bash /var/lib/runlease/setup/{{ printf "%02d" $i }}{{ if $s.Name }}-{{ $s.Name }}{{ end }}.sh; then
+    echo "__RUNLEASE_SETUP_FAILED__ step {{ printf "%02d" $i }}{{ if $s.Name }} ({{ $s.Name }}){{ end }}"
+    exit 1
+  fi
 {{- end }}
   echo "__RUNLEASE_SETUP_DONE__"
   touch /run/runlease-setup-done

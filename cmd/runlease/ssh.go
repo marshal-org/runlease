@@ -54,9 +54,9 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	if entry.RelayAddr != "" && !sshDirect {
 		fmt.Fprintf(out, "Connecting to %s via relay (%s) as runlease-agent...\n",
 			entry.Handle.ManifestName, entry.RelayAddr)
-		conn, err := dialRelay(entry.RelayAddr, entry.RelayToken)
+		conn, err := openRelay(cmd.Context(), cmd.ErrOrStderr(), entry)
 		if err != nil {
-			return fmt.Errorf("relay: %w", err)
+			return err
 		}
 		return sshOverConn(conn, entry.RelayAddr, cred)
 	}

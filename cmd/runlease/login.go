@@ -78,7 +78,7 @@ func relayFromFlagOrConfig() (string, error) {
 		return "", err
 	}
 	if cfg.Relay.Addr == "" {
-		return "", errors.New("no relay given: pass --relay wss://..., or run 'runlease config set relay.addr wss://...'")
+		return "", fmt.Errorf("no relay set. For the free public relay, run:\n  runlease login --relay %s\nFor your own relay: runlease config set relay.addr wss://YOUR-RELAY", publicRelay)
 	}
 	return cfg.Relay.Addr, nil
 }
@@ -137,13 +137,27 @@ func fetchDiscovery(ctx context.Context, relayAddr string) (*relayDiscovery, err
 	return &d, nil
 }
 
+// publicRelay is the free relay run by the project. It is only ever a
+// suggestion, and the one default: 'runlease login' with no relay chosen.
+const publicRelay = "wss://connect.runlease.online"
+
 func runLogin(cmd *cobra.Command, _ []string) error {
-	relayAddr, err := relayFromFlagOrConfig()
+	ctx := cmd.Context()
+	out := cmd.OutOrStdout()
+	// First run: no relay named and none saved. Signing in can then only mean
+	// the public one. It is saved once sign-in has worked, not before, so a
+	// cancelled login leaves later launches as they were.
+	cfg, err := config.Load(defaultConfigPath())
 	if err != nil {
 		return err
 	}
-	ctx := cmd.Context()
-	out := cmd.OutOrStdout()
+	firstRun := loginRelay == "" && cfg.Relay.Addr == ""
+	relayAddr := publicRelay
+	if firstRun {
+		fmt.Fprintf(out, "No relay chosen yet: using the free public relay %s.\n", publicRelay)
+	} else if relayAddr, err = relayFromFlagOrConfig(); err != nil {
+		return err
+	}
 
 	d, err := fetchDiscovery(ctx, relayAddr)
 	if err != nil {
@@ -180,6 +194,13 @@ func runLogin(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	fmt.Fprintf(out, "\n✅ Signed in as %s\n", tok.Email)
+	if firstRun {
+		cfg.Relay.Addr = publicRelay
+		if err := config.Save(defaultConfigPath(), cfg); err != nil {
+			return fmt.Errorf("signed in, but could not save the relay: %w\nRun: runlease config set relay.addr %s", err, publicRelay)
+		}
+		fmt.Fprintf(out, "   Saved as your relay. Change it with: runlease config set relay.addr ADDRESS\n")
+	}
 	if d.DefaultTier != nil && d.DefaultTier.MaxSlots > 0 {
 		fmt.Fprintf(out, "   %s tier: up to %d machines at once, each for up to %s.\n",
 			d.DefaultTier.Name, d.DefaultTier.MaxSlots, d.DefaultTier.SlotTTL)

@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/aws/smithy-go"
 
 	"github.com/marshal-org/runlease/pkg/provider"
@@ -30,6 +31,7 @@ type ec2API interface {
 
 type Provider struct {
 	ec2          ec2API
+	sts          stsAPI // nil in tests: the account line is then left out
 	region       string
 	pollInterval time.Duration
 }
@@ -41,6 +43,7 @@ func New(ctx context.Context, region string) (*Provider, error) {
 	}
 	return &Provider{
 		ec2:          ec2.NewFromConfig(cfg),
+		sts:          sts.NewFromConfig(cfg),
 		region:       region,
 		pollInterval: 5 * time.Second,
 	}, nil

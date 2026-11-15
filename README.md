@@ -80,18 +80,23 @@ one against a relay you do not run yourself.
 
 ## Quick start
 
-You need credentials for one cloud: `gcloud auth application-default login` for GCP, or the usual
-AWS credential chain.
+You need credentials for one cloud: `gcloud auth application-default login` (and
+`gcloud config set project MY_PROJECT`) for GCP, or the usual AWS credential chain.
 
 ```bash
-runlease configure                      # provider, region, relay, default size and lease
-runlease up                             # launch with your defaults
-runlease exec <name> -- make test       # run something
-runlease forward <name> -L 8080:localhost:8080   # reach a port on the VM
-runlease push <name> ./build.tar /tmp/build.tar
-runlease snooze <name> 1h               # extend the lease
-runlease down <name>                    # delete it now
+runlease login                          # the free public relay: approve a short code in a browser
+runlease up -p gcp -n box -d            # or -p aws: a small spot machine, gone in two hours
+                                        # no NAT gateway on the subnet? it stops and says so: add --public-ip
+runlease exec box -- uname -a           # run something
+runlease connect box                    # or open a shell
+runlease forward box -L 8080:localhost:8080   # reach a port on the VM
+runlease push box ./build.tar /tmp/build.tar
+runlease snooze box 1h                  # extend the lease
+runlease down box --yes                 # delete it now
 ```
+
+Run `runlease configure` once to save a default cloud, region and size; after that a bare
+`runlease up` is enough.
 
 For anything repeatable, describe the machine in a manifest:
 
@@ -185,8 +190,7 @@ A relay is one small Go binary. You have three choices:
 - **Use the public one.** Free, with a Google sign-in and a limit of two machines at once:
 
   ```bash
-  runlease config set relay.addr wss://connect.runlease.online
-  runlease login
+  runlease login          # with no relay set, this picks the public one and saves it
   ```
 
   What it allows and what it sees: [the public relay](docs/relay-service.md).

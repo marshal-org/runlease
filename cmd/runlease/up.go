@@ -11,6 +11,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+
+	"golang.org/x/term"
 	"os/exec"
 	"os/signal"
 	"os/user"
@@ -126,8 +128,15 @@ func runUp(cmd *cobra.Command, _ []string) error {
 				if err != nil {
 					return err
 				}
+			} else if prov, why := detectProvider(); prov != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "☁  Using %s (%s). Choose with --provider, or save a default with: runlease configure\n", prov, why)
+				quickProvider = prov
+				m, err = buildQuickManifest()
+				if err != nil {
+					return err
+				}
 			} else {
-				return fmt.Errorf("provide --manifest/-m <file>, --provider/-p <aws|gcp>, or set a default with: runlease configure")
+				return fmt.Errorf("which cloud? %s\n  runlease up --provider gcp\n  runlease up --provider aws\nOr save a default with: runlease configure", why)
 			}
 		}
 	}
@@ -165,6 +174,10 @@ func runUp(cmd *cobra.Command, _ []string) error {
 	p, err := newProvider(ctx, provider.ProviderType(m.Provider), m.Region, "")
 	if err != nil {
 		return fmt.Errorf("initializing provider: %w", err)
+	}
+	// Say where this is about to happen, before anything is created.
+	if d, ok := p.(provider.AccountDescriber); ok {
+		fmt.Fprintf(cmd.OutOrStdout(), "☁  %s\n", d.DescribeAccount(ctx))
 	}
 	// One name, one machine. Launching over a name that is in use would leave
 	// the first machine running with nothing tracking it.
@@ -406,6 +419,13 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	if !detach && !attach && !term.IsTerminal(int(os.Stdin.Fd())) {
+		// A script or an agent launched this: there is no terminal to give a
+		// shell to. The machine is up, which is what was asked for, so this
+		// is --detach, not an error. --attach is left alone: it needs no shell.
+		fmt.Fprintf(cmd.ErrOrStderr(), "No terminal here, so no shell is opened (same as --detach). Run commands with: runlease exec %s -- COMMAND\n", m.Name)
+		detach = true
+	}
 	if detach {
 		return nil
 	}
@@ -546,7 +566,12 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 	}
 
 	region := quickRegion
-	if region == "" {
+	if region != "" && !regionFits(quickProvider, region) {
+		return nil, fmt.Errorf("%q does not fit %s: %s", region, quickProvider, regionExample(quickProvider))
+	}
+	// The saved default region belongs to the saved default provider. Launching
+	// on the other cloud with it would send an AWS call to a Google zone.
+	if region == "" && regionFits(quickProvider, cfg.Defaults.Region) {
 		region = cfg.Defaults.Region
 	}
 	if region == "" {
@@ -554,7 +579,11 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 		case "gcp":
 			region = "us-central1-a"
 		case "aws":
-			region = "us-east-1"
+			// The region the user's own AWS setup names, before a guess.
+			region = awsprovider.ConfiguredRegion(context.Background())
+			if region == "" {
+				region = "us-east-1"
+			}
 		default:
 			return nil, fmt.Errorf("unknown provider %q — supported: aws, gcp", quickProvider)
 		}
@@ -920,6 +949,7 @@ func resolveAgentSHA256(fromManifest, fromBuild string) (string, error) {
 // checkPrivateEgress stops a relay-mode launch that takes the default of no
 // public IP on a network with no NAT: the agent could not reach the relay, so
 // the machine would be unreachable and still billed until its lease ran out.
+// It never adds a public IP on its own: that is the user's choice to make.
 //
 // It only blocks when it is sure. A check that cannot be made (no permission to
 // list routers, a provider that has no check) prints a note and lets the launch
@@ -937,17 +967,30 @@ func checkPrivateEgress(ctx context.Context, errOut io.Writer, p provider.CloudP
 	checkCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	has, err := checker.HasPrivateEgress(checkCtx, m.GCP.Network, subnetForProvider(m))
+	if isSignInError(err) {
+		// Nothing after this can work either, so stop before a relay slot is
+		// taken and a launch is attempted.
+		return fmt.Errorf("checking the network: %w", err)
+	}
 	if err != nil {
 		fmt.Fprint(errOut, note)
 		fmt.Fprintf(errOut, "   (could not check for a NAT gateway: %v)\n", err)
 		return nil
 	}
 	if !has {
-		return fmt.Errorf("no NAT gateway found for this subnet in %s, and by default a relay-mode machine gets no public IP, so it could not reach the relay.\n"+
-			"Do one of:\n"+
-			"  - add a NAT gateway to the subnet (the machine then has no public address at all)\n"+
-			"  - set 'publicIp: true' in the manifest, or pass --public-ip (outbound only: SSH listens on localhost)\n"+
-			"  - set 'publicIp: false' if the network gets out some other way", m.Region)
+		natSteps := "Add a NAT gateway to the subnet."
+		if a, ok := p.(provider.EgressAdviser); ok {
+			natSteps = a.NATAdvice(m.GCP.Network, subnetForProvider(m))
+		}
+		return fmt.Errorf("this subnet in %s has no NAT gateway, so a machine with no public IP could not reach the relay. Nothing was created.\n\n"+
+			"Pick one:\n\n"+
+			"1. Re-run with --public-ip (or 'publicIp: true' in the manifest).\n"+
+			"   The address carries outbound traffic only: SSH still listens on localhost, so nothing on it\n"+
+			"   accepts connections. This is the quick way, and the one to use if you cannot change the network.\n\n"+
+			"2. Add a NAT gateway, then re-run as is. The machine then has no public address at all.\n%s\n\n"+
+			"3. If this network already gets out some other way (a proxy, a VPN, your own NAT machine),\n"+
+			"   set 'publicIp: false' in the manifest to skip this check",
+			m.Region, indentLines(natSteps, "   "))
 	}
 	return nil
 }
@@ -1032,4 +1075,17 @@ func abandonLaunch(cmd *cobra.Command, p provider.CloudProvider, h *provider.Ins
 // nothing about the user or the machine.
 func userAgent() string {
 	return fmt.Sprintf("runlease/%s (%s/%s)", version, runtime.GOOS, runtime.GOARCH)
+}
+
+// regionExample says how prov writes a region, for an error message.
+func regionExample(prov string) string {
+	if prov == "aws" {
+		return "AWS regions look like us-east-1"
+	}
+	return "Google Cloud zones look like us-central1-a"
+}
+
+// indentLines puts prefix in front of every line of s.
+func indentLines(s, prefix string) string {
+	return prefix + strings.ReplaceAll(s, "\n", "\n"+prefix)
 }

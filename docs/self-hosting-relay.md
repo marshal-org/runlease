@@ -154,7 +154,7 @@ The relay logs three events with the account's email: a machine registered (with
 CLI version), a slot released (with how long it lived), and a registration refused at a tier
 limit. It records nothing about what a machine does, because it cannot see it.
 
-The Terraform module can keep these in BigQuery for you with `usage_analytics = true`, and ships
+The Terraform module can keep these in BigQuery for you with its `usage` module, and ships
 queries for the usual questions. See [the module's README](../deploy/relay/gcp/README.md#usage-records).
 Anywhere else, they are ordinary lines on the relay's standard error.
 

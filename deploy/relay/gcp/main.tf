@@ -146,10 +146,11 @@ resource "google_compute_instance" "relay" {
   metadata = merge({
     enable-oslogin         = "TRUE"
     block-project-ssh-keys = "TRUE"
-    }, var.usage_analytics ? {
+    }, var.console_to_cloud_logging ? {
     # The image already copies the journal to the serial console. This asks
     # the platform to store that console output in Cloud Logging. No agent
-    # runs on the VM for it. See usage.tf.
+    # runs on the VM for it. The usage module reads the relay's records from
+    # there: see usage/.
     serial-port-logging-enable = "true"
   } : {})
 

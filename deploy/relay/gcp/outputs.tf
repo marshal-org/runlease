@@ -16,7 +16,7 @@ output "service_account" {
   value = google_service_account.relay.email
 }
 
-output "usage_dataset" {
-  description = "BigQuery dataset holding the usage records, when usage_analytics is on."
-  value       = var.usage_analytics ? "${var.project_id}.${google_bigquery_dataset.usage[0].dataset_id}" : null
+output "instance_id" {
+  description = "The VM's numeric ID. The usage module filters the log by it."
+  value       = google_compute_instance.relay.instance_id
 }

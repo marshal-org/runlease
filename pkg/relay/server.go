@@ -324,7 +324,7 @@ func (s *Server) handleRegister(conn net.Conn, token, bearer, client string) {
 
 	s.startCoordinator(ctx, token, sl)
 	writeMsg(conn, wireMsg{Status: "ok"}) //nolint:errcheck
-	// One of the usage records (see deploy/relay/gcp/usage.tf). It carries who,
+	// One of the usage records (see deploy/relay/gcp/usage). It carries who,
 	// which tier and which CLI build, and nothing about what the machine does.
 	s.log.Info("token registered", "token", shortTok(token), "owner", sl.owner, "tier", tierName, "client", client)
 }

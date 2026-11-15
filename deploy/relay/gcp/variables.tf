@@ -152,20 +152,8 @@ variable "labels" {
   default = {}
 }
 
-variable "usage_analytics" {
-  description = "Keep the relay's usage records (who registered a machine, on which tier, with which CLI version, and for how long) in a BigQuery dataset. Off by default: the records contain email addresses."
+variable "console_to_cloud_logging" {
+  description = "Store the VM's serial console output, which includes the relay's log, in Cloud Logging. Needed by the usage module (usage/). Off by default: the relay's log contains the email addresses of the people who use it."
   type        = bool
   default     = false
-}
-
-variable "usage_retention_days" {
-  description = "Days a usage record is kept in BigQuery before it is deleted. Say the same number in your privacy notice."
-  type        = number
-  default     = 90
-}
-
-variable "usage_dataset_location" {
-  description = "Where the BigQuery dataset lives."
-  type        = string
-  default     = "US"
 }

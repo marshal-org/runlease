@@ -28,6 +28,7 @@
 <tr><th>What</th><th>Why</th><th>Kept for</th></tr>
 <tr><td>Your Google account email address, when you sign in with <code>runlease login</code></td><td>To apply your tier's limits and to contact you about your use of the service</td><td>While you use the service, and up to 90 days in logs</td></tr>
 <tr><td>When you open and close a relay slot, and the first characters of its token</td><td>To enforce limits and investigate abuse</td><td>Up to 90 days</td></tr>
+<tr><td>The version of the command-line tool, and your operating system and processor type, each time you launch a machine</td><td>To know which versions are in use, so we can support them and retire old ones safely</td><td>Up to 90 days</td></tr>
 <tr><td>Network addresses that connect to the relay, and the amount of data carried</td><td>To operate and protect the service</td><td>Up to 90 days</td></tr>
 <tr><td>Standard web server logs for this website</td><td>To operate the site</td><td>As kept by the hosting provider</td></tr>
 </table></div>
@@ -37,7 +38,8 @@
 <li>Your SSH keys or cloud credentials. They never leave your machine.</li>
 <li>The contents of your sessions: commands, files and forwarded connections. They pass through the relay encrypted end to end between your machine and your VM.</li>
 <li>Anything from your Google account other than the email address. Sign-in requests the <code>openid</code> and <code>email</code> scopes only.</li>
-<li>Usage data from the command-line tool. It has no telemetry.</li>
+<li>Usage data from the command-line tool. It has no telemetry and contacts nothing except your own cloud and the relay you chose. The only thing it tells a relay about itself is its version, as listed above.</li>
+<li>Which cloud you use, what size of machine you launch, or what you run on it. The relay is never told.</li>
 </ul>
 
 <h2>Who we share it with</h2>

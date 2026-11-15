@@ -107,6 +107,7 @@ type slot struct {
 	idleTTL         time.Duration // release when the agent has been absent this long; 0 = never
 	cancel          context.CancelFunc
 	expiresAt       time.Time
+	registeredAt    time.Time // for the "lived" figure logged at release
 	instanceClaimed atomic.Bool
 	instanceReady   atomic.Bool // set true once the yamux session is established
 	instanceCh      chan net.Conn
@@ -174,12 +175,14 @@ func (s *Server) handleUpgrade(w http.ResponseWriter, r *http.Request) {
 	// not accessible after the WebSocket handshake completes.
 	bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 
+	client := clientLabel(r.UserAgent())
+
 	ws, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		s.log.Warn("websocket upgrade failed", "err", err)
 		return
 	}
-	go s.dispatch(newWSConn(ws), bearer)
+	go s.dispatch(newWSConn(ws), bearer, client)
 }
 
 func newWSConn(ws *websocket.Conn) net.Conn {
@@ -217,7 +220,27 @@ type wireMsg struct {
 	Message string `json:"message,omitempty"`
 }
 
-func (s *Server) dispatch(conn net.Conn, bearer string) {
+// clientLabel reduces a User-Agent header to something safe to put in a log
+// line: the CLI's own "runlease/<version> (<os>/<arch>)", cut to a sane length
+// and to plain characters. Anything else is recorded as "other", so a browser
+// or a scanner cannot write arbitrary text into the usage records.
+func clientLabel(ua string) string {
+	if !strings.HasPrefix(ua, "runlease/") {
+		return "other"
+	}
+	if len(ua) > 64 {
+		ua = ua[:64]
+	}
+	for _, c := range ua {
+		ok := c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("/.-+_ ()", c)
+		if !ok {
+			return "other"
+		}
+	}
+	return ua
+}
+
+func (s *Server) dispatch(conn net.Conn, bearer, client string) {
 	conn.SetDeadline(time.Now().Add(handshakeTimeout)) //nolint:errcheck
 	hs, err := readMsg(conn)
 	conn.SetDeadline(time.Time{}) //nolint:errcheck
@@ -235,7 +258,7 @@ func (s *Server) dispatch(conn net.Conn, bearer string) {
 
 	switch hs.Role {
 	case "register":
-		s.handleRegister(conn, hs.Token, bearer)
+		s.handleRegister(conn, hs.Token, bearer, client)
 	case "release":
 		s.handleRelease(conn, hs.Token)
 	case "instance":
@@ -248,7 +271,7 @@ func (s *Server) dispatch(conn net.Conn, bearer string) {
 	}
 }
 
-func (s *Server) handleRegister(conn net.Conn, token, bearer string) {
+func (s *Server) handleRegister(conn net.Conn, token, bearer, client string) {
 	defer conn.Close()
 
 	id, err := s.cfg.Auth.identify(context.Background(), bearer)
@@ -275,7 +298,7 @@ func (s *Server) handleRegister(conn net.Conn, token, bearer string) {
 	// there is nobody to count against, and only the global cap holds.
 	if id.Email != "" && tier.MaxSlots > 0 && s.owned[id.Email] >= tier.MaxSlots {
 		s.mu.Unlock()
-		s.log.Info("register rejected: identity at tier limit", "owner", id.Email, "tier", tierName, "max_slots", tier.MaxSlots)
+		s.log.Info("register rejected: identity at tier limit", "owner", id.Email, "tier", tierName, "max_slots", tier.MaxSlots, "client", client)
 		writeMsg(conn, wireMsg{Status: "limit", Message: fmt.Sprintf( //nolint:errcheck
 			"the %q tier allows %d machines at once and you have %d. Run 'runlease down' on one you no longer need, or wait for it to expire",
 			tierName, tier.MaxSlots, tier.MaxSlots)})
@@ -283,14 +306,15 @@ func (s *Server) handleRegister(conn net.Conn, token, bearer string) {
 	}
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(tier.slotTTL()))
 	sl := &slot{
-		owner:      id.Email,
-		tier:       tierName,
-		idleTTL:    time.Duration(tier.IdleTTL),
-		cancel:     cancel,
-		expiresAt:  time.Now().Add(tier.slotTTL()),
-		instanceCh: make(chan net.Conn, 1),
-		clientCh:   make(chan net.Conn, 1),
-		done:       make(chan struct{}),
+		owner:        id.Email,
+		tier:         tierName,
+		idleTTL:      time.Duration(tier.IdleTTL),
+		cancel:       cancel,
+		expiresAt:    time.Now().Add(tier.slotTTL()),
+		registeredAt: time.Now(),
+		instanceCh:   make(chan net.Conn, 1),
+		clientCh:     make(chan net.Conn, 1),
+		done:         make(chan struct{}),
 	}
 	s.slots[token] = sl
 	if sl.owner != "" {
@@ -300,7 +324,9 @@ func (s *Server) handleRegister(conn net.Conn, token, bearer string) {
 
 	s.startCoordinator(ctx, token, sl)
 	writeMsg(conn, wireMsg{Status: "ok"}) //nolint:errcheck
-	s.log.Info("token registered", "token", shortTok(token), "owner", sl.owner, "tier", tierName)
+	// One of the usage records (see deploy/relay/gcp/usage.tf). It carries who,
+	// which tier and which CLI build, and nothing about what the machine does.
+	s.log.Info("token registered", "token", shortTok(token), "owner", sl.owner, "tier", tierName, "client", client)
 }
 
 // handleRelease frees a slot before it expires, so its owner gets the place
@@ -315,7 +341,7 @@ func (s *Server) handleRelease(conn net.Conn, token string) {
 	if ok {
 		sl.cancel()
 		<-sl.done
-		s.log.Info("slot released", "token", shortTok(token), "owner", sl.owner)
+		s.log.Info("slot released", "token", shortTok(token), "owner", sl.owner, "tier", sl.tier, "lived_s", int(time.Since(sl.registeredAt).Seconds()))
 	}
 	writeMsg(conn, wireMsg{Status: "ok"}) //nolint:errcheck
 }
@@ -392,7 +418,7 @@ func (s *Server) startCoordinator(ctx context.Context, token string, sl *slot) {
 					timer.Stop()
 				}
 			case <-idle:
-				s.log.Info("slot released: agent absent", "token", shortTok(token), "owner", sl.owner, "idle_ttl", sl.idleTTL.String())
+				s.log.Info("slot released: agent absent", "token", shortTok(token), "owner", sl.owner, "tier", sl.tier, "lived_s", int(time.Since(sl.registeredAt).Seconds()), "idle_ttl", sl.idleTTL.String())
 				return
 			case <-ctx.Done():
 				if timer != nil {

@@ -151,3 +151,21 @@ variable "labels" {
   type    = map(string)
   default = {}
 }
+
+variable "usage_analytics" {
+  description = "Keep the relay's usage records (who registered a machine, on which tier, with which CLI version, and for how long) in a BigQuery dataset. Off by default: the records contain email addresses."
+  type        = bool
+  default     = false
+}
+
+variable "usage_retention_days" {
+  description = "Days a usage record is kept in BigQuery before it is deleted. Say the same number in your privacy notice."
+  type        = number
+  default     = 90
+}
+
+variable "usage_dataset_location" {
+  description = "Where the BigQuery dataset lives."
+  type        = string
+  default     = "US"
+}

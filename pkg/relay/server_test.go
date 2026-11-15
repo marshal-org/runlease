@@ -390,3 +390,22 @@ func TestValidToken(t *testing.T) {
 		t.Errorf("shortTok on a short token = %q", got)
 	}
 }
+
+func TestClientLabel(t *testing.T) {
+	tests := map[string]string{
+		"runlease/0.5.0 (linux/amd64)":              "runlease/0.5.0 (linux/amd64)",
+		"runlease/0.5.0-dev+bdbb56e (darwin/arm64)": "runlease/0.5.0-dev+bdbb56e (darwin/arm64)",
+		"":                                "other",
+		"Mozilla/5.0 (X11; Linux x86_64)": "other",
+		"runlease/1.0\" owner=\"root":     "other", // no way to forge another field
+		"runlease/1.0\nlevel=ERROR":       "other",
+	}
+	for in, want := range tests {
+		if got := clientLabel(in); got != want {
+			t.Errorf("clientLabel(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := clientLabel("runlease/" + strings.Repeat("9", 200)); len(got) > 64 {
+		t.Errorf("label is %d characters, want at most 64", len(got))
+	}
+}

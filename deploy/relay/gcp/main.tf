@@ -143,10 +143,15 @@ resource "google_compute_instance" "relay" {
     enable_integrity_monitoring = true
   }
 
-  metadata = {
+  metadata = merge({
     enable-oslogin         = "TRUE"
     block-project-ssh-keys = "TRUE"
-  }
+    }, var.usage_analytics ? {
+    # The image already copies the journal to the serial console. This asks
+    # the platform to store that console output in Cloud Logging. No agent
+    # runs on the VM for it. See usage.tf.
+    serial-port-logging-enable = "true"
+  } : {})
 
   lifecycle {
     precondition {

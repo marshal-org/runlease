@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"os/user"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -624,6 +625,9 @@ func registerRelayToken(ctx context.Context, relayAddr, token string) error {
 	// the header when auth is off, and rejects the request with a clear error
 	// when auth is on and the token is missing or invalid.
 	headers := http.Header{}
+	// Which CLI build is asking. The relay records it with the registration,
+	// so its operator can tell which versions are in use. See the privacy page.
+	headers.Set("User-Agent", userAgent())
 	bearer, bearerErr := relayBearer(ctx, relayAddr)
 	if bearerErr == nil {
 		headers.Set("Authorization", "Bearer "+bearer)
@@ -1022,4 +1026,10 @@ func abandonLaunch(cmd *cobra.Command, p provider.CloudProvider, h *provider.Ins
 			cause, err, h.ID, h.Region)
 	}
 	return fmt.Errorf("%w\nThe machine was deleted", cause)
+}
+
+// userAgent identifies this CLI build to the relay: version, OS and CPU, and
+// nothing about the user or the machine.
+func userAgent() string {
+	return fmt.Sprintf("runlease/%s (%s/%s)", version, runtime.GOOS, runtime.GOARCH)
 }

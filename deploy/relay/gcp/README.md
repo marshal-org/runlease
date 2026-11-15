@@ -100,6 +100,29 @@ from its own release.
 | Change limits | Edit `tiers_yaml` and apply |
 | Shut it off | `terraform destroy`. Nothing is stored, so nothing is lost. |
 
+## Usage records
+
+Set `usage_analytics = true` to keep a record of who uses the relay. It is off by default, because
+the records contain email addresses.
+
+What you get is a BigQuery dataset, `relay_usage`, with one row for each of three events: a
+machine registered, a slot released, and a registration refused at a tier limit. Each carries the
+account's email, the tier, the CLI version, and for a release how long the slot lived. Nothing
+about what a machine does is recorded, because the relay cannot see it.
+
+How it gets there: the VM image already copies the system journal to the serial console. A
+metadata flag tells Google Cloud to store the console output in Cloud Logging, and a log sink
+copies the three kinds of line to BigQuery. No agent is installed and the relay gets no new
+permission. Rows are deleted after `usage_retention_days` (90 by default).
+
+`usage.sql` has a view that turns the records into columns, and queries for daily active users,
+new users per week, who hit a tier limit, machine lifetimes and CLI versions.
+
+Two things to know:
+
+- Cloud Logging itself keeps all console output for 30 days by default, in the `_Default` bucket.
+- If you publish a privacy notice, it should list these records and the retention you chose.
+
 ## Inputs
 
 See [`variables.tf`](variables.tf). The ones without a default are `project_id`, `hostname`,

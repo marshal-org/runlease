@@ -148,6 +148,16 @@ A full example is in [`deploy/relay/tiers.example.yaml`](../deploy/relay/tiers.e
 [`deploy/relay/gcp`](../deploy/relay/gcp) stands up everything on this page on one Google Cloud
 VM: network, firewall, static address, verified binaries, the systemd unit and TLS.
 
+## Usage records
+
+The relay logs three events with the account's email: a machine registered (with the tier and the
+CLI version), a slot released (with how long it lived), and a registration refused at a tier
+limit. It records nothing about what a machine does, because it cannot see it.
+
+The Terraform module can keep these in BigQuery for you with `usage_analytics = true`, and ships
+queries for the usual questions. See [the module's README](../deploy/relay/gcp/README.md#usage-records).
+Anywhere else, they are ordinary lines on the relay's standard error.
+
 ## Point the CLI at it
 
 ```bash

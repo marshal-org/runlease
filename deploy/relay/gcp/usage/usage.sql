@@ -9,8 +9,8 @@
 --
 -- A record is one line of the relay's log, for example:
 --   ... runlease-relay[1401]: time=... level=INFO msg="token registered"
---       token=8c4843bd… owner=ada@example.com tier=free client="runlease/0.5.0 (linux/amd64)"
---   ... msg="slot released" token=8c4843bd… owner=ada@example.com tier=free lived_s=5400
+--       token=a1b2c3d4… owner=ada@example.com tier=free client="runlease/0.5.0 (linux/amd64)"
+--   ... msg="slot released" token=a1b2c3d4… owner=ada@example.com tier=free lived_s=5400
 --
 -- In the table the quotes arrive escaped (msg=\"token registered\"), which is
 -- why the patterns below allow a backslash before each quote.

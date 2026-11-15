@@ -1,3 +1,0 @@
-# A made-up slot name in a unit test, in a constant that was called "token".
-# It was never a credential, and the constant has since been renamed.
-e75914e3115aa8430e542a1919d7f4022bf2bb77:cmd/runlease/relaywait_test.go:generic-api-key:193

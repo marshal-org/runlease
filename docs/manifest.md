@@ -147,7 +147,7 @@ Persisted to the registry at `up` time so `forward --all` doesn't need to re-rea
 ## Full example
 
 ```yaml
-name: bastion-dev
+name: k3s-dev
 provider: gcp
 region: us-central1-a
 instanceClass: compute.large
@@ -184,7 +184,7 @@ gcp:
     - allow-egress-only
 ```
 
-Launch with `runlease up --attach -m bastion-dev-manifest.yaml`.
+Launch with `runlease up --attach -m k3s-dev.yaml`.
 
 ---
 
@@ -192,5 +192,3 @@ Launch with `runlease up --attach -m bastion-dev-manifest.yaml`.
 
 - [`runlease manifest new`](../cmd/runlease/manifest.go) — interactive wizard
 - [`examples/manifests/`](../examples/manifests/) — minimal sample manifests
-- [`CLAUDE.md`](../CLAUDE.md) — architecture, security invariants, deployment story
-- [`docs/k3s-bastion-integration.md`](k3s-bastion-integration.md) — example end-to-end use case

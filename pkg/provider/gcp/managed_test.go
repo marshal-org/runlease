@@ -11,7 +11,7 @@ import (
 
 func TestManagedFromInstance(t *testing.T) {
 	inst := &compute.Instance{
-		Name:              "rl-run-62b18412-0e2f78",
+		Name:              "rl-nightly-build-0e2f78",
 		Zone:              "https://www.googleapis.com/compute/v1/projects/p/zones/europe-west1-b",
 		MachineType:       "https://www.googleapis.com/compute/v1/projects/p/zones/europe-west1-b/machineTypes/e2-small",
 		Status:            "TERMINATED",
@@ -24,14 +24,14 @@ func TestManagedFromInstance(t *testing.T) {
 		Disks: []*compute.AttachedDisk{{DiskSizeGb: 50}},
 	}
 	m := managedFromInstance(inst, "p")
-	if m.ID != "rl-run-62b18412-0e2f78" || m.Region != "europe-west1-b" || m.Project != "p" || m.InstanceType != "e2-small" {
+	if m.ID != "rl-nightly-build-0e2f78" || m.Region != "europe-west1-b" || m.Project != "p" || m.InstanceType != "e2-small" {
 		t.Errorf("identity fields wrong: %+v", m)
 	}
 	// Powered off, not gone: this is the state that leaks a billed disk.
 	if m.State != provider.StatusStopped {
 		t.Errorf("State = %q, want stopped", m.State)
 	}
-	if m.Name != "run-62b18412" || m.CreatedBy != "ada" || m.DiskGB != 50 {
+	if m.Name != "nightly-build" || m.CreatedBy != "ada" || m.DiskGB != 50 {
 		t.Errorf("name/creator/disk wrong: %+v", m)
 	}
 	want := time.Date(2026, 10, 13, 17, 0, 0, 0, time.UTC)

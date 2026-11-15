@@ -97,6 +97,114 @@
 
 <div class="note"><p><b>The machine is yours.</b> It runs in your cloud account, on your bill. The relay only connects you to it. <a href="relay.html">What the public relay allows, and how to run your own</a>.</p></div>
 
+<h2 id="manifests">Start from a manifest</h2>
+<p class="measure">A manifest is a short YAML file that describes one machine. Keep it next to your code and every launch is the same. Pick the one closest to what you need, save it, and run <code>runlease up -m FILE</code>.</p>
+<div class="threat tabset" data-tabs>
+  <div class="threat-tabs" role="tablist" aria-label="Example manifests">
+    <button role="tab" id="mt-quick-gcp" aria-controls="mp-quick-gcp" aria-selected="true">Smallest, Google Cloud</button>
+    <button role="tab" id="mt-quick-aws" aria-controls="mp-quick-aws" aria-selected="false">Smallest, AWS</button>
+    <button role="tab" id="mt-agent-workbench" aria-controls="mp-agent-workbench" aria-selected="false">Coding agent</button>
+    <button role="tab" id="mt-no-nat" aria-controls="mp-no-nat" aria-selected="false">No NAT gateway</button>
+    <button role="tab" id="mt-gpu" aria-controls="mp-gpu" aria-selected="false">GPU job</button>
+  </div>
+  <div class="threat-panel" role="tabpanel" id="mp-quick-gcp" aria-labelledby="mt-quick-gcp">
+    <h3>Smallest, Google Cloud</h3>
+    <p class="who">One small machine, the public relay, a two-hour lease. Start here. File: <a href="https://github.com/marshal-org/runlease/blob/main/examples/manifests/quick-gcp.yaml"><code>examples/manifests/quick-gcp.yaml</code></a></p>
+<pre># The smallest useful manifest: one small spot machine on Google Cloud,
+# reached through the free public relay, gone after two hours.
+#
+#   runlease up -m quick-gcp.yaml
+name: scratch
+provider: gcp
+region: us-central1-a          # a zone
+instanceClass: compute.small   # about 2 vCPU / 2 GB
+reclaim:
+  ttl: 2h                      # the lease: the machine deletes itself after this
+relay:
+  addr: wss://connect.runlease.online</pre>
+  </div>
+  <div class="threat-panel" role="tabpanel" id="mp-quick-aws" aria-labelledby="mt-quick-aws">
+    <h3>Smallest, AWS</h3>
+    <p class="who">The same on AWS. The image defaults to the latest Amazon Linux 2023. File: <a href="https://github.com/marshal-org/runlease/blob/main/examples/manifests/quick-aws.yaml"><code>examples/manifests/quick-aws.yaml</code></a></p>
+<pre># The same on AWS. The image defaults to the latest Amazon Linux 2023.
+#
+#   runlease up -m quick-aws.yaml
+name: scratch
+provider: aws
+region: eu-north-1             # a region
+instanceClass: compute.small   # about 2 vCPU / 2 GB
+reclaim:
+  ttl: 2h                      # the lease: the machine deletes itself after this
+relay:
+  addr: wss://connect.runlease.online</pre>
+  </div>
+  <div class="threat-panel" role="tabpanel" id="mp-agent-workbench" aria-labelledby="mt-agent-workbench">
+    <h3>Coding agent</h3>
+    <p class="who">More room, tools installed at boot, and a dev server port forwarded to your computer. File: <a href="https://github.com/marshal-org/runlease/blob/main/examples/manifests/agent-workbench.yaml"><code>examples/manifests/agent-workbench.yaml</code></a></p>
+<pre># A machine for a coding agent: more room, tools installed at boot, and a dev
+# server port forwarded to your computer.
+#
+#   runlease up -m agent-workbench.yaml --attach
+#
+# --attach streams the setup log, then holds the port forward open.
+name: workbench
+provider: gcp
+region: us-central1-a
+instanceClass: compute.large   # about 4 vCPU / 8 GB
+diskSizeGb: 50
+reclaim:
+  ttl: 4h
+relay:
+  addr: wss://connect.runlease.online
+sudo: passwordless             # the agent may install packages; default is locked
+setup:                         # runs once, as root, after the machine is ready
+  - name: tools
+    run: |
+      apt-get update -qq
+      apt-get install -y -qq git build-essential nodejs npm
+forwards:                      # localhost:3000 here -&gt; port 3000 on the machine
+  - name: dev-server
+    local: 3000
+    remote: 3000</pre>
+  </div>
+  <div class="threat-panel" role="tabpanel" id="mp-no-nat" aria-labelledby="mt-no-nat">
+    <h3>No NAT gateway</h3>
+    <p class="who">For a subnet with no NAT gateway: a public address for outbound traffic only. File: <a href="https://github.com/marshal-org/runlease/blob/main/examples/manifests/no-nat.yaml"><code>examples/manifests/no-nat.yaml</code></a></p>
+<pre># For a subnet with no NAT gateway. By default a machine launched through a
+# relay gets no public address and dials out through NAT. Without NAT it needs
+# a public address to reach the relay. SSH still listens on localhost only.
+#
+#   runlease up -m no-nat.yaml
+name: scratch
+provider: gcp
+region: us-central1-a
+instanceClass: compute.small
+publicIp: true                 # outbound only: nothing of Runlease&#39;s listens on it
+reclaim:
+  ttl: 2h
+relay:
+  addr: wss://connect.runlease.online</pre>
+  </div>
+  <div class="threat-panel" role="tabpanel" id="mp-gpu" aria-labelledby="mt-gpu">
+    <h3>GPU job</h3>
+    <p class="who">One spot GPU for a short job. File: <a href="https://github.com/marshal-org/runlease/blob/main/examples/manifests/gpu.yaml"><code>examples/manifests/gpu.yaml</code></a></p>
+<pre># One spot GPU for a short job. Spot GPUs are reclaimed more often than CPUs,
+# so keep the work resumable. Check your GPU quota in the region first.
+#
+#   runlease up -m gpu.yaml
+name: gpu-job
+provider: gcp
+region: us-central1-a
+instanceClass: compute.gpu     # about 4-8 vCPU / 16-32 GB and one GPU
+diskSizeGb: 100
+reclaim:
+  ttl: 3h
+relay:
+  addr: wss://connect.runlease.online</pre>
+  </div>
+</div>
+<p class="measure">Every field, with its default: <a href="https://github.com/marshal-org/runlease/blob/main/docs/manifest.md">the manifest reference</a>. These files are loaded by the project's tests, so they stay valid.</p>
+
 <h2 id="remove">Uninstall</h2>
 <pre><span class="p">$</span> rm ~/.local/bin/runlease
 <span class="p">$</span> rm -r ~/.runlease              <span class="c"># saved keys, settings and sign-in</span></pre>
@@ -117,5 +225,33 @@
   <a href="terms.html">Terms</a>
 </footer>
 </div>
+<script>
+(function () {
+  // Tabbed examples. Without JavaScript every panel stays visible, in order.
+  Array.prototype.forEach.call(document.querySelectorAll('[data-tabs]'), function (root) {
+    var tabs = Array.prototype.slice.call(root.querySelectorAll('[role="tab"]'));
+    var panels = tabs.map(function (t) { return document.getElementById(t.getAttribute('aria-controls')); });
+    function select(i, focus) {
+      tabs.forEach(function (t, j) {
+        t.setAttribute('aria-selected', j === i ? 'true' : 'false');
+        t.setAttribute('tabindex', j === i ? '0' : '-1');
+        panels[j].hidden = j !== i;
+      });
+      if (focus) tabs[i].focus();
+    }
+    tabs.forEach(function (t, i) {
+      t.addEventListener('click', function () { select(i, false); });
+      t.addEventListener('keydown', function (e) {
+        var n = null;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') n = (i + 1) % tabs.length;
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') n = (i - 1 + tabs.length) % tabs.length;
+        if (n === null) return;
+        e.preventDefault(); select(n, true);
+      });
+    });
+    select(0, false);
+  });
+})();
+</script>
 </body>
 </html>

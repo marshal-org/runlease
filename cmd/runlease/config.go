@@ -35,6 +35,23 @@ var configShowCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if jsonOutput() {
+			return writeJSON(cmd.OutOrStdout(), struct {
+				Path     string `json:"path"`
+				Relay    string `json:"relay"`
+				Defaults struct {
+					Provider string `json:"provider"`
+					Size     string `json:"size"`
+					TTL      string `json:"ttl"`
+					Region   string `json:"region"`
+				} `json:"defaults"`
+			}{Path: path, Relay: cfg.Relay.Addr, Defaults: struct {
+				Provider string `json:"provider"`
+				Size     string `json:"size"`
+				TTL      string `json:"ttl"`
+				Region   string `json:"region"`
+			}(cfg.Defaults)})
+		}
 		out, _ := yaml.Marshal(cfg)
 		fmt.Fprintf(cmd.OutOrStdout(), "# %s\n\n%s", path, out)
 		return nil

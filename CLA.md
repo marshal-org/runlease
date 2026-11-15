@@ -2,9 +2,6 @@
 
 Version 1.0
 
-> **Draft.** This text has not yet been reviewed by a lawyer. It will not be
-> required of anyone until it has been.
-
 Thank you for contributing to Runlease. This agreement records the rights you
 give to Marshal Security ("**we**", "**us**") in what you contribute, so that we
 can keep distributing Runlease under its license. You keep ownership of your

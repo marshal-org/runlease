@@ -21,7 +21,39 @@ import (
 const (
 	handshakeTimeout = 30 * time.Second
 	tokenTTL         = 24 * time.Hour
+
+	// Slot tokens are bearer secrets chosen by the CLI. The relay refuses
+	// anything too short to be unguessable, and anything that is not plain
+	// token characters, before it touches the slot table or the logs.
+	minTokenLen = 32
+	maxTokenLen = 128
 )
+
+// validToken reports whether tok is an acceptable slot token: 32 to 128
+// characters from [A-Za-z0-9_-]. The CLI sends 64 hex characters.
+func validToken(tok string) bool {
+	if len(tok) < minTokenLen || len(tok) > maxTokenLen {
+		return false
+	}
+	for i := 0; i < len(tok); i++ {
+		c := tok[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '-', c == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// shortTok returns a log-safe prefix of a token. It never panics, whatever
+// the length of its input.
+func shortTok(tok string) string {
+	if len(tok) > 8 {
+		return tok[:8] + "…"
+	}
+	return "…"
+}
 
 // Server is a WebSocket relay server that implements http.Handler.
 //
@@ -40,10 +72,24 @@ const (
 //  1. CLI (runlease up)      → relay: register token  (pre-authorises the slot)
 //  2. Instance (agent)       → relay: claim the slot with that token
 //  3. CLI (runlease connect) → relay: join the slot
+//
 // Config holds relay server configuration.
 type Config struct {
 	AgentPath string     // path to runlease-agent binary served at GET /agent; empty disables
 	Auth      AuthConfig // Google OAuth allow-list; zero value disables auth
+	// MaxSlots caps the number of live slots. Registration is refused once the
+	// cap is reached, so one caller cannot exhaust the relay's memory. Zero
+	// means no cap.
+	MaxSlots int
+	// Tiers sets per-identity limits. Nil means one tier with no
+	// per-identity limits.
+	Tiers *Tiers
+	// GoogleClientSecret is published, with the first of Auth.GoogleClientIDs,
+	// in the discovery document so `runlease login` can sign a user in. For an
+	// installed-application OAuth client this value is not confidential.
+	GoogleClientSecret string
+	// Version is reported in the discovery document.
+	Version string
 }
 
 type Server struct {
@@ -52,12 +98,17 @@ type Server struct {
 	upgrader websocket.Upgrader
 	mu       sync.Mutex
 	slots    map[string]*slot // keyed by token
+	owned    map[string]int   // live slots per owner email
 }
 
 type slot struct {
+	owner           string        // email of the identity that registered it; "" when auth is off
+	tier            string        // tier name at registration
+	idleTTL         time.Duration // release when the agent has been absent this long; 0 = never
+	cancel          context.CancelFunc
 	expiresAt       time.Time
 	instanceClaimed atomic.Bool
-	instanceReady   atomic.Bool   // set true once the yamux session is established
+	instanceReady   atomic.Bool // set true once the yamux session is established
 	instanceCh      chan net.Conn
 	clientCh        chan net.Conn // clients queue here for the coordinator to pick up
 	done            chan struct{} // closed when the coordinator goroutine exits
@@ -69,6 +120,7 @@ func New(log *slog.Logger, cfg Config) *Server {
 		cfg:      cfg,
 		upgrader: websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }},
 		slots:    make(map[string]*slot),
+		owned:    make(map[string]int),
 	}
 }
 
@@ -82,6 +134,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleReady(w, r)
 	case "/agent":
 		s.serveAgent(w, r)
+	case "/me":
+		s.handleMe(w, r)
+	case "/.well-known/runlease-relay":
+		s.handleDiscovery(w, r)
 	case "/health":
 		w.WriteHeader(http.StatusOK)
 	default:
@@ -140,6 +196,10 @@ func newWSConn(ws *websocket.Conn) net.Conn {
 //   → {"role":"register","token":"<tok>"}
 //   ← {"status":"ok"}
 //
+// Release (CLI during runlease down):
+//   → {"role":"release","token":"<tok>"}
+//   ← {"status":"ok"}
+//
 // Instance (runlease-agent on boot):
 //   → {"role":"instance","token":"<tok>"}
 //   ← {"status":"registered"}
@@ -162,8 +222,13 @@ func (s *Server) dispatch(conn net.Conn, bearer string) {
 	hs, err := readMsg(conn)
 	conn.SetDeadline(time.Time{}) //nolint:errcheck
 
-	if err != nil || hs.Token == "" {
+	if err != nil {
 		writeMsg(conn, wireMsg{Status: "error", Message: "invalid handshake"}) //nolint:errcheck
+		conn.Close()
+		return
+	}
+	if !validToken(hs.Token) {
+		writeMsg(conn, wireMsg{Status: "error", Message: "invalid token: want 32 to 128 characters of [A-Za-z0-9_-]"}) //nolint:errcheck
 		conn.Close()
 		return
 	}
@@ -171,6 +236,8 @@ func (s *Server) dispatch(conn net.Conn, bearer string) {
 	switch hs.Role {
 	case "register":
 		s.handleRegister(conn, hs.Token, bearer)
+	case "release":
+		s.handleRelease(conn, hs.Token)
 	case "instance":
 		s.handleInstance(conn, hs.Token)
 	case "client":
@@ -184,11 +251,13 @@ func (s *Server) dispatch(conn net.Conn, bearer string) {
 func (s *Server) handleRegister(conn net.Conn, token, bearer string) {
 	defer conn.Close()
 
-	if err := s.cfg.Auth.verify(context.Background(), bearer); err != nil {
+	id, err := s.cfg.Auth.identify(context.Background(), bearer)
+	if err != nil {
 		s.log.Warn("register rejected", "err", err)
 		writeMsg(conn, wireMsg{Status: "unauthorized", Message: err.Error()}) //nolint:errcheck
 		return
 	}
+	tierName, tier := s.cfg.Tiers.For(id.Email)
 
 	s.mu.Lock()
 	if _, exists := s.slots[token]; exists {
@@ -196,18 +265,59 @@ func (s *Server) handleRegister(conn net.Conn, token, bearer string) {
 		writeMsg(conn, wireMsg{Status: "error", Message: "token already registered"}) //nolint:errcheck
 		return
 	}
+	if s.cfg.MaxSlots > 0 && len(s.slots) >= s.cfg.MaxSlots {
+		s.mu.Unlock()
+		s.log.Warn("register rejected: relay at slot capacity", "max_slots", s.cfg.MaxSlots)
+		writeMsg(conn, wireMsg{Status: "error", Message: "relay is at capacity, try again later"}) //nolint:errcheck
+		return
+	}
+	// The per-identity cap only applies to a known identity. With auth off
+	// there is nobody to count against, and only the global cap holds.
+	if id.Email != "" && tier.MaxSlots > 0 && s.owned[id.Email] >= tier.MaxSlots {
+		s.mu.Unlock()
+		s.log.Info("register rejected: identity at tier limit", "owner", id.Email, "tier", tierName, "max_slots", tier.MaxSlots)
+		writeMsg(conn, wireMsg{Status: "limit", Message: fmt.Sprintf( //nolint:errcheck
+			"the %q tier allows %d machines at once and you have %d. Run 'runlease down' on one you no longer need, or wait for it to expire",
+			tierName, tier.MaxSlots, tier.MaxSlots)})
+		return
+	}
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(tier.slotTTL()))
 	sl := &slot{
-		expiresAt:  time.Now().Add(tokenTTL),
+		owner:      id.Email,
+		tier:       tierName,
+		idleTTL:    time.Duration(tier.IdleTTL),
+		cancel:     cancel,
+		expiresAt:  time.Now().Add(tier.slotTTL()),
 		instanceCh: make(chan net.Conn, 1),
 		clientCh:   make(chan net.Conn, 1),
 		done:       make(chan struct{}),
 	}
 	s.slots[token] = sl
+	if sl.owner != "" {
+		s.owned[sl.owner]++
+	}
 	s.mu.Unlock()
 
-	s.startCoordinator(token, sl)
+	s.startCoordinator(ctx, token, sl)
 	writeMsg(conn, wireMsg{Status: "ok"}) //nolint:errcheck
-	s.log.Info("token registered", "token", token[:8]+"…")
+	s.log.Info("token registered", "token", shortTok(token), "owner", sl.owner, "tier", tierName)
+}
+
+// handleRelease frees a slot before it expires, so its owner gets the place
+// back in their tier at once. Holding the token is the authority: it is the
+// same secret that already lets its holder use the slot. Releasing an unknown
+// token succeeds, so the call is safe to repeat.
+func (s *Server) handleRelease(conn net.Conn, token string) {
+	defer conn.Close()
+	s.mu.Lock()
+	sl, ok := s.slots[token]
+	s.mu.Unlock()
+	if ok {
+		sl.cancel()
+		<-sl.done
+		s.log.Info("slot released", "token", shortTok(token), "owner", sl.owner)
+	}
+	writeMsg(conn, wireMsg{Status: "ok"}) //nolint:errcheck
 }
 
 func (s *Server) handleInstance(conn net.Conn, token string) {
@@ -251,27 +361,43 @@ func (s *Server) handleClient(conn net.Conn, token string) {
 	}
 }
 
-func (s *Server) startCoordinator(token string, sl *slot) {
+func (s *Server) startCoordinator(ctx context.Context, token string, sl *slot) {
 	go func() {
-		// close(done) unblocks any client blocked in handleClient; the final
-		// drainClose mops up a conn that raced into the buffer on the way out.
+		// The slot leaves the table first, so anyone woken by close(done) sees
+		// it gone and the owner's count already lowered. close(done) then
+		// unblocks clients waiting in handleClient, and the drain mops up a
+		// conn that raced into the buffer on the way out.
 		defer func() {
-			close(sl.done)
-			drainClose(sl.clientCh)
+			sl.cancel()
 			s.removeSlot(token)
+			close(sl.done)
+			drainClose(sl.instanceCh)
+			drainClose(sl.clientCh)
 		}()
 
-		ctx, cancel := context.WithDeadline(context.Background(), sl.expiresAt)
-		defer cancel()
-
 		for {
-			// Wait for the agent to (re)connect.
+			// Wait for the agent to (re)connect. A tier may bound that wait:
+			// an agent that stays away means the machine is gone, and the
+			// owner should get the slot back.
+			var idle <-chan time.Time
+			var timer *time.Timer
+			if sl.idleTTL > 0 {
+				timer = time.NewTimer(sl.idleTTL)
+				idle = timer.C
+			}
 			var instanceConn net.Conn
 			select {
 			case instanceConn = <-sl.instanceCh:
+				if timer != nil {
+					timer.Stop()
+				}
+			case <-idle:
+				s.log.Info("slot released: agent absent", "token", shortTok(token), "owner", sl.owner, "idle_ttl", sl.idleTTL.String())
+				return
 			case <-ctx.Done():
-				drainClose(sl.instanceCh)
-				drainClose(sl.clientCh)
+				if timer != nil {
+					timer.Stop()
+				}
 				return
 			}
 
@@ -280,11 +406,14 @@ func (s *Server) startCoordinator(token string, sl *slot) {
 				sl.instanceClaimed.Store(false)
 				continue
 			}
-			s.log.Info("instance registered", "token", token[:8]+"…")
+			s.log.Info("instance registered", "token", shortTok(token))
 
 			s.runMuxSession(ctx, token, sl, instanceConn)
 			sl.instanceReady.Store(false)
 			sl.instanceClaimed.Store(false)
+			if ctx.Err() != nil {
+				return
+			}
 		}
 	}()
 }
@@ -295,7 +424,7 @@ func (s *Server) startCoordinator(token string, sl *slot) {
 func (s *Server) runMuxSession(ctx context.Context, token string, sl *slot, instanceConn net.Conn) {
 	session, err := yamux.Client(instanceConn, yamuxConfig())
 	if err != nil {
-		s.log.Warn("yamux.Client init failed", "token", token[:8]+"…", "err", err)
+		s.log.Warn("yamux.Client init failed", "token", shortTok(token), "err", err)
 		instanceConn.Close()
 		return
 	}
@@ -304,7 +433,7 @@ func (s *Server) runMuxSession(ctx context.Context, token string, sl *slot, inst
 	// As soon as the mux session is up, clients may connect — they no longer
 	// need a per-session "ready" ack from the agent.
 	sl.instanceReady.Store(true)
-	s.log.Info("mux session active", "token", token[:8]+"…")
+	s.log.Info("mux session active", "token", shortTok(token))
 
 	for {
 		select {
@@ -312,7 +441,7 @@ func (s *Server) runMuxSession(ctx context.Context, token string, sl *slot, inst
 			drainClose(sl.clientCh)
 			return
 		case <-session.CloseChan():
-			s.log.Info("mux session ended, awaiting agent reconnect", "token", token[:8]+"…")
+			s.log.Info("mux session ended, awaiting agent reconnect", "token", shortTok(token))
 			drainClose(sl.clientCh)
 			return
 		case clientConn := <-sl.clientCh:
@@ -324,7 +453,7 @@ func (s *Server) runMuxSession(ctx context.Context, token string, sl *slot, inst
 func (s *Server) handleMuxClient(session *yamux.Session, clientConn net.Conn, token string) {
 	stream, err := session.OpenStream()
 	if err != nil {
-		s.log.Warn("yamux OpenStream failed", "token", token[:8]+"…", "err", err)
+		s.log.Warn("yamux OpenStream failed", "token", shortTok(token), "err", err)
 		writeMsg(clientConn, wireMsg{Status: "error", Message: "mux open failed"}) //nolint:errcheck
 		clientConn.Close()
 		return
@@ -350,8 +479,70 @@ func yamuxConfig() *yamux.Config {
 
 func (s *Server) removeSlot(token string) {
 	s.mu.Lock()
-	delete(s.slots, token)
+	if sl, ok := s.slots[token]; ok {
+		delete(s.slots, token)
+		if sl.owner != "" {
+			if s.owned[sl.owner]--; s.owned[sl.owner] <= 0 {
+				delete(s.owned, sl.owner)
+			}
+		}
+	}
 	s.mu.Unlock()
+}
+
+// ── account and discovery ─────────────────────────────────────────────────────
+
+// handleMe reports the caller's identity, tier and usage. It takes the same
+// bearer token as registration.
+func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
+	if !s.cfg.Auth.enabled() {
+		http.Error(w, "this relay runs without authentication", http.StatusNotFound)
+		return
+	}
+	bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	id, err := s.cfg.Auth.identify(r.Context(), bearer)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tierName, tier := s.cfg.Tiers.For(id.Email)
+	s.mu.Lock()
+	used := s.owned[id.Email]
+	s.mu.Unlock()
+	writeJSON(w, map[string]any{
+		"email":   id.Email,
+		"tier":    tierName,
+		"slots":   map[string]int{"used": used, "max": tier.MaxSlots},
+		"slotTTL": tier.slotTTL().String(),
+		"idleTTL": time.Duration(tier.IdleTTL).String(),
+	})
+}
+
+// handleDiscovery tells a CLI how to sign in to this relay and what the
+// default tier allows. Everything in it is public.
+func (s *Server) handleDiscovery(w http.ResponseWriter, _ *http.Request) {
+	auth := map[string]any{"required": s.cfg.Auth.enabled()}
+	if len(s.cfg.Auth.GoogleClientIDs) > 0 {
+		auth["google"] = map[string]string{
+			"clientId":     s.cfg.Auth.GoogleClientIDs[0],
+			"clientSecret": s.cfg.GoogleClientSecret,
+		}
+	}
+	doc := map[string]any{"version": s.cfg.Version, "auth": auth}
+	if name, tier := s.cfg.Tiers.For(""); name != "" {
+		doc["defaultTier"] = map[string]any{
+			"name":     name,
+			"maxSlots": tier.MaxSlots,
+			"slotTTL":  tier.slotTTL().String(),
+		}
+	}
+	writeJSON(w, doc)
+}
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	json.NewEncoder(w).Encode(v) //nolint:errcheck
 }
 
 // ── agent binary download ─────────────────────────────────────────────────────

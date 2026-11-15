@@ -1,6 +1,7 @@
 package userdata
 
 import (
+	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -154,7 +155,7 @@ func TestBuild_gcpTTLBlock(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	for _, want := range []string{
-		"systemd-run --unit=runlease-selfterminate --on-active=7200",
+		"echo $(( $(date +%s) + 7200 )) > /var/lib/runlease/lease-deadline",
 		"/usr/local/bin/runlease-terminate",
 		"metadata.google.internal",
 		"compute.googleapis.com",
@@ -180,7 +181,7 @@ func TestBuild_awsTTLBlock(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	for _, want := range []string{
-		"systemd-run --unit=runlease-selfterminate --on-active=3600",
+		"echo $(( $(date +%s) + 3600 )) > /var/lib/runlease/lease-deadline",
 		"/usr/local/bin/runlease-terminate",
 		"systemctl --force --force poweroff",
 	} {
@@ -334,13 +335,257 @@ func TestBuild_autoFireTimerGated(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Build: %v", err)
 			}
-			// Key on the numeric offset + terminate path: only the gated boot
-			// timer emits it. The always-present snooze helper uses "$SECS".
-			marker := "--on-active=" + strconv.Itoa(tc.ttlSeconds) + " /usr/local/bin/runlease-terminate"
+			// Key on the numeric offset written as the deadline: only the gated
+			// boot block emits it. The always-present snooze helper uses "SECS".
+			marker := "+ " + strconv.Itoa(tc.ttlSeconds) + " )) > /var/lib/runlease/lease-deadline"
 			has := strings.Contains(out, marker)
 			if has != tc.wantTimer {
 				t.Errorf("auto-fire timer presence = %v, want %v", has, tc.wantTimer)
 			}
 		})
+	}
+}
+
+func relayParams() Params {
+	p := fullParams()
+	p.RelayAddr = "wss://relay.example.com"
+	p.RelayToken = strings.Repeat("ab", 32)
+	p.Provider = "gcp"
+	return p
+}
+
+func TestBuild_agentDigestIsVerifiedBeforeUse(t *testing.T) {
+	p := relayParams()
+	p.AgentSHA256 = strings.Repeat("0f", 32)
+	out, err := Build(p)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	check := strings.Index(out, p.AgentSHA256+"  /usr/local/bin/runlease-agent' | sha256sum -c -")
+	download := strings.Index(out, "-o /usr/local/bin/runlease-agent")
+	start := strings.Index(out, "systemctl enable --now runlease-agent")
+	if check < 0 {
+		t.Fatal("boot script does not verify the agent digest")
+	}
+	if !(download < check && check < start) {
+		t.Errorf("want download < verify < start, got %d %d %d", download, check, start)
+	}
+}
+
+func TestBuild_noDigestMeansNoCheck(t *testing.T) {
+	out, err := Build(relayParams())
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if strings.Contains(out, "sha256sum") {
+		t.Error("digest check emitted although no digest was given")
+	}
+}
+
+func TestBuild_rejectsMalformedDigest(t *testing.T) {
+	for _, bad := range []string{"abc", strings.Repeat("Z", 64), strings.Repeat("a", 63) + "'", strings.Repeat("A", 64)} {
+		p := relayParams()
+		p.AgentSHA256 = bad
+		if _, err := Build(p); err == nil {
+			t.Errorf("Build accepted malformed digest %q", bad)
+		}
+	}
+}
+
+func TestBuild_agentServiceRunsUnprivileged(t *testing.T) {
+	out, err := Build(relayParams())
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, want := range []string{"User=runlease-agent", "NoNewPrivileges=true", "CapabilityBoundingSet=\n", "ProtectSystem=strict"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("agent unit is missing %q", want)
+		}
+	}
+}
+
+// The rendered script must at least parse, with and without the optional parts.
+func TestBuild_scriptParses(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not available")
+	}
+	withAll := relayParams()
+	withAll.AgentSHA256 = strings.Repeat("0f", 32)
+	withAll.SelfTermination = true
+	withAll.TTLSeconds = 3600
+	withAll.PasswordlessSudo = true
+	withAll.SetupSteps = []SetupStep{{Name: "hello", Run: "echo hi"}}
+	for name, p := range map[string]Params{"minimal": fullParams(), "relay": relayParams(), "everything": withAll} {
+		out, err := Build(p)
+		if err != nil {
+			t.Fatalf("%s: Build: %v", name, err)
+		}
+		cmd := exec.Command(bash, "-n")
+		cmd.Stdin = strings.NewReader(out)
+		if msg, err := cmd.CombinedOutput(); err != nil {
+			t.Errorf("%s: bash -n: %v\n%s", name, err, msg)
+		}
+	}
+}
+
+// sshd keeps the first value it reads for a keyword, so the hardening block
+// has to end up ahead of the image's own sshd_config, not after it.
+func TestBuild_sshdHardeningGoesFirst(t *testing.T) {
+	out, err := Build(fullParams())
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if strings.Contains(out, "cat >> /etc/ssh/sshd_config <<") {
+		t.Error("hardening block is appended to sshd_config; sshd would ignore it where the image already sets a value")
+	}
+	block := strings.Index(out, "PasswordAuthentication no")
+	rest := strings.Index(out, "cat /etc/ssh/sshd_config >> /etc/ssh/sshd_config.runlease")
+	if block < 0 || rest < 0 || block > rest {
+		t.Errorf("hardening block (at %d) must be written before the image's config is added after it (at %d)", block, rest)
+	}
+	if !strings.Contains(out, "sshd -T") {
+		t.Error("script does not check the settings sshd will enforce")
+	}
+	// The script runs with pipefail, and grep -q exits at its first match. Fed
+	// by a pipe from echo, a correct config could then fail the check.
+	if strings.Contains(out, `echo "$SSHD_EFFECTIVE" |`) {
+		t.Error("sshd settings are piped into grep -q; under pipefail that fails at random on a correct config")
+	}
+}
+
+func TestBuild_sshdListensOnLocalhostOnlyInRelayMode(t *testing.T) {
+	direct, err := Build(fullParams())
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if strings.Contains(direct, "ListenAddress") {
+		t.Error("direct mode must leave sshd listening on the network: it is the only way in")
+	}
+
+	p := fullParams()
+	p.RelayAddr = "wss://relay.example.com"
+	p.RelayToken = "tok"
+	relay, err := Build(p)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if !strings.Contains(relay, "\nListenAddress 127.0.0.1\n") {
+		t.Error("relay mode must bind sshd to 127.0.0.1")
+	}
+	if !strings.Contains(relay, "listenaddress 127.0.0.1:22") {
+		t.Error("relay mode must verify sshd listens on localhost only")
+	}
+}
+
+func TestBuild_scriptParsesWithAndWithoutRelay(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not available")
+	}
+	for _, relay := range []string{"", "wss://relay.example.com"} {
+		p := fullParams()
+		p.RelayAddr = relay
+		p.Provider = "gcp"
+		out, err := Build(p)
+		if err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		cmd := exec.Command(bash, "-n")
+		cmd.Stdin = strings.NewReader(out)
+		if msg, err := cmd.CombinedOutput(); err != nil {
+			t.Errorf("relay=%q: script does not parse: %v\n%s", relay, err, msg)
+		}
+	}
+}
+
+// The lease has to outlive a reboot: the deadline is on disk, a unit enabled at
+// boot re-arms the timer from it, and the script itself does nothing on a
+// second run (GCP runs it at every boot, which would otherwise restart the lease).
+func TestBuild_leaseSurvivesReboot(t *testing.T) {
+	p := fullParams()
+	p.Provider = "gcp"
+	p.SelfTermination = true
+	p.TTLSeconds = 3600
+	out, err := Build(p)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, want := range []string{
+		"systemctl enable runlease-lease.service",
+		"ExecStart=/usr/local/bin/runlease-lease-arm",
+		"/var/lib/runlease/lease-deadline",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	guard := strings.Index(out, "if [ -e /var/lib/runlease/booted ]; then")
+	first := strings.Index(out, "cat > /usr/local/bin/runlease-terminate")
+	if guard < 0 || guard > first {
+		t.Error("the run-once guard must come before any setup step")
+	}
+	// Snooze must move the stored deadline, not only the timer in memory.
+	snooze := out[strings.Index(out, "runlease-snooze << 'SNOOZE_EOF'"):]
+	snooze = snooze[:strings.Index(snooze, "SNOOZE_EOF\n")]
+	if !strings.Contains(snooze, "/var/lib/runlease/lease-deadline.new /var/lib/runlease/lease-deadline") {
+		t.Error("snooze does not update the stored deadline, so a reboot would undo it")
+	}
+}
+
+// A boot script that stops early has to say so where the CLI can read it, and
+// a failed setup step has to end the log with a marker.
+func TestBuild_failureSignals(t *testing.T) {
+	p := fullParams()
+	p.Provider = "gcp"
+	p.RelayAddr = "wss://relay.example.com"
+	p.AgentSHA256 = strings.Repeat("a", 64)
+	p.SetupSteps = []SetupStep{{Name: "deps", Run: "false"}}
+	out, err := Build(p)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	trap := strings.Index(out, "RUNLEASE_BOOT_FAILED stage=$RUNLEASE_STAGE")
+	if trap < 0 || trap > strings.Index(out, "cat > /usr/local/bin/runlease-terminate") {
+		t.Error("the failure trap must be set before the first setup step")
+	}
+	for _, stage := range []string{"lease", "user", "sshd", "agent-download", "agent-verify", "agent-start", "setup"} {
+		if !strings.Contains(out, "RUNLEASE_STAGE="+stage+"\n") {
+			t.Errorf("stage %q is never set", stage)
+		}
+	}
+	if !strings.Contains(out, `echo "__RUNLEASE_SETUP_FAILED__ step 00 (deps)"`) {
+		t.Error("a failed setup step writes no failure marker")
+	}
+}
+
+// Run the setup block for real: a failing step must leave the failure marker
+// in the log and a non-zero exit, and a passing one the done marker.
+func TestSetupBlock_runs(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not available")
+	}
+	for _, tc := range []struct{ run, want string }{
+		{"echo hi; exit 3", "__RUNLEASE_SETUP_FAILED__ step 00 (deps)"},
+		{"echo hi", "__RUNLEASE_SETUP_DONE__"},
+	} {
+		p := fullParams()
+		p.SetupSteps = []SetupStep{{Name: "deps", Run: tc.run}}
+		out, err := Build(p)
+		if err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		dir := t.TempDir()
+		block := out[strings.Index(out, "RUNLEASE_STAGE=setup"):]
+		block = strings.NewReplacer("/var/lib/runlease", dir, "/var/log", dir, "/run/", dir+"/").Replace(block)
+		cmd := exec.Command(bash, "-c", "set -euo pipefail\n"+block)
+		got, runErr := cmd.CombinedOutput()
+		if !strings.Contains(string(got), tc.want) {
+			t.Errorf("run %q: output missing %q:\n%s", tc.run, tc.want, got)
+		}
+		if failed := strings.Contains(tc.want, "FAILED"); failed != (runErr != nil) {
+			t.Errorf("run %q: exit error = %v, want failure = %v", tc.run, runErr, failed)
+		}
 	}
 }

@@ -10,17 +10,20 @@ import (
 )
 
 type Manifest struct {
-	Name          string            `yaml:"name"`
-	Provider      string            `yaml:"provider"`
-	Region        string            `yaml:"region"`
-	InstanceClass string            `yaml:"instanceClass"`
-	InstanceType  string            `yaml:"instanceType"`
-	BaseImage     string            `yaml:"baseImage"`
+	Name          string `yaml:"name"`
+	Provider      string `yaml:"provider"`
+	Region        string `yaml:"region"`
+	InstanceClass string `yaml:"instanceClass"`
+	InstanceType  string `yaml:"instanceType"`
+	BaseImage     string `yaml:"baseImage"`
 	// DiskSizeGb overrides the boot disk size in GB. 0 (default) uses the
 	// image's own size. Must be >= the image's minimum on both clouds.
 	DiskSizeGb int `yaml:"diskSizeGb"`
-	// PublicIP controls whether a public IP is assigned. Nil = auto: true when
-	// no relay is configured (direct SSH needs it), false when relay is set.
+	// PublicIP controls whether a public IP is assigned. Nil means false when a
+	// relay is set (the VM is reached through the relay, and gets out through
+	// the subnet's NAT) and true when it is not (direct SSH is the only way in).
+	// Set true with a relay only where the subnet has no NAT: the address then
+	// carries outbound traffic, and sshd still listens on localhost only.
 	PublicIP *bool             `yaml:"publicIp"`
 	Relay    RelayConfig       `yaml:"relay"`
 	Reclaim  ReclaimPolicy     `yaml:"reclaim"`
@@ -85,24 +88,42 @@ type GCPConfig struct {
 	Subnetwork     string   `yaml:"subnetwork"` // subnetwork name or self-link; required for custom-mode VPCs
 }
 
-// WantsPublicIP returns the effective public IP setting (default true).
+// WantsPublicIP returns the effective public IP setting. Unset, it is false in
+// relay mode and true otherwise: see the PublicIP field.
 func (m *Manifest) WantsPublicIP() bool {
 	if m.PublicIP != nil {
 		return *m.PublicIP
 	}
-	return true
+	return m.Relay.Addr == ""
 }
+
+// PublicIPExplicit reports whether the manifest sets publicIp itself, as
+// opposed to taking the default.
+func (m *Manifest) PublicIPExplicit() bool { return m.PublicIP != nil }
 
 // RelayConfig enables the runlease relay tunnel. When set, launched instances
 // download runlease-agent from the relay's built-in HTTP endpoint and connect
 // outbound, so you can reach them without a public IP or open inbound firewall rules.
 type RelayConfig struct {
 	Addr string `yaml:"addr"` // host:port of the relay TCP server (e.g. "relay.example.com:7777")
+	// AgentSHA256 pins the agent binary the relay serves. Release builds of the
+	// CLI carry the digest of the matching agent, so this is only needed for a
+	// self-built relay: set it to the SHA-256 of your agent binary, or to
+	// "unverified" to skip the check on purpose.
+	AgentSHA256 string `yaml:"agentSha256,omitempty"`
 }
 
 type ReclaimPolicy struct {
-	TTL             string `yaml:"ttl"`
-	SelfTermination bool   `yaml:"selfTermination"`
+	TTL string `yaml:"ttl"`
+	// SelfTermination arms a timer on the VM that deletes it at the end of
+	// the TTL. Unset means true: a lease that nothing enforces is not a lease.
+	// Set false only if something else (the reclaim daemon) will stop the VM.
+	SelfTermination *bool `yaml:"selfTermination"`
+}
+
+// SelfTerminates reports whether the VM deletes itself at the end of its TTL.
+func (r *ReclaimPolicy) SelfTerminates() bool {
+	return r.SelfTermination == nil || *r.SelfTermination
 }
 
 func (r *ReclaimPolicy) TTLDuration() (time.Duration, error) {
@@ -180,8 +201,12 @@ func (m *Manifest) Validate() error {
 		return fmt.Errorf("manifest.diskSizeGb must be >= 0 (0 = image default), got %d", m.DiskSizeGb)
 	}
 	if m.Reclaim.TTL != "" {
-		if _, err := m.Reclaim.TTLDuration(); err != nil {
+		d, err := m.Reclaim.TTLDuration()
+		if err != nil {
 			return fmt.Errorf("manifest.reclaim.ttl invalid: %w", err)
+		}
+		if d < time.Second {
+			return fmt.Errorf("manifest.reclaim.ttl must be at least 1s, got %q", m.Reclaim.TTL)
 		}
 	}
 	switch m.Sudo {

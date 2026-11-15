@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/runlease/runlease/pkg/credential"
+	"github.com/marshal-org/runlease/pkg/credential"
 )
 
 func init() {
@@ -34,7 +34,7 @@ func runConnect(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if entry.RelayAddr == "" {
-		return fmt.Errorf("instance %s was not launched with a relay — use 'runlease ssh' instead", args[0])
+		return fmt.Errorf("instance %s was not launched with a relay — use 'runlease ssh' instead", entry.Handle.ManifestName)
 	}
 
 	masterKey, err := credential.LoadOrCreateMasterKey(defaultMasterKeyPath())
@@ -60,16 +60,18 @@ func runConnect(cmd *cobra.Command, args []string) error {
 			// Slot missing — relay restarted or first connect after a long gap.
 			fmt.Fprintf(out, "⚠️  Relay slot missing (relay may have restarted) — re-registering...\n")
 			if rerr := registerRelayToken(cmd.Context(), entry.RelayAddr, entry.RelayToken); rerr != nil {
-				return fmt.Errorf("relay: %w", err)
+				// Report why the slot could not be opened again (signed out, at
+				// the tier limit), not the "unauthorized" that led here.
+				return fmt.Errorf("relay: re-registering the slot: %w", rerr)
 			}
 			return pollAndConnectViaRelay(cmd, entry.RelayAddr, entry.RelayToken,
-				entry.Handle.ManifestName, cred, forwards)
+				entry.Handle.ManifestName, cred, forwards, 0, nil)
 		}
 		if strings.Contains(err.Error(), "close 1000") {
 			// Relay dropped the connection cleanly — agent is mid-reconnect (5s delay).
 			fmt.Fprintf(out, "⚠️  Agent reconnecting — waiting...\n")
 			return pollAndConnectViaRelay(cmd, entry.RelayAddr, entry.RelayToken,
-				entry.Handle.ManifestName, cred, forwards)
+				entry.Handle.ManifestName, cred, forwards, 0, nil)
 		}
 		return fmt.Errorf("relay: %w", err)
 	}

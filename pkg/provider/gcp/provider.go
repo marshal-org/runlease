@@ -16,7 +16,7 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
-	"github.com/runlease/runlease/pkg/provider"
+	"github.com/marshal-org/runlease/pkg/provider"
 )
 
 // DefaultImageFamily is the GCP image resolved at instance creation when no
@@ -27,9 +27,10 @@ const DefaultImageFamily = "projects/debian-cloud/global/images/family/debian-12
 // Provider implements CloudProvider for GCP Compute Engine spot VMs.
 //
 // Authentication uses Application Default Credentials (ADC):
-//   gcloud auth application-default login     (developer workstation)
-//   GOOGLE_APPLICATION_CREDENTIALS=key.json  (service account key file)
-//   Attached service account                  (if running on GCP)
+//
+//	gcloud auth application-default login     (developer workstation)
+//	GOOGLE_APPLICATION_CREDENTIALS=key.json  (service account key file)
+//	Attached service account                  (if running on GCP)
 //
 // The manifest `region` field is treated as a GCP zone (e.g. "us-central1-a").
 type Provider struct {
@@ -127,11 +128,7 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 	if err != nil {
 		return nil, fmt.Errorf("insert instance: %w", err)
 	}
-	if err := p.waitForZoneOp(ctx, op.Name); err != nil {
-		return nil, fmt.Errorf("instance creation: %w", err)
-	}
-
-	return &provider.InstanceHandle{
+	handle := &provider.InstanceHandle{
 		ID:           provider.InstanceID(name),
 		Provider:     provider.ProviderGCP,
 		InstanceType: spec.InstanceType,
@@ -141,7 +138,15 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 		ManifestName: spec.ManifestName,
 		CreatedAt:    time.Now().UTC(),
 		Tags:         spec.Tags,
-	}, nil
+	}
+	if err := p.waitForZoneOp(ctx, op.Name); err != nil {
+		// The insert was accepted. Whether we timed out, were interrupted, or
+		// it failed, the caller gets the handle so it can record the instance
+		// and clean it up: returning nil here would orphan a VM that the
+		// operation goes on to create.
+		return handle, fmt.Errorf("instance creation: %w", err)
+	}
+	return handle, nil
 }
 
 // Terminate deletes the instance and returns nil only once a Get in the same
@@ -256,10 +261,10 @@ func gcpStatus(s string) provider.InstanceStatus {
 		return provider.StatusPending
 	case "RUNNING":
 		return provider.StatusRunning
-	case "STOPPING", "STOPPED", "SUSPENDED":
+	case "STOPPING", "STOPPED", "SUSPENDED", "SUSPENDING", "TERMINATED":
+		// GCP's TERMINATED means powered off. The instance and its disk still
+		// exist and are still billed; only a 404 means it is gone (see Status).
 		return provider.StatusStopped
-	case "TERMINATED":
-		return provider.StatusTerminated
 	default:
 		return provider.StatusUnknown
 	}

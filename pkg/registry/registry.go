@@ -2,13 +2,14 @@ package registry
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/runlease/runlease/pkg/provider"
+	"github.com/marshal-org/runlease/pkg/provider"
 )
 
 type Entry struct {
@@ -40,25 +41,94 @@ type Registry struct {
 }
 
 func Load(path string) (*Registry, error) {
-	r := &Registry{path: path, data: make(map[string]*Entry)}
-	raw, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return r, nil
-	}
+	data, err := readFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("reading registry: %w", err)
+		return nil, err
 	}
-	if err := json.Unmarshal(raw, &r.data); err != nil {
-		return nil, fmt.Errorf("parsing registry: %w", err)
-	}
-	return r, nil
+	return &Registry{path: path, data: data}, nil
 }
 
-func (r *Registry) Add(e *Entry) error {
+// ErrExists is returned by AddNew when the name is already taken.
+var ErrExists = errors.New("an instance with this name is already in the registry")
+
+// Every write goes through mutate: under a file lock it re-reads the registry
+// from disk, applies one change, and writes the result back atomically. A
+// process that loaded the file a while ago (a `down` waiting on a delete, the
+// daemon) therefore changes only its own entry and cannot write back a stale
+// copy of everyone else's.
+func (r *Registry) mutate(change func(data map[string]*Entry) error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.data[e.Handle.ManifestName] = e
-	return r.save()
+	if err := os.MkdirAll(filepath.Dir(r.path), 0700); err != nil {
+		return fmt.Errorf("creating registry dir: %w", err)
+	}
+	unlock, err := lockFile(r.path + ".lock")
+	if err != nil {
+		return fmt.Errorf("locking registry: %w", err)
+	}
+	defer unlock()
+
+	data, err := readFile(r.path)
+	if err != nil {
+		return err
+	}
+	if err := change(data); err != nil {
+		return err
+	}
+	if err := writeFile(r.path, data); err != nil {
+		return err
+	}
+	r.data = data
+	return nil
+}
+
+// Add records an instance, replacing any entry with the same name.
+func (r *Registry) Add(e *Entry) error {
+	return r.mutate(func(data map[string]*Entry) error {
+		data[e.Handle.ManifestName] = e
+		return nil
+	})
+}
+
+// AddNew records an instance and fails with ErrExists if the name is taken.
+// The check and the write happen under one lock, so two `up` runs with the
+// same name cannot both succeed and leave one machine untracked.
+func (r *Registry) AddNew(e *Entry) error {
+	return r.mutate(func(data map[string]*Entry) error {
+		if _, taken := data[e.Handle.ManifestName]; taken {
+			return fmt.Errorf("%q: %w", e.Handle.ManifestName, ErrExists)
+		}
+		data[e.Handle.ManifestName] = e
+		return nil
+	})
+}
+
+// Update applies change to the entry of the instance with this ID, if it is
+// still registered under that ID.
+func (r *Registry) Update(id provider.InstanceID, change func(e *Entry)) error {
+	return r.mutate(func(data map[string]*Entry) error {
+		for _, e := range data {
+			if e.Handle.ID == id {
+				change(e)
+				return nil
+			}
+		}
+		return fmt.Errorf("instance %q not found", id)
+	})
+}
+
+// RemoveID removes the entry for this exact instance. If the name has since
+// been given to another instance, that entry is left alone and RemoveID
+// returns nil: the instance asked about is already gone from the registry.
+func (r *Registry) RemoveID(id provider.InstanceID) error {
+	return r.mutate(func(data map[string]*Entry) error {
+		for k, e := range data {
+			if e.Handle.ID == id {
+				delete(data, k)
+			}
+		}
+		return nil
+	})
 }
 
 func (r *Registry) Get(nameOrID string) (*Entry, error) {
@@ -72,27 +142,27 @@ func (r *Registry) Get(nameOrID string) (*Entry, error) {
 }
 
 func (r *Registry) UpdateState(nameOrID string, state provider.InstanceStatus) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	key := r.findKey(nameOrID)
-	if key == "" {
-		return fmt.Errorf("instance %q not found", nameOrID)
-	}
-	r.data[key].Handle.State = state
-	return r.save()
+	return r.mutate(func(data map[string]*Entry) error {
+		key := findKey(data, nameOrID)
+		if key == "" {
+			return fmt.Errorf("instance %q not found", nameOrID)
+		}
+		data[key].Handle.State = state
+		return nil
+	})
 }
 
 // UpdateExpiry sets the instance's auto-termination deadline (used by
 // `runlease snooze`). A nil expiresAt clears it (manually managed).
 func (r *Registry) UpdateExpiry(nameOrID string, expiresAt *time.Time) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	key := r.findKey(nameOrID)
-	if key == "" {
-		return fmt.Errorf("instance %q not found", nameOrID)
-	}
-	r.data[key].Handle.ExpiresAt = expiresAt
-	return r.save()
+	return r.mutate(func(data map[string]*Entry) error {
+		key := findKey(data, nameOrID)
+		if key == "" {
+			return fmt.Errorf("instance %q not found", nameOrID)
+		}
+		data[key].Handle.ExpiresAt = expiresAt
+		return nil
+	})
 }
 
 // Reload re-reads the registry file from disk, replacing the in-memory state.
@@ -101,31 +171,23 @@ func (r *Registry) UpdateExpiry(nameOrID string, expiresAt *time.Time) error {
 func (r *Registry) Reload() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	raw, err := os.ReadFile(r.path)
-	if os.IsNotExist(err) {
-		r.data = make(map[string]*Entry)
-		return nil
-	}
+	data, err := readFile(r.path)
 	if err != nil {
-		return fmt.Errorf("reading registry: %w", err)
-	}
-	data := make(map[string]*Entry)
-	if err := json.Unmarshal(raw, &data); err != nil {
-		return fmt.Errorf("parsing registry: %w", err)
+		return err
 	}
 	r.data = data
 	return nil
 }
 
 func (r *Registry) Remove(nameOrID string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	key := r.findKey(nameOrID)
-	if key == "" {
-		return fmt.Errorf("instance %q not found", nameOrID)
-	}
-	delete(r.data, key)
-	return r.save()
+	return r.mutate(func(data map[string]*Entry) error {
+		key := findKey(data, nameOrID)
+		if key == "" {
+			return fmt.Errorf("instance %q not found", nameOrID)
+		}
+		delete(data, key)
+		return nil
+	})
 }
 
 func (r *Registry) List() []*Entry {
@@ -139,11 +201,13 @@ func (r *Registry) List() []*Entry {
 }
 
 // findKey must be called with mu held.
-func (r *Registry) findKey(nameOrID string) string {
-	if _, ok := r.data[nameOrID]; ok {
+func (r *Registry) findKey(nameOrID string) string { return findKey(r.data, nameOrID) }
+
+func findKey(data map[string]*Entry, nameOrID string) string {
+	if _, ok := data[nameOrID]; ok {
 		return nameOrID
 	}
-	for k, e := range r.data {
+	for k, e := range data {
 		if string(e.Handle.ID) == nameOrID {
 			return k
 		}
@@ -151,15 +215,41 @@ func (r *Registry) findKey(nameOrID string) string {
 	return ""
 }
 
-func (r *Registry) save() error {
-	if err := os.MkdirAll(filepath.Dir(r.path), 0700); err != nil {
-		return fmt.Errorf("creating registry dir: %w", err)
+func readFile(path string) (map[string]*Entry, error) {
+	data := make(map[string]*Entry)
+	raw, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return data, nil
 	}
-	raw, err := json.MarshalIndent(r.data, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("reading registry: %w", err)
+	}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil, fmt.Errorf("parsing registry: %w", err)
+	}
+	return data, nil
+}
+
+// writeFile replaces the registry through a temp file and a rename, so a crash
+// mid-write leaves the old file intact instead of a truncated one.
+func writeFile(path string, data map[string]*Entry) error {
+	raw, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling registry: %w", err)
 	}
-	if err := os.WriteFile(r.path, raw, 0600); err != nil {
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("writing registry: %w", err)
+	}
+	_, err = tmp.Write(raw)
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp.Name(), path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp.Name())
 		return fmt.Errorf("writing registry: %w", err)
 	}
 	return nil

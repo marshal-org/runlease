@@ -10,7 +10,7 @@ import (
 	cryptossh "golang.org/x/crypto/ssh"
 	"golang.org/x/term"
 
-	"github.com/runlease/runlease/pkg/credential"
+	"github.com/marshal-org/runlease/pkg/credential"
 )
 
 func init() {
@@ -54,11 +54,15 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	if entry.RelayAddr != "" && !sshDirect {
 		fmt.Fprintf(out, "Connecting to %s via relay (%s) as runlease-agent...\n",
 			entry.Handle.ManifestName, entry.RelayAddr)
-		conn, err := dialRelay(entry.RelayAddr, entry.RelayToken)
+		conn, err := openRelay(cmd.Context(), cmd.ErrOrStderr(), entry)
 		if err != nil {
-			return fmt.Errorf("relay: %w", err)
+			return err
 		}
 		return sshOverConn(conn, entry.RelayAddr, cred)
+	}
+	if entry.RelayAddr != "" {
+		return fmt.Errorf("instance %s was launched through a relay, so its SSH server listens on localhost only; connect with: runlease connect %s",
+			entry.Handle.ID, entry.Handle.ManifestName)
 	}
 	if entry.Handle.PublicIP == "" {
 		return fmt.Errorf("instance %s has no public IP and no relay configured", entry.Handle.ID)

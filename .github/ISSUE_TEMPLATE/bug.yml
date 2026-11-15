@@ -1,0 +1,47 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If a VM was left running, delete it in your cloud console first, then tell us about it here.
+        Do not paste relay tokens, keys, or the contents of `~/.runlease`.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, what you got. Paste the exact output.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `runlease version`
+    validations:
+      required: true
+  - type: dropdown
+    id: cloud
+    attributes:
+      label: Cloud
+      options: [GCP, AWS, Other]
+    validations:
+      required: true
+  - type: dropdown
+    id: relay
+    attributes:
+      label: Relay
+      options: [Community relay, Self-hosted relay, No relay (direct SSH)]
+    validations:
+      required: true
+  - type: textarea
+    id: manifest
+    attributes:
+      label: Manifest
+      description: The manifest you launched with. Remove project IDs and account names.
+      render: yaml
+  - type: input
+    id: os
+    attributes:
+      label: Your OS and architecture

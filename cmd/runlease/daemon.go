@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
-	"github.com/runlease/runlease/pkg/lifecycle"
+	"github.com/marshal-org/runlease/pkg/lifecycle"
+	"github.com/marshal-org/runlease/pkg/registry"
 )
 
 func init() {
@@ -43,6 +46,18 @@ func runDaemon(cmd *cobra.Command, _ []string) error {
 	}
 
 	mgr := lifecycle.New(reg, newProvider, logger)
+	// Give the relay slot back when the daemon drops a machine, as 'down' and
+	// 'sync' do. Otherwise it counts against the owner's tier until it times out.
+	mgr.OnCleanup = func(e *registry.Entry) {
+		if e.RelayAddr == "" || e.RelayToken == "" {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := releaseRelaySlot(ctx, e.RelayAddr, e.RelayToken); err != nil {
+			logger.Warn("releasing relay slot", "name", e.Handle.ManifestName, "err", err)
+		}
+	}
 	mgr.Start(cmd.Context())
 	return nil
 }

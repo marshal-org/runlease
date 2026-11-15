@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- PRE-LAUNCH: remove this line when the repository goes public. -->
+<meta name="robots" content="noindex">
+<meta name="description" content="The free public Runlease relay, what it sees, and how to run your own.">
+<title>The Runlease relay</title>
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<link rel="stylesheet" href="page.css">
+</head>
+<body>
+<div class="wrap wide">
+<header>
+  <a class="mark" href="./"><img src="logo.svg" alt="" width="26" height="26">runlease</a>
+  <nav aria-label="Main">
+    <a href="how-it-works.html">How it works</a>
+    <a href="security.html">Security</a>
+    <a href="install.html">Install</a>
+    <a href="relay.html" aria-current="page">Relay</a>
+    <a href="https://github.com/marshal-org/runlease">GitHub</a>
+  </nav>
+</header>
+<main>
+<p class="eyebrow">The relay</p>
+<h1>Start on ours for free. Move to your own whenever you like.</h1>
+<p class="lede">The relay is the one part that must be reachable from the internet. It introduces your machine to your VM and then copies encrypted bytes. It never holds a key.</p>
+
+<nav class="toc" aria-label="On this page">
+  <a href="#public">The public relay</a>
+  <a href="#sees">What it sees</a>
+  <a href="#own">When to run your own</a>
+  <a href="#selfhost">Self-hosting</a>
+  <a href="#tiers">Tiers and limits</a>
+  <a href="#operate">Operating it</a>
+</nav>
+
+<div class="opts">
+  <div>
+    <p class="eyebrow">Free</p>
+    <h3>Public relay</h3>
+    <p>Sign in with Google and launch. No card, no setup.</p>
+    <dl>
+      <dt>machines at once</dt><dd>2</dd>
+      <dt>connected for up to</dt><dd>8 h</dd>
+      <dt>sign-in</dt><dd>Google</dd>
+      <dt>uptime promise</dt><dd>none</dd>
+    </dl>
+  </div>
+  <div>
+    <p class="eyebrow">Your own</p>
+    <h3>Self-hosted relay</h3>
+    <p>One small binary on one small VM, admitting only who you say.</p>
+    <dl>
+      <dt>machines at once</dt><dd>yours to set</dd>
+      <dt>who can sign in</dt><dd>your domain</dd>
+      <dt>connection metadata</dt><dd>stays with you</dd>
+      <dt>cost</dt><dd>one small VM</dd>
+    </dl>
+  </div>
+</div>
+
+<h2 id="public">The public relay</h2>
+<pre><span class="p">$</span> runlease config set relay.addr wss://connect.runlease.online
+<span class="p">$</span> runlease login</pre>
+<p class="measure"><code>runlease login</code> prints a short code and a link. Open the link in any browser, on any device, enter the code and approve. Nothing has to open on the machine you are working on.</p>
+<pre><span class="p">$</span> runlease whoami     <span class="c"># who you are, your tier, how much of it is in use</span>
+<span class="p">$</span> runlease up         <span class="c"># launch as usual</span>
+<span class="p">$</span> runlease logout     <span class="c"># forget the saved sign-in</span></pre>
+
+<h3>What the free tier allows</h3>
+<div class="scroll"><table>
+  <tr><th></th><th>Free</th></tr>
+  <tr><td>Machines connected at once</td><td>2</td></tr>
+  <tr><td>Longest a machine can stay connected</td><td>8 hours, then <code>runlease connect</code> reconnects it</td></tr>
+  <tr><td>A machine that has been gone for 15 minutes</td><td>Its place is given back</td></tr>
+  <tr><td>Price</td><td>Nothing</td></tr>
+  <tr><td>Uptime promise</td><td>None</td></tr>
+</table></div>
+<p class="measure"><code>runlease down</code> gives a place back at once. If you reach the limit, <code>runlease up</code> tells you so before any machine is created, and tells you which command frees a place.</p>
+<div class="note"><p><b>The limits are on the relay only.</b> The machines are yours, in your cloud account, on your bill. Runlease does not limit or meter them.</p></div>
+<p class="measure">Larger tiers may be offered later. The limits can change; <code>runlease whoami</code> always shows the current ones.</p>
+
+<h2 id="sees">What it sees</h2>
+<p class="measure">The relay is built so that it does not have to be trusted with your sessions. The <a href="security.html">threat model</a> has the full account.</p>
+<div class="gets">
+  <div class="y"><h4>It sees and logs</h4><ul>
+    <li>The email address of the Google account you signed in with</li>
+    <li>When you open and close a slot, and the first characters of its token</li>
+    <li>The network addresses that connect to it, and how much data passes</li>
+  </ul></div>
+  <div class="n"><h4>It never sees</h4><ul>
+    <li>Your SSH keys</li>
+    <li>Your cloud credentials</li>
+    <li>Your commands, files, or the contents of forwarded connections</li>
+    <li>Anything from your Google account other than the email address</li>
+  </ul></div>
+</div>
+<p class="measure" style="margin-top:16px">Details are in the <a href="privacy.html">privacy notice</a>. The relay exists to reach machines you launched with Runlease; the <a href="terms.html">terms</a> say what it may not be used for.</p>
+
+<h2 id="own">When to run your own</h2>
+<ul class="measure">
+  <li>You need more than the free limits, or an uptime you can rely on.</li>
+  <li>You do not want a third party to see who connects to what, and when.</li>
+  <li>Your machines must only talk to hosts inside your own network.</li>
+  <li>You want to admit your organisation's identities and nobody else.</li>
+</ul>
+<p class="measure">The security of a session is the same either way. What changes is who holds the connection metadata and who sets the limits.</p>
+
+<h2 id="selfhost">Self-hosting</h2>
+<p class="measure">The relay is one static binary. It needs a public TLS endpoint and almost nothing else: it keeps no data on disk and holds no keys.</p>
+
+<h3>What you need</h3>
+<ul class="measure">
+  <li>A small Linux VM or container. One vCPU and 1 GB of memory is enough to start.</li>
+  <li>A DNS name and TLS. Put the relay behind a load balancer, Caddy, nginx or Cloudflare; the relay itself speaks plain HTTP and WebSocket on one port.</li>
+  <li>The <code>runlease-relay</code> and <code>runlease-agent</code> binaries <b>from the same release</b> as the CLI your team uses.</li>
+</ul>
+
+<h3>With Terraform, on Google Cloud</h3>
+<p class="measure">The repository ships a module that stands up everything on this page on one VM: its own network, inbound 80 and 443 only, a static address, a service account with no cloud access, checksum-verified binaries and automatic TLS. It is the module the public relay runs on.</p>
+<pre><span class="k">module</span> "relay" {
+  source = "github.com/marshal-org/runlease//deploy/relay/gcp?ref=v0.5.0"
+
+  project_id = "my-relay-project"
+  hostname   = "relay.example.com"
+  acme_email = "ops@example.com"
+
+  relay_binary_url = "https://github.com/marshal-org/runlease/releases/download/v0.5.0/runlease-relay-linux-amd64"
+  relay_sha256     = "&lt;from checksums.txt&gt;"
+  agent_binary_url = "https://github.com/marshal-org/runlease/releases/download/v0.5.0/runlease-agent-linux-amd64"
+  agent_sha256     = "&lt;from checksums.txt&gt;"
+
+  <span class="c"># a private relay for one organisation</span>
+  audience        = "https://relay.example.com"
+  allowed_domains = ["example.com"]
+}</pre>
+<p class="measure">Point the hostname's A record at the module's <code>address</code> output. Create the DNS record before the VM, or restart the VM once the record resolves: it asks for its certificate at boot.</p>
+
+<h3>By hand</h3>
+<pre><span class="p">$</span> VERSION=v0.5.0
+<span class="p">$</span> BASE=https://github.com/marshal-org/runlease/releases/download/$VERSION
+<span class="p">$</span> curl -fsSLO $BASE/runlease-relay-linux-amd64
+<span class="p">$</span> curl -fsSLO $BASE/runlease-agent-linux-amd64
+<span class="p">$</span> curl -fsSLO $BASE/checksums.txt
+<span class="p">$</span> sha256sum --check --ignore-missing checksums.txt
+<span class="p">$</span> sudo install -m 0755 runlease-relay-linux-amd64 /usr/local/bin/runlease-relay
+<span class="p">$</span> sudo install -m 0755 runlease-agent-linux-amd64 /usr/local/bin/runlease-agent</pre>
+<div class="note warn"><p><b>Use the release binaries, not a local build.</b> The CLI checks the agent the relay serves against a SHA-256 compiled into the CLI at release time. A locally built agent has a different digest and VMs will refuse it, unless each manifest pins it with <code>relay.agentSha256</code>.</p></div>
+<pre><span class="c"># /etc/systemd/system/runlease-relay.service</span>
+[Unit]
+Description=Runlease relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/runlease-relay \
+  --addr 127.0.0.1:7777 \
+  --agent-binary /usr/local/bin/runlease-agent \
+  --audience https://relay.example.com \
+  --allowed-domains example.com \
+  --max-slots 5000
+Restart=always
+DynamicUser=yes
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target</pre>
+<pre><span class="p">$</span> sudo systemctl daemon-reload
+<span class="p">$</span> sudo systemctl enable --now runlease-relay
+<span class="p">$</span> curl -fsS http://127.0.0.1:7777/health &amp;&amp; echo ok</pre>
+<p class="measure">Then terminate TLS in front of it and forward to <code>127.0.0.1:7777</code>. WebSocket upgrades must pass through, and idle timeouts on the proxy should be long, because sessions are held open.</p>
+
+<h3>Point the CLI at it</h3>
+<pre><span class="p">$</span> runlease config set relay.addr wss://relay.example.com</pre>
+
+<h3>Who may open a slot</h3>
+<p class="measure">Opening a slot needs a Google ID token. There are two ways to accept one, and a relay can use both.</p>
+<div class="scroll"><table>
+  <tr><th>Setting</th><th>Who it admits</th><th>How they sign in</th></tr>
+  <tr><td><code>--audience</code> with <code>--allowed-domains</code> or <code>--allowed-emails</code></td><td>Your organisation's accounts and service accounts</td><td><code>gcloud</code> or a service account. Nothing to set up per person</td></tr>
+  <tr><td><code>--google-client-id</code> and <code>--google-client-secret</code></td><td>Anyone with a Google account, or only your allow-list if you set one</td><td><code>runlease login</code></td></tr>
+</table></div>
+<p class="measure">For <code>runlease login</code>, create an OAuth client of type <b>TVs and Limited Input devices</b> in the Google Cloud console, with the <code>openid</code> and <code>email</code> scopes. The relay hands the client ID and secret to each CLI that signs in. For this client type the secret is not confidential; what protects sign-in is Google's signature on the token, which the relay verifies.</p>
+<p class="measure">The relay will not start with no authentication at all unless you pass <code>--insecure-no-auth</code>.</p>
+
+<h2 id="tiers">Tiers and limits</h2>
+<p class="measure">A tiers file gives each identity a set of limits. Adding a tier is a file edit.</p>
+<pre><span class="k">default</span>: free
+<span class="k">tiers</span>:
+  <span class="k">free</span>:
+    <span class="k">maxSlots</span>: 2      <span class="c"># machines one person may have connected at once</span>
+    <span class="k">slotTTL</span>: 8h      <span class="c"># a slot lives this long at most</span>
+    <span class="k">idleTTL</span>: 15m     <span class="c"># a slot whose machine has been gone this long is given back</span>
+  <span class="k">team</span>:
+    <span class="k">maxSlots</span>: 20
+<span class="k">assign</span>:
+  <span class="k">emails</span>:
+    someone@example.com: team
+  <span class="k">domains</span>:
+    example.com: team</pre>
+<ul class="measure">
+  <li>Everyone lands in <code>default</code> unless an assignment names another tier. An exact email wins over a domain.</li>
+  <li>A slot is given back when its owner runs <code>runlease down</code>, when its machine has been absent for <code>idleTTL</code>, or when <code>slotTTL</code> runs out.</li>
+  <li>An unknown field in the file is an error, so a misspelt limit cannot silently mean "unlimited".</li>
+  <li>The file is read at start. Restart the relay to change limits.</li>
+</ul>
+
+<h2 id="operate">Operating it</h2>
+<div class="scroll"><table>
+  <tr><th>Flag</th><th>Meaning</th></tr>
+  <tr><td><code>--addr</code></td><td>Listen address. Default <code>:7777</code></td></tr>
+  <tr><td><code>--agent-binary</code></td><td>Path of the agent served to booting VMs</td></tr>
+  <tr><td><code>--audience</code></td><td>The relay's public URL, which identity tokens must be issued for</td></tr>
+  <tr><td><code>--allowed-emails</code>, <code>--allowed-domains</code></td><td>Who may open slots</td></tr>
+  <tr><td><code>--google-client-id</code>, <code>--google-client-secret</code></td><td>The OAuth client for <code>runlease login</code></td></tr>
+  <tr><td><code>--tiers-file</code></td><td>The tiers file</td></tr>
+  <tr><td><code>--max-slots</code></td><td>Refuse new slots beyond this many, across everyone. Default 5000</td></tr>
+</table></div>
+<ul class="measure">
+  <li><b>State</b> is all in memory. There is nothing to back up.</li>
+  <li><b>Logs</b> go to stderr. Slot tokens are logged as a short prefix only.</li>
+  <li><b>Health:</b> <code>GET /health</code> returns 200.</li>
+  <li><b>Network:</b> inbound HTTPS, and nothing outbound.</li>
+  <li><b>Upgrades:</b> the relay serves the agent, so relay and agent are always upgraded together, before the CLI release that goes with them. Restarting the relay drops live sessions and forgets its slots. VMs already running keep their old agent.</li>
+  <li><b>Hardening:</b> keep it on its own small machine with no cloud credentials attached. A relay with no credentials is worth little to whoever breaks into it, which is the point of the design.</li>
+</ul>
+
+<div class="next">
+  <a class="btn" href="security.html">What a compromised relay can do</a>
+  <a class="btn" href="install.html">Install</a>
+</div>
+</main>
+<footer>
+  <span>Built by the team behind <a href="https://marshal.codes">Marshal</a>. Apache-2.0.</span>
+  <a href="how-it-works.html">How it works</a>
+  <a href="security.html">Security</a>
+  <a href="install.html">Install</a>
+  <a href="relay.html">Relay</a>
+  <a href="privacy.html">Privacy</a>
+  <a href="terms.html">Terms</a>
+</footer>
+</div>
+</body>
+</html>

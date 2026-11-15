@@ -16,7 +16,7 @@ instanceClass: compute.small
 reclaim:
   ttl: 2h
 relay:
-  addr: wss://relay.runlease.online
+  addr: wss://relay.example.com
 ```
 
 Launch with `runlease up -m my-runner-manifest.yaml`.
@@ -45,15 +45,16 @@ Launch with `runlease up -m my-runner-manifest.yaml`.
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `publicIp` | bool | `true` (or `false` if `relay.addr` is set) | Attach a public IP. When `false` on GCP, ensure Cloud NAT is set up so the instance can reach the relay. |
+| `publicIp` | bool | `false` with a relay, `true` without | Attach a public IP. With a relay the VM needs none: it dials out through your subnet's NAT gateway, and its SSH server listens on localhost only. If the subnet has no NAT gateway, set `true` (or pass `--public-ip`); the address then carries outbound traffic only. `runlease up` checks the subnet for a NAT gateway first (Cloud NAT on GCP, the route table on AWS) and refuses to launch a machine that could not reach the relay. |
 | `relay.addr` | string | — | `wss://…` or `host:port`. Enables the relay tunnel. With this set, no inbound firewall rule is needed. |
+| `relay.agentSha256` | string | digest built into release CLIs | SHA-256 the VM checks the relay-served agent against before running it. Set it when your relay serves an agent you built yourself. `unverified` skips the check on purpose. See [agent verification](security.md#the-agent-binary-is-verified-before-it-runs). |
 
 ### Lifecycle
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `reclaim.ttl` | duration | — | `2h`, `90m`, `1d`. Auto-terminate after this much elapsed time. |
-| `reclaim.selfTermination` | bool | `false` | Install `/usr/local/bin/runlease-terminate` + a `systemd-run` timer. Required for TTL to actually fire from inside the VM. |
+| `reclaim.selfTermination` | bool | `true` | Arm the lease timer inside the VM, so it deletes itself at the end of `ttl`. The deadline is stored on the VM's disk and re-armed at every boot, so a reboot neither loses nor restarts the lease. Set `false` only if something else stops the VM: then nothing on the VM enforces the lease, and `runlease up` says so. On GCP this attaches the default service account with the Compute scope unless `gcp.serviceAccount` is set. |
 | `tags` | map[string]string | — | AWS tags / GCP labels. User keys override the auto-injected `runlease-managed`, `runlease-created-by`, `runlease-expires-at`. |
 
 ### Sudo
@@ -154,7 +155,7 @@ baseImage: projects/debian-cloud/global/images/family/debian-12
 
 publicIp: false                      # relay-only access
 relay:
-  addr: wss://relay.runlease.online
+  addr: wss://relay.example.com
 
 reclaim:
   ttl: 4h

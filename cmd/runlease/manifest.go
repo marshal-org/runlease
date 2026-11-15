@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	rlconfig "github.com/runlease/runlease/pkg/config"
+	rlconfig "github.com/marshal-org/runlease/pkg/config"
 )
 
 var manifestNewOutput string
@@ -76,7 +76,9 @@ instanceClass: compute.small   # Portable class: micro | small | medium | large 
 
 # ── Networking ──────────────────────────────────────────────────────────────
 # publicIp: true               # Default: true if no relay, false if relay set.
-                               # On GCP, false requires Cloud NAT for egress.
+                               # false needs a NAT gateway on the subnet so the
+                               # VM can reach the relay. With a relay, SSH
+                               # listens on localhost only either way.
 relay:
   addr: wss://relay.runlease.online   # Set for tunneled access (no inbound firewall).
                                    # Leave empty to use direct SSH on the public IP.
@@ -84,8 +86,9 @@ relay:
 # ── Lifecycle ───────────────────────────────────────────────────────────────
 reclaim:
   ttl: 2h                      # Auto-terminate after this duration (e.g. 90m, 2h, 1d).
-  selfTermination: true        # Schedule the systemd-run timer that fires
-                               # /usr/local/bin/runlease-terminate at TTL.
+  selfTermination: true        # Default. The VM deletes itself at TTL, and the
+                               # deadline survives a reboot. false = nothing on
+                               # the VM enforces the lease.
                                # The terminate script itself is ALWAYS installed
                                # (manual escape: "sudo runlease-terminate").
 
@@ -172,7 +175,7 @@ relay:
 sudo: passwordless              # NOPASSWD: ALL for runlease-agent
 {{- end }}
 # Optional fields (uncomment to use):
-# publicIp: true
+# publicIp: true               # only if the subnet has no NAT gateway
 # tags:
 #   env: dev
 #   team: platform

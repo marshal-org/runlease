@@ -1,82 +1,150 @@
 name: Release Please
 
 # Runs on every push to main. release-please maintains a single "release PR"
-# from conventional-commit history (feat → minor, fix → patch). Merging that PR
-# bumps the version, updates CHANGELOG.md, and creates the `vX.Y.Z` git tag +
-# GitHub Release. The build job below is gated on that release being created in
-# the same run — so it uploads the cross-platform binaries to the new release
-# without needing a PAT (a tag pushed by GITHUB_TOKEN can't trigger a separate
-# tag-triggered workflow).
+# from conventional-commit history (feat -> minor, fix -> patch). Merging that
+# PR bumps the version, updates CHANGELOG.md, and creates the `vX.Y.Z` tag and
+# GitHub Release. The jobs below are gated on that release being created in the
+# same run, so no personal access token is needed.
+#
+# What a release contains (see docs/ci.md and docs/security.md):
+#   - CLI binaries for linux, darwin and windows
+#   - agent and relay binaries for linux
+#   - checksums.txt with the SHA-256 of every file
+#   - on a public repository: a keyless Sigstore signature of checksums.txt and
+#     a build provenance attestation for every binary
+#
+# The CLI is built AFTER the agent, with the agent's SHA-256 compiled in. A VM
+# launched by a release CLI refuses any agent binary that does not match it.
 
 on:
   push:
     branches: [main]
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   release-please:
-    runs-on: ${{ vars.RUNNER }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
       release_created: ${{ steps.rp.outputs.release_created }}
       tag_name: ${{ steps.rp.outputs.tag_name }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
         id: rp
         with:
           config-file: .release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  build:
-    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
+  server:
+    name: Build agent and relay
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
-    runs-on: ${{ vars.RUNNER }}
-    permissions:
-      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      agent_sha256: ${{ steps.digest.outputs.agent_sha256 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Build
+        env:
+          CGO_ENABLED: 0
+          GOOS: linux
+          VERSION: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          mkdir dist
+          for arch in amd64 arm64; do
+            GOARCH="$arch" go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/runlease-agent-linux-${arch}" ./cmd/runlease-agent
+            GOARCH="$arch" go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/runlease-relay-linux-${arch}" ./cmd/runlease-relay
+          done
+      - name: Agent digest
+        id: digest
+        run: echo "agent_sha256=$(sha256sum dist/runlease-agent-linux-amd64 | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: server
+          path: dist/*
+          if-no-files-found: error
+
+  cli:
+    name: Build CLI ${{ matrix.goos }}-${{ matrix.goarch }}
+    needs: [release-please, server]
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-          - goos: windows
-            goarch: amd64
-
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
-
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
           VERSION: ${{ needs.release-please.outputs.tag_name }}
+          AGENT_SHA256: ${{ needs.server.outputs.agent_sha256 }}
         run: |
+          test -n "$AGENT_SHA256"
           EXT=""
           [ "$GOOS" = "windows" ] && EXT=".exe"
-          SUFFIX="${GOOS}-${GOARCH}"
-          LDFLAGS="-s -w -X main.version=${VERSION}"
           mkdir dist
-          go build -ldflags="$LDFLAGS" -o "dist/runlease-${SUFFIX}${EXT}" ./cmd/runlease
-          if [ "$GOOS" = "linux" ]; then
-            go build -ldflags="$LDFLAGS" -o "dist/runlease-agent-${SUFFIX}" ./cmd/runlease-agent
-            go build -ldflags="$LDFLAGS" -o "dist/runlease-relay-${SUFFIX}" ./cmd/runlease-relay
-          fi
+          go build -trimpath \
+            -ldflags="-s -w -X main.version=${VERSION} -X main.agentSHA256=${AGENT_SHA256}" \
+            -o "dist/runlease-${GOOS}-${GOARCH}${EXT}" ./cmd/runlease
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
 
-      - name: Upload binaries to the release
-        uses: softprops/action-gh-release@v2
+  publish:
+    name: Checksums, signature, upload
+    needs: [release-please, server, cli]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum runlease* > checksums.txt && cat checksums.txt
+      # Keyless signing writes the repository identity to a public transparency
+      # log, so it only runs once the repository itself is public.
+      - name: Install cosign
+        if: ${{ !github.event.repository.private }}
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - name: Sign checksums
+        if: ${{ !github.event.repository.private }}
+        working-directory: dist
+        run: cosign sign-blob --yes --bundle checksums.txt.sigstore.json checksums.txt
+      - name: Attest build provenance
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: dist/runlease*
+      - name: Upload to the release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
           files: dist/*

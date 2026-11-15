@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.0](https://github.com/marshal-org/runlease/compare/v0.5.0...v0.6.0) (2026-11-15)
+
+
+### Features
+
+* a Claude Code plugin for Runlease ([#41](https://github.com/marshal-org/runlease/issues/41)) ([a635be0](https://github.com/marshal-org/runlease/commit/a635be01fccb7cf6cd7cd9680f7692f7179f9b57))
+* **doctor:** add runlease doctor, fill JSON output gaps, fix down --leaked with nowhere to look ([#43](https://github.com/marshal-org/runlease/issues/43)) ([0fc0d1e](https://github.com/marshal-org/runlease/commit/0fc0d1e374c40f4633f9d9ef5cf9fb21e84eff1f))
+* **mcp:** add 'runlease mcp', a Model Context Protocol server over stdio ([#42](https://github.com/marshal-org/runlease/issues/42)) ([4a84737](https://github.com/marshal-org/runlease/commit/4a847372be1d702b89bc28993a5d8e6e342af7d0))
+
+
+### Bug Fixes
+
+* make the first launch work without reading the manual ([#40](https://github.com/marshal-org/runlease/issues/40)) ([4ed30b1](https://github.com/marshal-org/runlease/commit/4ed30b15d4745078ac51e4345e27f2ff8090eddc))
+* **site:** line the use-case text up with its command block ([9b57286](https://github.com/marshal-org/runlease/commit/9b57286e66d96ba24adbbddf4180b28dcbdb4baa))
+* **site:** use-case commands wrap instead of showing scroll bars ([fae9cc5](https://github.com/marshal-org/runlease/commit/fae9cc541d887b31dda8531a96fe4f57e47a01d5))
+* **site:** use-case commands wrap instead of showing scroll bars ([ce6515f](https://github.com/marshal-org/runlease/commit/ce6515f503cc5ae3a9c823d6b402a5dc39bf29fe))
+
 ## [0.5.0](https://github.com/marshal-org/runlease/compare/v0.4.1...v0.5.0) (2026-11-15)
 
 

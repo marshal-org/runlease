@@ -54,6 +54,7 @@ code { font-family: var(--mono); font-size: .88em; }
 :not(pre) > code { background: var(--sheet-2); padding: 1px 5px; overflow-wrap: anywhere; }
 pre { background: var(--term-bg); color: var(--term-ink); font-family: var(--mono); font-size: .84rem; line-height: 1.7; padding: 18px 20px; overflow-x: auto; margin: 14px 0 20px; }
 pre code { font-size: inherit; }
+pre, .scroll { scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
 pre .c { color: var(--term-dim); }
 pre .p { color: var(--lease); user-select: none; }
 pre .k { color: #8FB4FF; }

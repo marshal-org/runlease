@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" role="img" aria-labelledby="t d">
+<title id="t">Runlease in thirty seconds</title>
+<desc id="d">A terminal runs runlease up, exec, snooze and list. Beside it a diagram builds step by step: keys are made on your computer, a slot is reserved at the relay, a spot machine starts in your cloud account and dials out, SSH runs end to end through the relay, the lease is extended, and the machine deletes itself.</desc>
+<style>
+text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
+.term{fill:#0c1a2b}
+.ttitle{fill:#6f84a0;font-size:12.5px}
+.tp{fill:#f2a33a;font-size:15.5px}
+.tc{fill:#eaf1fb;font-size:15.5px}
+.to{fill:#b9c8dc;font-size:15.5px}
+.tok{fill:#5fd38d;font-size:15.5px}
+.tdim{fill:#6f84a0;font-size:15.5px}
+.cover{fill:#0c1a2b;transform-box:fill-box;transform-origin:right center}
+.cap{fill:#0f1c2e;font-size:15px;font-weight:700;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.node{fill:#fff;stroke:#b9c6d8;stroke-width:1.5}
+.nt{fill:#0f1c2e;font-size:17px;font-weight:700;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.ns{fill:#5b6b82;font-size:13px;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.zone{fill:none;stroke:#8ea0ba;stroke-width:1.5;stroke-dasharray:7 6}
+.zt{fill:#5b6b82;font-size:11.5px;letter-spacing:.12em}
+.chip{fill:#e9eef6}.chipt{fill:#33445c;font-size:12px}
+.chipa{fill:#fdecc8}.chipat{fill:#8a5200;font-size:12px}
+.chipg{fill:#d9f3e3}.chipgt{fill:#12693a;font-size:12px}
+.chipr{fill:#fbdcd8}.chiprt{fill:#98261b;font-size:12px}
+.wire{fill:none;stroke:#7d90ab;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wl{fill:#5b6b82;font-size:12px}
+.tunnel{fill:none;stroke:#1f9d55;stroke-width:4.5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:10 8}
+.tl{fill:#12693a;font-size:12.5px;font-weight:700}
+.gone{fill:#5b6b82;font-size:13.5px;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+@media (prefers-color-scheme:dark){
+.cap,.nt{fill:#e8eff9}.node{fill:#13233a;stroke:#2f4666}.ns,.zt,.wl,.gone{fill:#9db0c9}
+.zone{stroke:#4a6184}.wire{stroke:#6f86a8}.chip{fill:#20324d}.chipt{fill:#c6d4e8}
+.chipa{fill:#4a3410}.chipat{fill:#ffcf7a}.chipg{fill:#12402a}.chipgt{fill:#7fe0a8}
+.chipr{fill:#4d1d19}.chiprt{fill:#ffada3}.tunnel{stroke:#3ecf7d}.tl{fill:#7fe0a8}
+}
+@keyframes s1{0.000%{opacity:0}1.333%{opacity:0}2.167%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s1{animation:s1 30.0s linear infinite}@keyframes c2{0.000%{transform:scaleX(1)}2.333%{transform:scaleX(1)}8.667%{transform:scaleX(0)}100.000%{transform:scaleX(0)}}.c2{animation:c2 30.0s linear infinite}@keyframes s3{0.000%{opacity:0}10.000%{opacity:0}10.833%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s3{animation:s3 30.0s linear infinite}@keyframes s4{0.000%{opacity:0}20.000%{opacity:0}20.833%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s4{animation:s4 30.0s linear infinite}@keyframes s5{0.000%{opacity:0}31.667%{opacity:0}32.500%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s5{animation:s5 30.0s linear infinite}@keyframes s6{0.000%{opacity:0}32.667%{opacity:0}33.500%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s6{animation:s6 30.0s linear infinite}@keyframes s7{0.000%{opacity:0}33.667%{opacity:0}34.500%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s7{animation:s7 30.0s linear infinite}@keyframes s8{0.000%{opacity:0}41.333%{opacity:0}42.167%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s8{animation:s8 30.0s linear infinite}@keyframes s9{0.000%{opacity:0}46.333%{opacity:0}47.167%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s9{animation:s9 30.0s linear infinite}@keyframes c10{0.000%{transform:scaleX(1)}47.333%{transform:scaleX(1)}53.000%{transform:scaleX(0)}100.000%{transform:scaleX(0)}}.c10{animation:c10 30.0s linear infinite}@keyframes s11{0.000%{opacity:0}57.000%{opacity:0}57.833%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s11{animation:s11 30.0s linear infinite}@keyframes s12{0.000%{opacity:0}63.000%{opacity:0}63.833%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s12{animation:s12 30.0s linear infinite}@keyframes c13{0.000%{transform:scaleX(1)}64.000%{transform:scaleX(1)}68.333%{transform:scaleX(0)}100.000%{transform:scaleX(0)}}.c13{animation:c13 30.0s linear infinite}@keyframes s14{0.000%{opacity:0}70.333%{opacity:0}71.167%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s14{animation:s14 30.0s linear infinite}@keyframes s15{0.000%{opacity:0}76.667%{opacity:0}77.500%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s15{animation:s15 30.0s linear infinite}@keyframes s16{0.000%{opacity:0}82.333%{opacity:0}83.167%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s16{animation:s16 30.0s linear infinite}@keyframes c17{0.000%{transform:scaleX(1)}83.333%{transform:scaleX(1)}86.000%{transform:scaleX(0)}100.000%{transform:scaleX(0)}}.c17{animation:c17 30.0s linear infinite}@keyframes s18{0.000%{opacity:0}87.667%{opacity:0}88.500%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s18{animation:s18 30.0s linear infinite}@keyframes s19{0.000%{opacity:0}2.667%{opacity:0}3.500%{opacity:1}9.000%{opacity:1}9.833%{opacity:0}100.000%{opacity:0}}.s19{animation:s19 30.0s linear infinite}@keyframes s20{0.000%{opacity:0}10.000%{opacity:0}10.833%{opacity:1}19.000%{opacity:1}19.833%{opacity:0}100.000%{opacity:0}}.s20{animation:s20 30.0s linear infinite}@keyframes s21{0.000%{opacity:0}20.000%{opacity:0}20.833%{opacity:1}34.333%{opacity:1}35.167%{opacity:0}100.000%{opacity:0}}.s21{animation:s21 30.0s linear infinite}@keyframes s22{0.000%{opacity:0}35.333%{opacity:0}36.167%{opacity:1}45.667%{opacity:1}46.500%{opacity:0}100.000%{opacity:0}}.s22{animation:s22 30.0s linear infinite}@keyframes s23{0.000%{opacity:0}46.667%{opacity:0}47.500%{opacity:1}62.333%{opacity:1}63.167%{opacity:0}100.000%{opacity:0}}.s23{animation:s23 30.0s linear infinite}@keyframes s24{0.000%{opacity:0}63.333%{opacity:0}64.167%{opacity:1}75.000%{opacity:1}75.833%{opacity:0}100.000%{opacity:0}}.s24{animation:s24 30.0s linear infinite}@keyframes s25{0.000%{opacity:0}76.000%{opacity:0}76.833%{opacity:1}94.333%{opacity:1}95.167%{opacity:0}100.000%{opacity:0}}.s25{animation:s25 30.0s linear infinite}@keyframes s26{0.000%{opacity:0}1.000%{opacity:0}1.833%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s26{animation:s26 30.0s linear infinite}@keyframes s27{0.000%{opacity:0}8.000%{opacity:0}8.833%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s27{animation:s27 30.0s linear infinite}@keyframes s28{0.000%{opacity:0}10.000%{opacity:0}10.833%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s28{animation:s28 30.0s linear infinite}@keyframes s29{0.000%{opacity:0}14.333%{opacity:0}15.167%{opacity:1}47.667%{opacity:1}48.500%{opacity:0}100.000%{opacity:0}}.s29{animation:s29 30.0s linear infinite}@keyframes s30{0.000%{opacity:0}48.667%{opacity:0}49.500%{opacity:1}76.000%{opacity:1}76.833%{opacity:0}100.000%{opacity:0}}.s30{animation:s30 30.0s linear infinite}@keyframes s31{0.000%{opacity:0}20.000%{opacity:0}20.833%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s31{animation:s31 30.0s linear infinite}@keyframes s32{0.000%{opacity:0}22.000%{opacity:0}22.833%{opacity:1}80.000%{opacity:1}80.833%{opacity:0}100.000%{opacity:0}}.s32{animation:s32 30.0s linear infinite}@keyframes s33{0.000%{opacity:0}32.667%{opacity:0}33.500%{opacity:1}80.000%{opacity:1}80.833%{opacity:0}100.000%{opacity:0}}.s33{animation:s33 30.0s linear infinite}@keyframes s34{0.000%{opacity:0}33.667%{opacity:0}34.500%{opacity:1}70.333%{opacity:1}71.167%{opacity:0}100.000%{opacity:0}}.s34{animation:s34 30.0s linear infinite}@keyframes s35{0.000%{opacity:0}70.667%{opacity:0}71.500%{opacity:1}76.333%{opacity:1}77.167%{opacity:0}100.000%{opacity:0}}.s35{animation:s35 30.0s linear infinite}@keyframes s36{0.000%{opacity:0}76.667%{opacity:0}77.500%{opacity:1}80.000%{opacity:1}80.833%{opacity:0}100.000%{opacity:0}}.s36{animation:s36 30.0s linear infinite}@keyframes s37{0.000%{opacity:0}81.667%{opacity:0}82.500%{opacity:1}95.333%{opacity:1}96.167%{opacity:0}100.000%{opacity:0}}.s37{animation:s37 30.0s linear infinite}@keyframes d38{0.000%{stroke-dashoffset:100;opacity:0}11.000%{stroke-dashoffset:100;opacity:1}14.000%{stroke-dashoffset:0;opacity:1}76.333%{stroke-dashoffset:0;opacity:1}77.333%{stroke-dashoffset:0;opacity:0}100.000%{stroke-dashoffset:100;opacity:0}}.d38{animation:d38 30.0s linear infinite}@keyframes d39{0.000%{stroke-dashoffset:100;opacity:0}36.000%{stroke-dashoffset:100;opacity:1}39.333%{stroke-dashoffset:0;opacity:1}76.333%{stroke-dashoffset:0;opacity:1}77.333%{stroke-dashoffset:0;opacity:0}100.000%{stroke-dashoffset:100;opacity:0}}.d39{animation:d39 30.0s linear infinite}@keyframes s40{0.000%{opacity:0}12.000%{opacity:0}12.833%{opacity:1}76.333%{opacity:1}77.167%{opacity:0}100.000%{opacity:0}}.s40{animation:s40 30.0s linear infinite}@keyframes s41{0.000%{opacity:0}36.667%{opacity:0}37.500%{opacity:1}76.333%{opacity:1}77.167%{opacity:0}100.000%{opacity:0}}.s41{animation:s41 30.0s linear infinite}@keyframes t42{0.000%{opacity:0;stroke-dashoffset:0}47.667%{opacity:0;stroke-dashoffset:0}49.000%{opacity:1;stroke-dashoffset:-8}75.667%{opacity:1;stroke-dashoffset:-168}76.667%{opacity:0;stroke-dashoffset:-174}100.000%{opacity:0;stroke-dashoffset:-174}}.t42{animation:t42 30.0s linear infinite}@keyframes s43{0.000%{opacity:0}49.333%{opacity:0}50.167%{opacity:1}76.000%{opacity:1}76.833%{opacity:0}100.000%{opacity:0}}.s43{animation:s43 30.0s linear infinite}
+
+@media (prefers-reduced-motion:reduce){
+/* A still picture: the session running, before the lease ends. */
+*{animation:none!important}
+[class*=" s"],[class^="s"],[class*=" d"],[class*=" t"]{opacity:1}
+.cover{opacity:0}
+}
+</style>
+<rect x="20" y="20" width="560" height="560" rx="12" class="term"/>
+<circle cx="44" cy="42" r="5.5" fill="#ff5f57"/><circle cx="63" cy="42" r="5.5" fill="#febc2e"/><circle cx="82" cy="42" r="5.5" fill="#28c840"/>
+<text x="300.0" y="47" class="ttitle" text-anchor="middle">your terminal</text>
+<g class="s1"><text x="44" y="94" class="tp">$</text><text x="62.64" y="94" class="tc">runlease up --provider gcp --ttl 2h</text>
+<rect x="60.64" y="78.5" width="334.2" height="25" class="cover c2"/></g>
+<text x="44" y="125" class="to s3" xml:space="preserve">Pre-registering relay slot...</text>
+<text x="44" y="156" class="to s4" xml:space="preserve">Requesting spot instance (e2-small)...</text>
+<text x="44" y="187" class="tok s5" xml:space="preserve">Instance ready</text>
+<text x="44" y="218" class="to s6" xml:space="preserve">   Public IP: none</text>
+<text x="44" y="249" class="to s7" xml:space="preserve">   Rate:      ~$0.026/hr</text>
+<text x="44" y="280" class="to s8" xml:space="preserve">Agent connected</text>
+<g class="s9"><text x="44" y="323.4" class="tp">$</text><text x="62.64" y="323.4" class="tc">runlease exec dev -- make test</text>
+<rect x="60.64" y="307.9" width="287.6" height="25" class="cover c10"/></g>
+<text x="44" y="354.40000000000003" class="tok s11" xml:space="preserve">ok    all tests passed    12.4s</text>
+<g class="s12"><text x="44" y="397.8" class="tp">$</text><text x="62.64" y="397.8" class="tc">runlease snooze dev 1h</text>
+<rect x="60.64" y="382.3" width="213.0" height="25" class="cover c13"/></g>
+<text x="44" y="428.8" class="to s14" xml:space="preserve">dev now auto-terminates in 3h0m0s</text>
+<text x="44" y="472.20000000000005" class="tdim s15" xml:space="preserve"># nobody runs 'down'. the lease just ends.</text>
+<g class="s16"><text x="44" y="503.20000000000005" class="tp">$</text><text x="62.64" y="503.20000000000005" class="tc">runlease list</text>
+<rect x="60.64" y="487.70000000000005" width="129.2" height="25" class="cover c17"/></g>
+<text x="44" y="534.2" class="to s18" xml:space="preserve">No active instances tracked on this computer.</text>
+<text x="630" y="52" class="cap s19">1  Keys are made on your computer. They never leave it.</text>
+<text x="630" y="52" class="cap s20">2  A slot is reserved at the relay. The relay holds no key.</text>
+<text x="630" y="52" class="cap s21">3  A spot machine starts in your own cloud account.</text>
+<text x="630" y="52" class="cap s22">4  It dials out. No public address, no open port.</text>
+<text x="630" y="52" class="cap s23">5  SSH runs end to end. The relay sees only ciphertext.</text>
+<text x="630" y="52" class="cap s24">6  Need longer? Snooze moves the deadline.</text>
+<text x="630" y="52" class="cap s25">7  The lease ends and the machine deletes itself.</text>
+<g class="s26"><rect x="630" y="86" width="232" height="96" rx="10" class="node"/><text x="648" y="120" class="nt">Your computer</text><text x="648" y="144" class="ns">runs the CLI</text></g>
+<g class="s27"><rect x="648" y="192" width="153" height="24" rx="12" class="chipa"/><text x="659" y="208.5" class="chipat">SSH keys made here</text></g>
+<g class="s28"><rect x="922" y="232" width="236" height="96" rx="10" class="node"/><text x="940" y="266" class="nt">Relay</text><text x="940" y="290" class="ns">pairs the two sides</text></g>
+<g class="s29"><rect x="940" y="338" width="117" height="24" rx="12" class="chip"/><text x="951" y="354.5" class="chipt">slot reserved</text></g>
+<g class="s30"><rect x="940" y="338" width="168" height="24" rx="12" class="chipg"/><text x="951" y="354.5" class="chipgt">sees only ciphertext</text></g>
+<g class="s31"><rect x="630" y="400" width="528" height="176" rx="12" class="zone"/><text x="648" y="426" class="zt">YOUR CLOUD ACCOUNT</text></g>
+<g class="s32"><rect x="654" y="440" width="250" height="96" rx="10" class="node"/><text x="672" y="474" class="nt">Spot machine</text><text x="672" y="498" class="ns">e2-small · billed to you</text></g>
+<g class="s33"><rect x="922" y="446" width="146" height="24" rx="12" class="chip"/><text x="933" y="462.5" class="chipt">no public address</text></g>
+<g class="s34"><rect x="922" y="478" width="95" height="24" rx="12" class="chipa"/><text x="933" y="494.5" class="chipat">lease 2:00</text></g>
+<g class="s35"><rect x="922" y="478" width="95" height="24" rx="12" class="chipa"/><text x="933" y="494.5" class="chipat">lease 3:00</text></g>
+<g class="s36"><rect x="922" y="478" width="95" height="24" rx="12" class="chipr"/><text x="933" y="494.5" class="chiprt">lease over</text></g>
+<text x="672" y="496" class="gone s37">deleted itself. nothing left to pay for.</text>
+<path d="M746 220 V280 H922" class="wire d38" stroke-dasharray="100" pathLength="100"/>
+<path d="M779 440 V386 H1040 V366" class="wire d39" stroke-dasharray="100" pathLength="100"/>
+<text x="758" y="262" class="wl s40">outbound</text>
+<text x="791" y="378" class="wl s41">dials out</text>
+<path d="M746 220 V280 H922 M1040 366 V386 H779 V440" class="tunnel t42"/>
+<text x="922" y="216" class="tl s43">SSH, encrypted end to end</text>
+</svg>

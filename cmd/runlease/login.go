@@ -78,7 +78,7 @@ func relayFromFlagOrConfig() (string, error) {
 		return "", err
 	}
 	if cfg.Relay.Addr == "" {
-		return "", fmt.Errorf("no relay set. For the free public relay, run:\n  runlease login --relay %s\nFor your own: runlease config set relay.addr wss://...", publicRelay)
+		return "", fmt.Errorf("no relay set. For the free public relay, run:\n  runlease login --relay %s\nFor your own relay: runlease config set relay.addr wss://YOUR-RELAY", publicRelay)
 	}
 	return cfg.Relay.Addr, nil
 }

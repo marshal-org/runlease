@@ -1,7 +1,7 @@
 # Governance
 
-Runlease is maintained by the team behind [Marshal](https://marshal.codes). It is Apache-2.0
-licensed and is developed in the open.
+Runlease is maintained by the team behind [Marshal](https://marshal.codes). Its source is
+available under the [Functional Source License](LICENSE), and it is developed in the open.
 
 ## Roles
 

@@ -1,0 +1,25 @@
+# A machine for a coding agent: more room, tools installed at boot, and a dev
+# server port forwarded to your computer.
+#
+#   runlease up -m agent-workbench.yaml --attach
+#
+# --attach streams the setup log, then holds the port forward open.
+name: workbench
+provider: gcp
+region: us-central1-a
+instanceClass: compute.large   # about 4 vCPU / 8 GB
+diskSizeGb: 50
+reclaim:
+  ttl: 4h
+relay:
+  addr: wss://connect.runlease.online
+sudo: passwordless             # the agent may install packages; default is locked
+setup:                         # runs once, as root, after the machine is ready
+  - name: tools
+    run: |
+      apt-get update -qq
+      apt-get install -y -qq git build-essential nodejs npm
+forwards:                      # localhost:3000 here -> port 3000 on the machine
+  - name: dev-server
+    local: 3000
+    remote: 3000

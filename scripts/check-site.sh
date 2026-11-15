@@ -2,7 +2,7 @@
 # Checks the website before it is published, and on every pull request.
 #   - every page is a complete HTML document
 #   - every local link and stylesheet points at a file that exists
-#   - nothing loads a script from another site
+#   - nothing loads a script from another site (the site's own files are fine)
 set -euo pipefail
 cd "$(dirname "$0")/../site"
 fail=0
@@ -23,7 +23,8 @@ for f in *.html; do
     fi
   done
 
-  if grep -q -E '<script[^>]+src=' "$f"; then
+  # A script file of the site's own is fine. One fetched from another site is not.
+  if grep -q -E "<script[^>]+src=[\"']?(https?:)?//" "$f"; then
     echo "SITE: $f loads an external script; the site ships its own code only" >&2
     fail=1
   fi

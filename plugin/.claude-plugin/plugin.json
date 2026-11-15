@@ -1,0 +1,11 @@
+{
+  "name": "runlease",
+  "version": "0.1.0",
+  "description": "Leased spot machines for coding agents, in your own cloud: skills, slash commands, typed tools and a live view of what is running.",
+  "author": { "name": "Marshal Security", "url": "https://marshal.codes" },
+  "homepage": "https://runlease.online",
+  "repository": "https://github.com/marshal-org/runlease",
+  "license": "Apache-2.0",
+  "keywords": ["spot", "vm", "sandbox", "gcp", "aws", "agents"],
+  "types": "./types/index.d.ts"
+}

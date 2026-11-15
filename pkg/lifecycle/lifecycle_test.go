@@ -305,8 +305,11 @@ func TestStart_picksUpInstancesAddedLater(t *testing.T) {
 	mock := newMock(provider.StatusRunning)
 	mgr := managerWith(reg, mock)
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go mgr.Start(ctx)
+	stopped := make(chan struct{})
+	go func() { mgr.Start(ctx); close(stopped) }()
+	// Stop the manager and wait for its watches before the temp dir is removed:
+	// they write to the registry file in it.
+	defer func() { cancel(); <-stopped }()
 
 	time.Sleep(10 * time.Millisecond)
 	// Written by another process: a registry of its own on the same file.

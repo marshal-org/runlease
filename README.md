@@ -113,6 +113,20 @@ runlease up -m agent-box.yaml --attach
 `runlease manifest new` writes one interactively. Every field is in the
 [manifest reference](docs/manifest.md).
 
+### Finding machines this computer has forgotten
+
+`runlease list` shows what this computer launched and still remembers. It also asks your cloud
+for every machine carrying the `runlease-managed` label, and lists the ones it does not track:
+launched from another computer, or left behind stopped with a disk that still bills.
+
+```bash
+runlease list             # tracked machines, then anything found in the cloud
+runlease down --leaked    # delete the stopped and the overdue ones
+runlease list --local     # skip the cloud lookup
+```
+
+`down --leaked` never deletes a machine that is running within its lease.
+
 ## How it works
 
 ```mermaid

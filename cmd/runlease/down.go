@@ -10,12 +10,17 @@ import (
 
 	"github.com/marshal-org/runlease/pkg/credential"
 	"github.com/marshal-org/runlease/pkg/provider"
+	"github.com/marshal-org/runlease/pkg/registry"
 )
 
-var downYes bool
+var (
+	downYes    bool
+	downLeaked bool
+)
 
 func init() {
 	downCmd.Flags().BoolVarP(&downYes, "yes", "y", false, "skip confirmation prompt")
+	downCmd.Flags().BoolVar(&downLeaked, "leaked", false, "delete runlease machines found in the cloud that this computer does not track and that should no longer exist: stopped ones (their disks still bill) and ones past their lease")
 	rootCmd.AddCommand(downCmd)
 }
 
@@ -30,6 +35,12 @@ func runDown(cmd *cobra.Command, args []string) error {
 	reg, err := loadRegistry()
 	if err != nil {
 		return err
+	}
+	if downLeaked {
+		if len(args) > 0 {
+			return fmt.Errorf("--leaked takes no instance name: it finds the machines itself")
+		}
+		return runDownLeaked(cmd, reg)
 	}
 
 	nameOrID, err := resolveInstance(cmd, reg, args, "down")
@@ -91,5 +102,64 @@ func runDown(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintln(cmd.OutOrStdout(), done)
+	return nil
+}
+
+// runDownLeaked deletes the runlease machines that `list` reports as leaked or
+// expired: found in the cloud by label, not in the registry, and either
+// stopped with a disk still billing or running past their lease. A machine
+// that is running within its lease is never touched: it is someone's.
+func runDownLeaked(cmd *cobra.Command, reg *registry.Registry) error {
+	out := cmd.OutOrStdout()
+	ctx := cmd.Context()
+	scopes := scanScopes(reg)
+	if len(scopes) == 0 {
+		return fmt.Errorf("nowhere to look: this computer tracks no machines and has no default provider and region. Run 'runlease configure' first")
+	}
+	found, notes := findUntracked(ctx, reg, scopes)
+	var doomed []untrackedInstance
+	for _, u := range found {
+		if u.removable() {
+			doomed = append(doomed, u)
+		}
+	}
+	for _, n := range notes {
+		fmt.Fprintf(cmd.ErrOrStderr(), "note: %s\n", n)
+	}
+	if len(doomed) == 0 {
+		fmt.Fprintln(out, "Nothing leaked: no stopped or expired runlease machines found outside the registry.")
+		return nil
+	}
+
+	fmt.Fprintf(out, "To be deleted (%d):\n", len(doomed))
+	for _, u := range doomed {
+		fmt.Fprintf(out, "  %s  %s %s  %s\n", u.ID, u.Provider, u.Region, explain(u))
+	}
+	if !downYes {
+		fmt.Fprint(out, "Delete them? [y/N] ")
+		scanner := bufio.NewScanner(cmd.InOrStdin())
+		scanner.Scan()
+		if strings.ToLower(strings.TrimSpace(scanner.Text())) != "y" {
+			fmt.Fprintln(out, "Aborted.")
+			return nil
+		}
+	}
+
+	var failed int
+	for _, u := range doomed {
+		p, err := newProvider(ctx, u.Provider, u.Region, u.Project)
+		if err == nil {
+			err = p.Terminate(ctx, u.ID)
+		}
+		if err != nil && !errors.Is(err, provider.ErrNotFound) {
+			failed++
+			fmt.Fprintf(out, "❌ %s: %v\n", u.ID, err)
+			continue
+		}
+		fmt.Fprintf(out, "✅ %s deleted\n", u.ID)
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d of %d machines could not be deleted", failed, len(doomed))
+	}
 	return nil
 }

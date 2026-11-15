@@ -184,7 +184,10 @@ These are real, and they are why the trust table above lists your cloud account 
    `gcp.serviceAccount` is attached with the `cloud-platform` scope, so its IAM roles are the only
    limit on what code on the VM can do. Without that permission the VM powers itself off at the
    end of the lease instead: compute billing stops, but the stopped instance and its disk stay
-   until something removes them.
+   until something removes them. `runlease list` looks for exactly these: it asks the cloud for
+   every machine carrying the `runlease-managed` label and shows the ones this computer does not
+   track, with their disk size. `runlease down --leaked` deletes the stopped and the overdue
+   ones, and `runlease sync` and the daemon delete a stopped machine they do track.
 12. **Spot VMs can be reclaimed by the cloud at any time.** That is a property of spot capacity,
    not a failure.
 

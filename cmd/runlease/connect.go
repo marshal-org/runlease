@@ -65,13 +65,13 @@ func runConnect(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("relay: re-registering the slot: %w", rerr)
 			}
 			return pollAndConnectViaRelay(cmd, entry.RelayAddr, entry.RelayToken,
-				entry.Handle.ManifestName, cred, forwards)
+				entry.Handle.ManifestName, cred, forwards, 0, nil)
 		}
 		if strings.Contains(err.Error(), "close 1000") {
 			// Relay dropped the connection cleanly — agent is mid-reconnect (5s delay).
 			fmt.Fprintf(out, "⚠️  Agent reconnecting — waiting...\n")
 			return pollAndConnectViaRelay(cmd, entry.RelayAddr, entry.RelayToken,
-				entry.Handle.ManifestName, cred, forwards)
+				entry.Handle.ManifestName, cred, forwards, 0, nil)
 		}
 		return fmt.Errorf("relay: %w", err)
 	}

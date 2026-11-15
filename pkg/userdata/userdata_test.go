@@ -532,3 +532,60 @@ func TestBuild_leaseSurvivesReboot(t *testing.T) {
 		t.Error("snooze does not update the stored deadline, so a reboot would undo it")
 	}
 }
+
+// A boot script that stops early has to say so where the CLI can read it, and
+// a failed setup step has to end the log with a marker.
+func TestBuild_failureSignals(t *testing.T) {
+	p := fullParams()
+	p.Provider = "gcp"
+	p.RelayAddr = "wss://relay.example.com"
+	p.AgentSHA256 = strings.Repeat("a", 64)
+	p.SetupSteps = []SetupStep{{Name: "deps", Run: "false"}}
+	out, err := Build(p)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	trap := strings.Index(out, "RUNLEASE_BOOT_FAILED stage=$RUNLEASE_STAGE")
+	if trap < 0 || trap > strings.Index(out, "cat > /usr/local/bin/runlease-terminate") {
+		t.Error("the failure trap must be set before the first setup step")
+	}
+	for _, stage := range []string{"lease", "user", "sshd", "agent-download", "agent-verify", "agent-start", "setup"} {
+		if !strings.Contains(out, "RUNLEASE_STAGE="+stage+"\n") {
+			t.Errorf("stage %q is never set", stage)
+		}
+	}
+	if !strings.Contains(out, `echo "__RUNLEASE_SETUP_FAILED__ step 00 (deps)"`) {
+		t.Error("a failed setup step writes no failure marker")
+	}
+}
+
+// Run the setup block for real: a failing step must leave the failure marker
+// in the log and a non-zero exit, and a passing one the done marker.
+func TestSetupBlock_runs(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not available")
+	}
+	for _, tc := range []struct{ run, want string }{
+		{"echo hi; exit 3", "__RUNLEASE_SETUP_FAILED__ step 00 (deps)"},
+		{"echo hi", "__RUNLEASE_SETUP_DONE__"},
+	} {
+		p := fullParams()
+		p.SetupSteps = []SetupStep{{Name: "deps", Run: tc.run}}
+		out, err := Build(p)
+		if err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		dir := t.TempDir()
+		block := out[strings.Index(out, "RUNLEASE_STAGE=setup"):]
+		block = strings.NewReplacer("/var/lib/runlease", dir, "/var/log", dir, "/run/", dir+"/").Replace(block)
+		cmd := exec.Command(bash, "-c", "set -euo pipefail\n"+block)
+		got, runErr := cmd.CombinedOutput()
+		if !strings.Contains(string(got), tc.want) {
+			t.Errorf("run %q: output missing %q:\n%s", tc.run, tc.want, got)
+		}
+		if failed := strings.Contains(tc.want, "FAILED"); failed != (runErr != nil) {
+			t.Errorf("run %q: exit error = %v, want failure = %v", tc.run, runErr, failed)
+		}
+	}
+}

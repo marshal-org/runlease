@@ -33,6 +33,10 @@ type mockEC2 struct {
 	routesErr   error
 }
 
+func (m *mockEC2) GetConsoleOutput(_ context.Context, _ *ec2.GetConsoleOutputInput, _ ...func(*ec2.Options)) (*ec2.GetConsoleOutputOutput, error) {
+	return &ec2.GetConsoleOutputOutput{}, nil
+}
+
 func (m *mockEC2) DescribeSubnets(_ context.Context, _ *ec2.DescribeSubnetsInput, _ ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error) {
 	return m.subnetsOut, m.subnetsErr
 }

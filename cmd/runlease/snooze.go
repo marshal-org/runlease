@@ -79,9 +79,9 @@ func runSnooze(cmd *cobra.Command, args []string) error {
 	var conn net.Conn
 	var addr string
 	if entry.RelayAddr != "" && !snoozeDirect {
-		conn, err = dialRelay(entry.RelayAddr, entry.RelayToken)
+		conn, err = openRelay(cmd.Context(), cmd.ErrOrStderr(), entry)
 		if err != nil {
-			return fmt.Errorf("relay: %w", err)
+			return err
 		}
 		addr = entry.RelayAddr
 	} else if entry.Handle.PublicIP != "" {

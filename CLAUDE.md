@@ -129,6 +129,9 @@ The registry is the only local record of a machine, so these rules keep it from 
 3. Every registry write goes through `Registry.mutate`: file lock, re-read, one change, atomic rename. Never write back a map loaded earlier. Remove by instance ID (`RemoveID`), not by name.
 4. Gone means the cloud says not found (or AWS `terminated`). Powered off (`StatusStopped`, including GCP `TERMINATED`) still exists and is billed: `sync` and the daemon delete it before dropping the entry.
 5. The lease is a deadline on the VM's disk (`/var/lib/runlease/lease-deadline`), re-armed at each boot by `runlease-lease.service`. The boot script runs once (`/var/lib/runlease/booted`). `selfTermination` defaults to true.
+7. Waiting for the agent is bounded and explains itself (`waitForAgent`): the slot is gone (relay 404), the boot script failed (it writes `RUNLEASE_BOOT_FAILED stage=… exit=…` to the serial console, read through `provider.ConsoleReader`), or the time is up. A setup step that fails ends the log with `__RUNLEASE_SETUP_FAILED__`.
+8. Commands reach a machine through `openRelay`, which registers the slot again when the relay answers "unauthorized". Don't call `dialRelay` directly from a command.
+9. `up` compares the relay's agent with the digest the VM will check (`checkRelayAgent`) before it reserves a slot or creates anything.
 6. The daemon rescans the registry every poll, retries a failed terminate, and reads the registry again before acting on a deadline.
 
 ### What lives where

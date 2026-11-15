@@ -90,9 +90,9 @@ func runExec(cmd *cobra.Command, args []string) error {
 	}
 
 	if entry.RelayAddr != "" && !execDirect {
-		conn, err := dialRelay(entry.RelayAddr, entry.RelayToken)
+		conn, err := openRelay(cmd.Context(), cmd.ErrOrStderr(), entry)
 		if err != nil {
-			return fmt.Errorf("relay: %w", err)
+			return err
 		}
 		return execOverConn(conn, entry.RelayAddr, cred, remoteArgs)
 	}

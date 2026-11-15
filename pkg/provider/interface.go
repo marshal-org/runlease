@@ -88,3 +88,11 @@ type EgressChecker interface {
 	// made, not that there is no NAT.
 	HasPrivateEgress(ctx context.Context, network, subnet string) (bool, error)
 }
+
+// ConsoleReader is implemented by providers that can return an instance's
+// serial console output. `up` reads it while waiting for the agent, to report
+// a boot script that failed instead of waiting on a machine that will never
+// connect.
+type ConsoleReader interface {
+	ConsoleOutput(ctx context.Context, id InstanceID) (string, error)
+}

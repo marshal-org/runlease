@@ -181,6 +181,18 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	agentDigest, err := resolveAgentSHA256(m.Relay.AgentSHA256, agentSHA256)
+	if err != nil {
+		return err
+	}
+	if m.Relay.Addr != "" && agentDigest == "" {
+		fmt.Fprintf(cmd.ErrOrStderr(), "⚠  The agent binary served by the relay will not be verified. Set relay.agentSha256 in the manifest, or use a release build of runlease.\n")
+	}
+
+	if err := checkRelayAgent(ctx, cmd.ErrOrStderr(), m.Relay.Addr, agentDigest); err != nil {
+		return err
+	}
+
 	var relayToken string
 	// launched turns true once the machine is in the registry, where
 	// 'runlease down' can find it and give its relay slot back.
@@ -218,14 +230,6 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		if d, err := m.Reclaim.TTLDuration(); err == nil {
 			ttlSeconds = int(d.Seconds())
 		}
-	}
-
-	agentDigest, err := resolveAgentSHA256(m.Relay.AgentSHA256, agentSHA256)
-	if err != nil {
-		return err
-	}
-	if m.Relay.Addr != "" && agentDigest == "" {
-		fmt.Fprintf(cmd.ErrOrStderr(), "⚠  The agent binary served by the relay will not be verified. Set relay.agentSha256 in the manifest, or use a release build of runlease.\n")
 	}
 
 	ud, err := userdata.Build(userdata.Params{
@@ -405,19 +409,26 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 	if attach {
-		return runAttach(cmd, m, running, cred, relayToken)
+		return runAttach(cmd, m, running, cred, relayToken, bootFailureProbe(p, running.ID))
 	}
 	// Manifest forwards auto-apply alongside the interactive shell. The
 	// shell runs in the foreground; forwards run in a goroutine on the same
 	// SSH client and are torn down when the shell exits.
 	specs := registryForwardsToSpecs(manifestToRegistryForwards(m.Forwards))
 	if m.Relay.Addr != "" {
-		return pollAndConnectViaRelay(cmd, m.Relay.Addr, relayToken, m.Name, cred, specs)
+		return pollAndConnectViaRelay(cmd, m.Relay.Addr, relayToken, m.Name, cred, specs,
+			upTimeout, bootFailureProbe(p, running.ID))
+	}
+	if running.PublicIP == "" {
+		// No relay and no public address: there is nothing to dial. The hint
+		// above says how to reach it (a relay, IAP or SSM).
+		return nil
 	}
 	return pollAndConnect(cmd, running.PublicIP, m.Name, cred, specs)
 }
 
-const sshPollInterval = 8 * time.Second
+// sshPollInterval is a variable so tests can shorten it.
+var sshPollInterval = 8 * time.Second
 
 func pollAndConnect(cmd *cobra.Command, publicIP, name string, cred *credential.EphemeralCredential, forwards []forwardSpec) error {
 	out := cmd.OutOrStdout()
@@ -470,59 +481,30 @@ func pollAndConnect(cmd *cobra.Command, publicIP, name string, cred *credential.
 	}
 }
 
-func pollAndConnectViaRelay(cmd *cobra.Command, relayAddr, token, name string, cred *credential.EphemeralCredential, forwards []forwardSpec) error {
+// pollAndConnectViaRelay waits for the machine's agent to reach the relay and
+// then opens the shell. bootFailure may be nil (see agentWait).
+func pollAndConnectViaRelay(cmd *cobra.Command, relayAddr, token, name string, cred *credential.EphemeralCredential, forwards []forwardSpec, timeout time.Duration, bootFailure func(context.Context) string) error {
 	out := cmd.OutOrStdout()
-	readyURL := relayHTTPBase(relayAddr) + "/ready"
-
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(sigCh)
-
-	pollCtx, cancel := context.WithCancel(cmd.Context())
+	pollCtx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	go func() {
-		select {
-		case <-sigCh:
-			cancel()
-		case <-pollCtx.Done():
-		}
-	}()
-
 	fmt.Fprintf(out, "\n⏳ Waiting for relay agent to register — usually takes ~30s (Ctrl+C to stop)...\n")
-	for {
-		// Poll via HTTP — doesn't consume the client slot.
-		req, _ := http.NewRequestWithContext(pollCtx, "GET", readyURL, nil)
-		req.Header.Set("X-Relay-Token", token)
-		resp, err := http.DefaultClient.Do(req)
-		if err == nil {
-			ready := resp.StatusCode == http.StatusOK
-			resp.Body.Close()
-			if ready {
-				fmt.Fprintf(out, "🔗 Agent connected — opening SSH session...\n")
-				conn, err := dialRelay(relayAddr, token)
-				if err != nil {
-					return fmt.Errorf("relay: %w", err)
-				}
-				return sshShellWithForwards(conn, relayAddr, cred, forwards, out)
-			}
-		}
-
-		select {
-		case <-pollCtx.Done():
-			fmt.Fprintf(out, "\nStopped waiting. Connect later with: runlease connect %s\n", name)
-			return nil
-		default:
-		}
-
-		fmt.Fprintf(out, "⏳ Agent not ready yet, retrying in %s...\n", sshPollInterval)
-		select {
-		case <-time.After(sshPollInterval):
-		case <-pollCtx.Done():
-			fmt.Fprintf(out, "\nStopped waiting. Connect later with: runlease connect %s\n", name)
-			return nil
-		}
+	err := waitForAgent(pollCtx, out, agentWait{
+		relayAddr: relayAddr, token: token, name: name, timeout: timeout, bootFailure: bootFailure,
+	})
+	if pollCtx.Err() != nil {
+		fmt.Fprintf(out, "\nStopped waiting. Connect later with: runlease connect %s\n", name)
+		return nil
 	}
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "🔗 Agent connected — opening SSH session...\n")
+	conn, err := dialRelay(relayAddr, token)
+	if err != nil {
+		return fmt.Errorf("relay: %w", err)
+	}
+	return sshShellWithForwards(conn, relayAddr, cred, forwards, out)
 }
 
 // subnetForProvider resolves the single InstanceSpec.SubnetID field from the

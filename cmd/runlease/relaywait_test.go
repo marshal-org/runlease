@@ -190,13 +190,14 @@ func TestOpenRelay_reRegistersLostSlot(t *testing.T) {
 		}
 	}()
 
-	const token = "lost-slot-0123456789abcdef0123456789abcdef"
+	// Not a credential: a made-up slot name for the in-process relay.
+	const lostSlot = "slot-that-the-relay-forgot"
 	// The machine's agent: refused until the slot exists, then it gets in.
 	stop := make(chan struct{})
 	t.Cleanup(func() { close(stop) })
 	go func() {
 		for {
-			_ = agent.RunOnce(agent.Config{RelayAddr: addr, Token: token, LocalTarget: ln.Addr().String(),
+			_ = agent.RunOnce(agent.Config{RelayAddr: addr, Token: lostSlot, LocalTarget: ln.Addr().String(),
 				Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 			select {
 			case <-stop:
@@ -225,7 +226,7 @@ func TestOpenRelay_reRegistersLostSlot(t *testing.T) {
 	}
 
 	var note bytes.Buffer
-	conn, err := openRelay(context.Background(), &note, &registry.Entry{RelayAddr: addr, RelayToken: token})
+	conn, err := openRelay(context.Background(), &note, &registry.Entry{RelayAddr: addr, RelayToken: lostSlot})
 	if err != nil {
 		t.Fatalf("openRelay: %v", err)
 	}

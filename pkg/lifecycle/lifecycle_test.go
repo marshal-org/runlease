@@ -98,9 +98,14 @@ func managerWith(reg *registry.Registry, mock *mockProvider) *Manager {
 	return &Manager{reg: reg, factory: factory, log: silentLogger(), pollInterval: time.Millisecond}
 }
 
+// reconcile runs the manager for a short while (many poll intervals) and
+// waits for its watches to end. A watch only ends by itself once its instance
+// is gone, so the deadline is what stops the rest.
 func reconcile(mgr *Manager) {
 	var wg sync.WaitGroup
-	mgr.Reconcile(context.Background(), &wg)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
+	defer cancel()
+	mgr.Reconcile(ctx, &wg)
 	wg.Wait()
 }
 
@@ -205,13 +210,14 @@ func TestWatch_cleansUpOnSpotInterruption(t *testing.T) {
 	mgr := managerWith(reg, mock)
 	mgr.Reconcile(ctx, &wg)
 
-	// Goroutine polls every millisecond; terminated state triggers cleanup.
+	// Goroutine polls every millisecond; a gone instance ends the watch.
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
 	select {
-	case <-mock.terminateCh:
+	case <-done:
 	case <-time.After(500 * time.Millisecond):
-		t.Error("cleanup not triggered after spot interruption detected")
+		t.Fatal("watch did not end after the instance was gone")
 	}
-	wg.Wait()
 	if _, err := reg.Get("spot-runner"); err == nil {
 		t.Error("spot-interrupted instance should have been removed from registry")
 	}
@@ -264,5 +270,140 @@ func TestReconcile_recordedProjectTerminateNotFoundRemovesEntry(t *testing.T) {
 	reconcile(managerWith(reg, mock))
 	if _, err := reg.Get("modern"); err == nil {
 		t.Error("not found in the recorded project means gone: entry should be removed")
+	}
+}
+
+// The entry carries the relay token, so the hook has to run while the entry is
+// still in the registry: afterwards nothing could release the slot.
+func TestCleanup_callsOnCleanupBeforeRemoving(t *testing.T) {
+	reg := setupRegistry(t, entry(t, "worker", "i-dead", nil))
+	mgr := managerWith(reg, newMock(provider.StatusTerminated))
+
+	var seen string
+	stillRegistered := false
+	mgr.OnCleanup = func(e *registry.Entry) {
+		seen = e.Handle.ManifestName
+		_, err := reg.Get("worker")
+		stillRegistered = err == nil
+	}
+	reconcile(mgr)
+
+	if seen != "worker" {
+		t.Fatalf("OnCleanup saw %q, want worker", seen)
+	}
+	if !stillRegistered {
+		t.Error("OnCleanup ran after the entry was removed")
+	}
+	if _, err := reg.Get("worker"); err == nil {
+		t.Error("entry was not removed after cleanup")
+	}
+}
+
+// A machine launched after the daemon started must still be held to its lease.
+func TestStart_picksUpInstancesAddedLater(t *testing.T) {
+	reg := setupRegistry(t)
+	mock := newMock(provider.StatusRunning)
+	mgr := managerWith(reg, mock)
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan struct{})
+	go func() { mgr.Start(ctx); close(stopped) }()
+	// Stop the manager and wait for its watches before the temp dir is removed:
+	// they write to the registry file in it.
+	defer func() { cancel(); <-stopped }()
+
+	time.Sleep(10 * time.Millisecond)
+	// Written by another process: a registry of its own on the same file.
+	if err := reg.Add(entry(t, "late", "i-late", pastExpiry())); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-mock.terminateCh:
+	case <-time.After(500 * time.Millisecond):
+		t.Error("instance added after start was never terminated at its TTL")
+	}
+}
+
+// A terminate that fails at TTL is tried again; the entry goes once it works.
+func TestWatch_retriesFailedTerminate(t *testing.T) {
+	reg := setupRegistry(t, entry(t, "stuck", "i-stuck", pastExpiry()))
+	mock := &failThenOK{mockProvider: newMock(provider.StatusRunning), failures: 3}
+	factory := func(context.Context, provider.ProviderType, string, string) (provider.CloudProvider, error) {
+		return mock, nil
+	}
+	mgr := &Manager{reg: reg, factory: factory, log: silentLogger(), pollInterval: time.Millisecond}
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	mgr.Reconcile(ctx, &wg)
+	wg.Wait()
+	if mock.calls < 4 {
+		t.Errorf("Terminate called %d times, want a retry after each failure", mock.calls)
+	}
+	if _, err := reg.Get("stuck"); err == nil {
+		t.Error("entry should be removed once Terminate succeeds")
+	}
+}
+
+type failThenOK struct {
+	*mockProvider
+	failures, calls int
+}
+
+func (f *failThenOK) Terminate(context.Context, provider.InstanceID) error {
+	f.calls++
+	if f.calls <= f.failures {
+		return errors.New("still there")
+	}
+	return nil
+}
+
+// A stopped machine still exists and is still billed: delete it, do not just forget it.
+func TestWatch_deletesStoppedInstance(t *testing.T) {
+	reg := setupRegistry(t, entry(t, "off", "i-off", nil))
+	mock := newMock(provider.StatusStopped)
+	reconcile(managerWith(reg, mock))
+	select {
+	case <-mock.terminateCh:
+	default:
+		t.Error("stopped instance was forgotten without being deleted")
+	}
+	if _, err := reg.Get("off"); err == nil {
+		t.Error("entry should be removed after the stopped instance is deleted")
+	}
+}
+
+// Cleanup of an old instance must not remove a newer one that reuses its name.
+func TestCleanup_leavesNewerInstanceWithSameName(t *testing.T) {
+	old := entry(t, "dev", "i-old", nil)
+	reg := setupRegistry(t, old)
+	mgr := managerWith(reg, newMock(provider.StatusTerminated))
+	if err := reg.Add(entry(t, "dev", "i-new", nil)); err != nil {
+		t.Fatal(err)
+	}
+	mgr.cleanup(old)
+	got, err := reg.Get("dev")
+	if err != nil || got.Handle.ID != "i-new" {
+		t.Errorf("the newer instance's entry was removed: %v", err)
+	}
+}
+
+// A snooze written just before the old deadline wins over the timer.
+func TestWatch_snoozeJustBeforeDeadlineIsHonoured(t *testing.T) {
+	reg := setupRegistry(t, entry(t, "napper", "i-nap", futureExpiry(30*time.Millisecond)))
+	mock := newMock(provider.StatusRunning)
+	mgr := managerWith(reg, mock)
+	mgr.pollInterval = time.Hour // only the deadline timer can wake the watch
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	mgr.Reconcile(ctx, &wg)
+	if err := reg.UpdateExpiry("napper", futureExpiry(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	wg.Wait()
+	select {
+	case <-mock.terminateCh:
+		t.Error("instance terminated at the old deadline although it was snoozed")
+	default:
 	}
 }

@@ -23,6 +23,9 @@ type ec2API interface {
 	TerminateInstances(ctx context.Context, params *ec2.TerminateInstancesInput, optFns ...func(*ec2.Options)) (*ec2.TerminateInstancesOutput, error)
 	DescribeInstances(ctx context.Context, params *ec2.DescribeInstancesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
 	DescribeImages(ctx context.Context, params *ec2.DescribeImagesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeImagesOutput, error)
+	GetConsoleOutput(ctx context.Context, params *ec2.GetConsoleOutputInput, optFns ...func(*ec2.Options)) (*ec2.GetConsoleOutputOutput, error)
+	DescribeSubnets(ctx context.Context, params *ec2.DescribeSubnetsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error)
+	DescribeRouteTables(ctx context.Context, params *ec2.DescribeRouteTablesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error)
 }
 
 type Provider struct {
@@ -70,12 +73,22 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 			{ResourceType: types.ResourceTypeInstance, Tags: tags},
 		},
 	}
+	// The public address is decided here, not left to the subnet's
+	// auto-assign setting, so `publicIp` in the manifest means the same thing
+	// in every VPC. EC2 only takes that choice on a network interface, and
+	// then the subnet and security groups have to be given there too.
+	nic := types.InstanceNetworkInterfaceSpecification{
+		DeviceIndex:              awssdk.Int32(0),
+		AssociatePublicIpAddress: awssdk.Bool(spec.PublicIP),
+		DeleteOnTermination:      awssdk.Bool(true),
+	}
 	if len(spec.SecurityGroupIDs) > 0 {
-		input.SecurityGroupIds = spec.SecurityGroupIDs
+		nic.Groups = spec.SecurityGroupIDs
 	}
 	if spec.SubnetID != "" {
-		input.SubnetId = awssdk.String(spec.SubnetID)
+		nic.SubnetId = awssdk.String(spec.SubnetID)
 	}
+	input.NetworkInterfaces = []types.InstanceNetworkInterfaceSpecification{nic}
 	if spec.InstanceProfileARN != "" {
 		input.IamInstanceProfile = &types.IamInstanceProfileSpecification{
 			Arn: awssdk.String(spec.InstanceProfileARN),

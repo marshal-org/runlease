@@ -12,7 +12,7 @@ To report a vulnerability, see [SECURITY.md](../SECURITY.md).
 - Your SSH keys are generated on your machine and never leave it.
 - The relay moves bytes. It holds no keys and no cloud credentials, and it cannot read, change or
   impersonate a session.
-- The VM has no inbound ports. It dials out.
+- The VM dials out. Runlease needs no inbound port.
 - The VM's identity is fixed before it boots. Nothing is trusted on first use.
 - The agent binary is verified before it runs, and then runs without privileges.
 - Every VM has a lease and deletes itself when it ends.
@@ -49,7 +49,7 @@ flowchart LR
 | Login key pair (ed25519) | CLI, per VM | Private half: your machine only. Public half: `authorized_keys` on the VM | Proves you to the VM |
 | Host key pair (ed25519) | CLI, per VM | Both halves on your machine; both halves in the VM's boot script | Proves the VM to you |
 | Slot token (256 random bits) | CLI, per VM | Your machine, the relay's memory, the VM's boot script | Matches your connections to that VM's agent at the relay |
-| Identity token (Google ID token) | Your cloud login | Sent once to the relay at `up` | Lets the relay decide who may open a slot |
+| Identity token (Google ID token) | `runlease login`, or your cloud login | Sent to the relay at `up`. A `runlease login` session, with its refresh token, is kept in `~/.runlease/auth.json`, mode 0600 | Lets the relay decide who may open a slot, and how many |
 | Master key (AES-256) | CLI, once | `~/.runlease/master.key`, mode 0600 | Encrypts stored key pairs at rest |
 
 Code: `pkg/credential/credential.go`, `cmd/runlease/up.go`.
@@ -101,10 +101,19 @@ The agent only dials out to the relay and connects to `localhost:22`. Its system
 unprivileged user with `NoNewPrivileges`, an empty capability set, a read-only view of the system
 and no access to home directories or devices.
 
-### The VM has no inbound surface
+### SSH listens on localhost only
 
-With a relay configured the VM gets no public IP and needs no inbound firewall rule. `sshd` is
-reachable only through the agent.
+With a relay, the VM gets no public address by default and its SSH server is bound to
+`127.0.0.1`. The only way in is the agent on the VM, which dials out to the relay and hands each
+connection to SSH on localhost. There is no SSH port for a firewall rule to expose.
+
+The SSH settings are written at the top of `sshd_config`, because SSH keeps the first value it
+reads. The boot script then asks SSH what it will enforce (`sshd -T`) and stops, leaving the
+machine unreachable, if passwords are on, root login is allowed, or it would listen beyond
+localhost.
+
+If your subnet has no NAT gateway, set `publicIp: true`. The address is then used for outbound
+traffic only; SSH still listens on localhost. Known limit 1 covers what that changes.
 
 ### sudo is off by default
 
@@ -114,8 +123,8 @@ deletion timer. General `sudo` needs `sudo: passwordless` in the manifest, set b
 ### The relay fails closed
 
 `runlease-relay` refuses to start without authentication unless you pass `--insecure-no-auth`.
-It validates every slot token before use, caps the number of live slots, and expires a slot after
-24 hours. Code: `cmd/runlease-relay/main.go`, `pkg/relay/server.go`.
+It validates every slot token before use, caps the number of live slots in total and per signed-in
+identity, gives a slot back when its machine has gone, and expires a slot after at most 24 hours. Code: `cmd/runlease-relay/main.go`, `pkg/relay/server.go`.
 
 ### AWS instances require IMDSv2
 
@@ -138,32 +147,45 @@ Being honest about this matters more than the list above.
 
 These are real, and they are why the trust table above lists your cloud account as trusted.
 
-1. **The boot script contains the host private key and the slot token.** Anything that can read
+1. **Without a NAT gateway, the VM needs a public address to reach the relay.** That is the
+   `publicIp: true` setting. Runlease's own SSH server still listens on localhost only, but
+   anything else you start on the VM that listens on all interfaces is then exposed to whatever
+   your cloud firewall allows. With no relay at all, the VM always has a public address and SSH
+   listens on it: one key, one user, passwords off.
+2. **The boot script contains the host private key and the slot token.** Anything that can read
    instance metadata can read them: an IAM principal with instance read access in your project or
    account, and any process on the VM that can reach the metadata server. With both, an attacker
    who can also take the agent's place at the relay could present the right host key to your CLI.
    They still could not log in to the real VM. What to do: keep instance read access in that
    project narrow, and do not let untrusted workloads on the VM reach the metadata server. On AWS,
    IMDSv2 is required; on GCP the metadata server already requires a custom header.
-2. **A slot token is a bearer secret.** Whoever holds it can open a TCP connection to the VM's
+3. **A slot token is a bearer secret.** Whoever holds it can open a TCP connection to the VM's
    `sshd` through the relay. They cannot get past SSH authentication. Tokens are 256 random bits,
    are validated by the relay, and die with the slot.
-3. **Stored keys are only as safe as your user account.** Key pairs are encrypted at rest, but the
+4. **Stored keys are only as safe as your user account.** Key pairs are encrypted at rest, but the
    key that encrypts them sits beside them, readable by your user. This stops casual copying of
    the credentials directory. It does not stop someone who already runs code as you.
-4. **Relay sign-in is Google identity only**, for now. A relay with an audience set and no
-   allow-list admits any verified Google account.
-5. **The relay sees who talks to what, and when.** Run your own if that metadata matters.
-6. **`ws://` and bare `host:port` relays are plaintext at the transport layer.** SSH still
+5. **Relay sign-in is Google identity only**, for now. A relay with no allow-list admits any
+   verified Google account; tiers then decide how much each one gets. The relay learns the email
+   address of whoever signs in, and logs it with each slot they open.
+6. **Releasing a slot needs only its token.** Anyone who holds a slot token can free that slot.
+   They could already use it, so this adds no new access, but it is a way to interrupt a session
+   for someone who has stolen a token.
+7. **Limits are per identity, not per person.** Someone with several Google accounts gets the
+   free allowance for each. The total slot cap is the backstop.
+8. **The relay sees who talks to what, and when.** Run your own if that metadata matters.
+9. **`ws://` and bare `host:port` relays are plaintext at the transport layer.** SSH still
    protects the session, but the slot token and the agent download cross the network in the clear.
    Use `wss://` outside a private network.
-7. **A manifest is code.** `setup` steps run as root on the VM. Read a manifest before you launch
+10. **A manifest is code.** `setup` steps run as root on the VM. Read a manifest before you launch
    one you did not write.
-8. **Self-deletion on GCP needs the VM's service account to be able to delete the VM.** Use a
+11. **Self-deletion on GCP needs the VM's service account to be able to delete the VM.** Use a
    dedicated service account with only that permission, not a broad one. A custom
    `gcp.serviceAccount` is attached with the `cloud-platform` scope, so its IAM roles are the only
-   limit on what code on the VM can do.
-9. **Spot VMs can be reclaimed by the cloud at any time.** That is a property of spot capacity,
+   limit on what code on the VM can do. Without that permission the VM powers itself off at the
+   end of the lease instead: compute billing stops, but the stopped instance and its disk stay
+   until something removes them.
+12. **Spot VMs can be reclaimed by the cloud at any time.** That is a property of spot capacity,
    not a failure.
 
 ## Leases: making sure machines go away

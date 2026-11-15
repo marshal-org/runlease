@@ -1,6 +1,10 @@
 package gcp
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/marshal-org/runlease/pkg/provider"
+)
 
 func TestGCPNetworkInterface(t *testing.T) {
 	tests := []struct {
@@ -66,5 +70,15 @@ func TestGCPNetworkInterface(t *testing.T) {
 				t.Errorf("has AccessConfigs = %v, want %v", gotNAT, tc.wantNAT)
 			}
 		})
+	}
+}
+
+// GCP's TERMINATED means powered off: the instance and its disk still exist.
+// Reading it as gone made `sync` forget machines that were still billed.
+func TestGCPStatus_poweredOffIsNotGone(t *testing.T) {
+	for _, s := range []string{"TERMINATED", "STOPPED", "STOPPING", "SUSPENDED"} {
+		if got := gcpStatus(s); got != provider.StatusStopped {
+			t.Errorf("gcpStatus(%q) = %q, want stopped", s, got)
+		}
 	}
 }

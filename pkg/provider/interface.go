@@ -96,3 +96,31 @@ type EgressChecker interface {
 type ConsoleReader interface {
 	ConsoleOutput(ctx context.Context, id InstanceID) (string, error)
 }
+
+// ManagedInstance is a runlease-launched instance as the cloud reports it,
+// found by its runlease-managed label rather than through the local registry.
+type ManagedInstance struct {
+	ID           InstanceID
+	Provider     ProviderType
+	Project      string // GCP only
+	Region       string // AWS region or GCP zone
+	Name         string // the manifest name it was launched under, if recorded
+	InstanceType string
+	State        InstanceStatus
+	CreatedAt    time.Time
+	ExpiresAt    *time.Time // from the runlease-expires-at label; nil if absent or unreadable
+	CreatedBy    string     // the runlease-created-by label
+	// DiskGB is the size of the attached disks, which keep billing while the
+	// instance is stopped. 0 means the provider did not report it.
+	DiskGB int64
+	// DiskMonthlyUSD is a rough monthly cost of those disks at list price.
+	// 0 means unknown.
+	DiskMonthlyUSD float64
+}
+
+// ManagedLister is implemented by providers that can find every instance
+// carrying the runlease-managed label, so that an instance the local registry
+// has lost track of can still be seen and removed.
+type ManagedLister interface {
+	ListManaged(ctx context.Context) ([]ManagedInstance, error)
+}

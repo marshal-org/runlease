@@ -42,8 +42,10 @@ func New(ctx context.Context, region string) (*Provider, error) {
 		return nil, fmt.Errorf("loading AWS config: %w", err)
 	}
 	return &Provider{
-		ec2:          ec2.NewFromConfig(cfg),
-		sts:          sts.NewFromConfig(cfg),
+		ec2: ec2.NewFromConfig(cfg),
+		// Who the caller is does not depend on the region, and asking in a
+		// region the account has not enabled fails as if the sign-in were bad.
+		sts:          sts.NewFromConfig(cfg, func(o *sts.Options) { o.Region = identityRegion(region) }),
 		region:       region,
 		pollInterval: 5 * time.Second,
 	}, nil

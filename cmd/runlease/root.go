@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -28,10 +29,28 @@ func init() {
 // jsonOutput returns true when the user asked for --output json (case-insensitive).
 func jsonOutput() bool { return outputMode == "json" || outputMode == "JSON" }
 
+// writeJSON prints v the way every command's --output json does: indented,
+// one document, a newline at the end.
+func writeJSON(out io.Writer, v any) error {
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
+}
+
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version",
-	Run:   func(cmd *cobra.Command, _ []string) { fmt.Fprintln(cmd.OutOrStdout(), version) },
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		if jsonOutput() {
+			return writeJSON(cmd.OutOrStdout(), struct {
+				Version string `json:"version"`
+				// AgentSHA256 is the agent digest this build carries; "" in a source build.
+				AgentSHA256 string `json:"agentSha256"`
+			}{version, agentSHA256})
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), version)
+		return nil
+	},
 }
 
 func init() { rootCmd.AddCommand(versionCmd) }
@@ -44,6 +63,7 @@ var rootCmd = &cobra.Command{
 
 Get started:
   runlease configure           set your defaults (provider, region, relay, etc.)
+  runlease doctor              check your sign-ins, project and network; prints the fix
   runlease up                  launch an instance using your defaults
   runlease up -m manifest.yaml launch from a manifest file
   runlease up --provider gcp   quick launch without a manifest

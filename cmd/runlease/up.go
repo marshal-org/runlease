@@ -569,22 +569,8 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 	if region != "" && !regionFits(quickProvider, region) {
 		return nil, fmt.Errorf("%q does not fit %s: %s", region, quickProvider, regionExample(quickProvider))
 	}
-	// The saved default region belongs to the saved default provider. Launching
-	// on the other cloud with it would send an AWS call to a Google zone.
-	if region == "" && regionFits(quickProvider, cfg.Defaults.Region) {
-		region = cfg.Defaults.Region
-	}
 	if region == "" {
-		switch quickProvider {
-		case "gcp":
-			region = "us-central1-a"
-		case "aws":
-			// The region the user's own AWS setup names, before a guess.
-			region = awsprovider.ConfiguredRegion(context.Background())
-			if region == "" {
-				region = "us-east-1"
-			}
-		default:
+		if region, _ = defaultRegionFor(quickProvider, cfg); region == "" {
 			return nil, fmt.Errorf("unknown provider %q — supported: aws, gcp", quickProvider)
 		}
 	}
@@ -642,6 +628,32 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 	}
 	return m, nil
 }
+
+// defaultRegionFor is the region (a zone, on Google Cloud) a command uses on
+// prov when none is named, and where it came from. It is "" for a provider
+// runlease has no default for.
+func defaultRegionFor(prov string, cfg *rlconfig.Config) (region, why string) {
+	// The saved default region belongs to the saved default provider. Using it
+	// on the other cloud would send an AWS call to a Google zone.
+	if cfg != nil && cfg.Defaults.Region != "" && regionFits(prov, cfg.Defaults.Region) && (prov == "gcp" || prov == "aws") {
+		return cfg.Defaults.Region, "your saved default"
+	}
+	switch prov {
+	case "gcp":
+		return "us-central1-a", "runlease's default"
+	case "aws":
+		// The region the user's own AWS setup names, before a guess.
+		if r := configuredAWSRegion(context.Background()); r != "" {
+			return r, "from your AWS setup"
+		}
+		return "us-east-1", "runlease's default"
+	}
+	return "", ""
+}
+
+// configuredAWSRegion is a variable so a test does not read the AWS setup of
+// the computer it runs on.
+var configuredAWSRegion = awsprovider.ConfiguredRegion
 
 // registerRelayToken pre-registers a token with the relay so the CLI is the
 // issuing authority. The relay will reject any instance or client that presents

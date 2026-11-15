@@ -90,6 +90,7 @@
 <span class="p">$</span> runlease connect box           <span class="c"># or open a shell</span>
 <span class="p">$</span> runlease down box --yes        <span class="c"># or let the lease delete it</span></pre>
 <p class="measure">Those lines are copy-paste complete. To stop typing the cloud, region and size each time, run <code>runlease configure</code> once; after that a bare <code>runlease up</code> is enough. If a command fails because a cloud sign-in has expired, the error says which command renews it.</p>
+<p class="measure">Something not working? <code>runlease doctor</code> checks your sign-ins, project and network and prints the fix.</p>
 
 <div class="note warn"><p><b>Your subnet needs a way out.</b> A machine launched through a relay gets no public address, so it reaches the relay through your subnet's NAT gateway. <code>runlease up</code> checks for one before it creates anything. If there is none it stops and tells you the two ways forward: add a NAT gateway, or re-run with <code>--public-ip</code>, which gives an address for outbound traffic only while SSH still listens on localhost.</p></div>
 

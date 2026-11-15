@@ -44,6 +44,23 @@ func runCatalog(cmd *cobra.Command, _ []string) error {
 		"compute.gpu",
 	}
 
+	if jsonOutput() {
+		type row struct {
+			Class         string   `json:"class"`
+			Provider      string   `json:"provider"`
+			InstanceTypes []string `json:"instanceTypes"` // preferred first
+		}
+		rows := []row{}
+		for _, class := range classes {
+			for _, pt := range catalogProviders {
+				if candidates, err := resolver.Resolve(class, pt); err == nil {
+					rows = append(rows, row{class, string(pt), candidates})
+				}
+			}
+		}
+		return writeJSON(cmd.OutOrStdout(), rows)
+	}
+
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
 	fmt.Fprintln(w, "CLASS\tPROVIDER\tINSTANCE TYPES (preferred first)")
 

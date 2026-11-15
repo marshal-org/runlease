@@ -33,6 +33,9 @@ func (f *fakeDownProvider) WaitUntilRunning(context.Context, provider.InstanceID
 }
 func (f *fakeDownProvider) ProjectID() string { return "env-project" }
 
+// AccountName is what the environment's project (or account) resolves to.
+func (f *fakeDownProvider) AccountName(context.Context) string { return "env-project" }
+
 // runDownWith runs `down --yes` against a registry holding one GCP entry with
 // the given recorded project, and a provider whose Terminate returns termErr.
 // It returns the output, the error, the project newProvider was asked for, and

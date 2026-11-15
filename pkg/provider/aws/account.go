@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
@@ -28,6 +29,44 @@ func (p *Provider) DescribeAccount(ctx context.Context) string {
 		return s
 	}
 	return fmt.Sprintf("AWS account %s, region %s, as %s", awssdk.ToString(out.Account), p.region, awssdk.ToString(out.Arn))
+}
+
+// identityRegion is the region to ask STS in: one that every account of the
+// partition has enabled, so the answer says something about the credentials
+// and nothing about the region a launch is headed for.
+func identityRegion(region string) string {
+	switch {
+	case strings.HasPrefix(region, "us-gov-"):
+		return "us-gov-west-1"
+	case strings.HasPrefix(region, "cn-"):
+		return "cn-north-1"
+	}
+	return "us-east-1"
+}
+
+// AccountName is the AWS account ID, looked up for two seconds at most.
+func (p *Provider) AccountName(ctx context.Context) string {
+	account, _ := p.caller(ctx)
+	return account
+}
+
+// Identity is the ARN the credentials belong to.
+func (p *Provider) Identity(ctx context.Context) string {
+	_, arn := p.caller(ctx)
+	return arn
+}
+
+func (p *Provider) caller(ctx context.Context) (account, arn string) {
+	if p.sts == nil {
+		return "", ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	out, err := p.sts.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return "", ""
+	}
+	return awssdk.ToString(out.Account), awssdk.ToString(out.Arn)
 }
 
 // ConfiguredRegion is the region the user's AWS setup already names, from the

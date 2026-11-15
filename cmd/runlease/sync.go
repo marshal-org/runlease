@@ -21,24 +21,56 @@ var syncCmd = &cobra.Command{
 	RunE:  runSync,
 }
 
+// syncJSON is one tracked machine in `sync --output json`.
+type syncJSON struct {
+	Name          string `json:"name"`
+	ID            string `json:"id"`
+	Provider      string `json:"provider"`
+	Region        string `json:"region"`
+	PreviousState string `json:"previousState"`
+	State         string `json:"state"` // what the cloud says now; "" if it could not be asked
+	// Action is what sync did: "unchanged", "updated" (the recorded state),
+	// "removed" (gone or stopped, so deleted and forgotten), "kept" (looks
+	// gone but may only be in another project) or "error".
+	Action string `json:"action"`
+	Error  string `json:"error,omitempty"`
+}
+
 func runSync(cmd *cobra.Command, _ []string) error {
 	reg, err := loadRegistry()
 	if err != nil {
 		return err
 	}
 	entries := reg.List()
+	out := cmd.OutOrStdout()
 	if len(entries) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "No active instances.")
+		if jsonOutput() {
+			return writeJSON(out, []syncJSON{})
+		}
+		fmt.Fprintln(out, "No active instances.")
 		return nil
 	}
 
 	ctx := cmd.Context()
-	out := cmd.OutOrStdout()
+	rows := make([]syncJSON, 0, len(entries))
 	for _, e := range entries {
 		name := e.Handle.ManifestName
+		row := syncJSON{Name: name, ID: string(e.Handle.ID), Provider: string(e.Handle.Provider),
+			Region: e.Handle.Region, PreviousState: string(e.Handle.State)}
+		// say prints the line for a person; fail also records it for JSON.
+		say := func(format string, a ...any) {
+			if !jsonOutput() {
+				fmt.Fprintf(out, "%-22s  "+format+"\n", append([]any{name}, a...)...)
+			}
+		}
+		fail := func(format string, a ...any) {
+			row.Action, row.Error = "error", fmt.Sprintf(format, a...)
+			say(format, a...)
+			rows = append(rows, row)
+		}
 		p, err := providerForEntry(ctx, e.Handle, cmd.ErrOrStderr())
 		if err != nil {
-			fmt.Fprintf(out, "%-22s  error initializing provider: %v\n", name, err)
+			fail("error initializing provider: %v", err)
 			continue
 		}
 		newState, err := p.Status(ctx, e.Handle.ID)
@@ -46,31 +78,35 @@ func runSync(cmd *cobra.Command, _ []string) error {
 			if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "InvalidInstanceID") {
 				newState = provider.StatusTerminated
 			} else {
-				fmt.Fprintf(out, "%-22s  error querying status: %v\n", name, err)
+				fail("error querying status: %v", err)
 				continue
 			}
 		}
+		row.State = string(newState)
 
 		old := e.Handle.State
 		isDead := newState == provider.StatusTerminated || newState == provider.StatusStopped
 		if newState == provider.StatusTerminated && e.Handle.ProjectUnknown() {
 			// A 404 reads as terminated, but without a recorded project we may
 			// have looked in the wrong one. Keep the entry.
-			fmt.Fprintf(out, "%-22s  not found in the default project; kept (no recorded project) — "+
-				"run `GOOGLE_CLOUD_PROJECT=<project> runlease down %s`\n", name, name)
+			say("not found in the default project; kept (no recorded project) — "+
+				"run `GOOGLE_CLOUD_PROJECT=<project> runlease down %s`", name)
+			row.Action = "kept"
+			row.Error = "not found in the default project, and no project is recorded for it"
+			rows = append(rows, row)
 			continue
 		}
 		if newState == provider.StatusStopped {
 			// Powered off is not deleted: the machine and its disk still exist
 			// and are still billed. Delete it before forgetting it.
 			if err := p.Terminate(ctx, e.Handle.ID); err != nil && !errors.Is(err, provider.ErrNotFound) {
-				fmt.Fprintf(out, "%-22s  stopped, and deleting it failed: %v (kept)\n", name, err)
+				fail("stopped, and deleting it failed: %v (kept)", err)
 				continue
 			}
 		}
 		if isDead {
 			if err := credential.Delete(e.CredDir, string(e.Handle.ID)); err != nil {
-				fmt.Fprintf(out, "%-22s  warning: could not delete credentials: %v\n", name, err)
+				say("warning: could not delete credentials: %v", err)
 			}
 			// The token leaves with the registry entry, so this is the last
 			// chance to give the relay slot back. Best effort, as in 'down'.
@@ -78,19 +114,26 @@ func runSync(cmd *cobra.Command, _ []string) error {
 				_ = releaseRelaySlot(ctx, e.RelayAddr, e.RelayToken)
 			}
 			if err := reg.RemoveID(e.Handle.ID); err != nil {
-				fmt.Fprintf(out, "%-22s  error removing from registry: %v\n", name, err)
+				fail("error removing from registry: %v", err)
 				continue
 			}
-			fmt.Fprintf(out, "%-22s  %s → %s  (removed)\n", name, old, newState)
+			say("%s → %s  (removed)", old, newState)
+			row.Action = "removed"
 		} else if newState != old {
 			if err := reg.UpdateState(name, newState); err != nil {
-				fmt.Fprintf(out, "%-22s  error updating registry: %v\n", name, err)
+				fail("error updating registry: %v", err)
 				continue
 			}
-			fmt.Fprintf(out, "%-22s  %s → %s\n", name, old, newState)
+			say("%s → %s", old, newState)
+			row.Action = "updated"
 		} else {
-			fmt.Fprintf(out, "%-22s  %s\n", name, old)
+			say("%s", old)
+			row.Action = "unchanged"
 		}
+		rows = append(rows, row)
+	}
+	if jsonOutput() {
+		return writeJSON(out, rows)
 	}
 	return nil
 }

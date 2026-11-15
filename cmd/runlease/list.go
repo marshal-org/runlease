@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	rlconfig "github.com/marshal-org/runlease/pkg/config"
 	"github.com/marshal-org/runlease/pkg/pricing"
 	"github.com/marshal-org/runlease/pkg/registry"
 )
@@ -19,12 +20,18 @@ var (
 	labelFilters  []string
 	listLocal     bool
 	listUntracked bool
+	listProvider  string
+	listRegion    string
+	listProject   string
 )
 
 func init() {
 	listCmd.Flags().StringArrayVarP(&labelFilters, "label", "l", nil, "filter by label key=value (repeatable, ANDed)")
 	listCmd.Flags().BoolVar(&listLocal, "local", false, "show only what this computer tracks; do not ask the cloud for runlease machines it has lost track of")
 	listCmd.Flags().BoolVar(&listUntracked, "untracked", false, "with --output json: also list runlease machines found in the cloud that this computer does not track (\"tracked\": false)")
+	listCmd.Flags().StringVarP(&listProvider, "provider", "p", "", "the cloud to ask for untracked machines, gcp or aws (default: where this computer has launched before and its saved default)")
+	listCmd.Flags().StringVarP(&listRegion, "region", "r", "", "the AWS region to ask. On Google Cloud a zone only says which cloud: every zone of the project is searched")
+	listCmd.Flags().StringVar(&listProject, "project", "", "the Google Cloud project to ask, all zones (default: the one your Google Cloud setup names)")
 	rootCmd.AddCommand(listCmd)
 }
 
@@ -54,10 +61,46 @@ func runList(cmd *cobra.Command, _ []string) error {
 		scanNotes []string
 		scanDone  = make(chan struct{})
 	)
+	where := scopeFlags{listProvider, listRegion, listProject}
+	if where.any() {
+		// The flags say where to ask the cloud. Given where the cloud is not
+		// asked, they would do nothing, and silence would read as "none there".
+		if listLocal {
+			return fmt.Errorf("--provider, --region and --project say where to ask the cloud, and --local does not ask it: drop one or the other")
+		}
+		if jsonOutput() && !listUntracked {
+			return fmt.Errorf("--provider, --region and --project have no effect on --output json unless --untracked is given: add --untracked")
+		}
+	}
+	var scopes []cloudScope
 	if !listLocal && (!jsonOutput() || listUntracked) {
+		cfg, cfgErr := rlconfig.Load(defaultConfigPath())
+		if cfgErr != nil {
+			if listUntracked || where.any() {
+				return cfgErr
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "note: %v; its saved default is not being asked for untracked machines\n", cfgErr)
+			cfg = &rlconfig.Config{}
+		}
+		// A plain `list` asks only the places it already knows. Asked for the
+		// untracked ones by name, with nowhere known, it tries every cloud
+		// signed in here, as `down --leaked` does.
+		plan, err := resolveScopes(reg, cfg, where, listUntracked)
+		if err != nil {
+			return err
+		}
+		if where.any() || plan.unnamed != "" {
+			plan = locateScopes(cmd.Context(), plan)
+			announceScopes(cmd.ErrOrStderr(), plan)
+		}
+		if listUntracked && len(plan.scopes) == 0 {
+			// Not an error: the list of what is tracked is still the answer.
+			fmt.Fprintf(cmd.ErrOrStderr(), "note: %v\n", errNowhereToLook)
+		}
+		scopes = plan.scopes
 		go func() {
 			defer close(scanDone)
-			untracked, scanNotes = findUntracked(cmd.Context(), reg, scanScopes(reg))
+			untracked, scanNotes = findUntracked(cmd.Context(), reg, scopes)
 		}()
 	} else {
 		close(scanDone)

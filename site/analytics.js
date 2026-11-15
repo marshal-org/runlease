@@ -10,7 +10,7 @@
 //   - PostHog is set to discard the IP address.
 //   - What is sent: the page address without its query string, the page you
 //     came from, your screen size, time zone and browser type.
-//   - "Do Not Track" turns it off entirely.
+//   - "Do Not Track" or "Global Privacy Control" turns it off entirely.
 //
 // The key below is a public, write-only project key, meant for client code.
 (function () {
@@ -18,7 +18,8 @@
   var KEY = 'phc_uxg95JtK7nvyghhjy6DNPQNS7AMCnght3XdMLWLWvnXp';
   var ENDPOINT = 'https://us.i.posthog.com/i/v0/e/';
 
-  if (navigator.doNotTrack === '1' || window.doNotTrack === '1') return;
+  // Either of the browser's "do not track me" signals turns this off.
+  if (navigator.doNotTrack === '1' || window.doNotTrack === '1' || navigator.globalPrivacyControl === true) return;
   if (location.protocol !== 'https:') return; // local previews are not visits
 
   var ua = navigator.userAgent || '';

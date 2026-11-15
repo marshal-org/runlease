@@ -17,6 +17,8 @@ for f in *.html; do
     | grep -v -E '^(https?:|data:|mailto:|#)' | sed -E 's/[#?].*$//' | sort -u || true)"
   for t in $targets; do
     [ "$t" = "./" ] && t="index.html"
+    [ "$t" = "/" ] && t="index.html"
+    t="${t#/}" # a path from the site root: the site is served from the domain's root
     if [ ! -e "$t" ]; then
       echo "SITE: $f links to missing file: $t" >&2
       fail=1
@@ -24,7 +26,9 @@ for f in *.html; do
   done
 
   # A script file of the site's own is fine. One fetched from another site is not.
-  if grep -q -E "<script[^>]+src=[\"']?(https?:)?//" "$f"; then
+  # Case-insensitive, and tolerant of spaces and of either quote, so that
+  # SRC = "HTTPS://..." or src='//...' is caught too.
+  if grep -q -i -E "<script[^>]*[[:space:]]src[[:space:]]*=[[:space:]]*[\"']?[[:space:]]*(https?:)?//" "$f"; then
     echo "SITE: $f loads an external script; the site ships its own code only" >&2
     fail=1
   fi

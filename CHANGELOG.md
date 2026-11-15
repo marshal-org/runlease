@@ -4,6 +4,57 @@ All notable changes to this project will be documented here.
 
 ---
 
+## [0.5.0](https://github.com/marshal-org/runlease/compare/v0.4.1...v0.5.0) (2026-11-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **license:** the license is Apache-2.0, not FSL-1.1-ALv2.
+* **license:** the license is FSL-1.1-ALv2, not Apache-2.0.
+* reclaim.selfTermination defaults to true. On GCP that attaches the default service account with the Compute scope unless gcp.serviceAccount is set. Set selfTermination: false to opt out. runlease up fails if the name is already in use by a machine that still exists.
+* **security:** with a relay set, machines no longer get a public IP unless the manifest sets publicIp: true or up is run with --public-ip. The subnet needs a NAT gateway otherwise.
+
+### Features
+
+* **cli:** runlease login, logout and whoami ([5c0f0a5](https://github.com/marshal-org/runlease/commit/5c0f0a560e9d4eccd19a4eab9fb161b721ac9fa1))
+* **deploy:** Terraform module for a relay on Google Cloud ([aa6cec2](https://github.com/marshal-org/runlease/commit/aa6cec2a4a9fdc3ae3659c827f4a5d6739752b4e))
+* **list:** find runlease machines the registry has lost, and delete the leaked ones ([c8521a2](https://github.com/marshal-org/runlease/commit/c8521a2d626a84d71fca51272b25230d089317d5))
+* **list:** find runlease machines the registry has lost, and delete the leaked ones ([3e3a3ca](https://github.com/marshal-org/runlease/commit/3e3a3ca373be4246a6980a67645e91ec23d1d9c2)), closes [#19](https://github.com/marshal-org/runlease/issues/19)
+* **relay:** identities, tiers and per-identity limits ([db56bfa](https://github.com/marshal-org/runlease/commit/db56bfac65c61921ed50c3b81e83c7deda17ca13))
+* **relay:** usage records for the relay's operator ([4c1a226](https://github.com/marshal-org/runlease/commit/4c1a226aae5a46b6adfbcef6e6983c291c78129c))
+* **relay:** usage records for the relay's operator ([977ffc0](https://github.com/marshal-org/runlease/commit/977ffc065350fede5646cd85c2a9fa1d3947a6dc))
+* **site:** cookieless page-view analytics, with no third-party script ([a047a80](https://github.com/marshal-org/runlease/commit/a047a80d4839a2a91d52b2737456b27cb0bce477))
+* **site:** cookieless page-view analytics, with no third-party script ([7e9812d](https://github.com/marshal-org/runlease/commit/7e9812d844acbf9c6c4f1bfde55bdb97953d6308))
+* **site:** documentation pages, a clearer security story, logo and installer ([1ae8237](https://github.com/marshal-org/runlease/commit/1ae8237be1f2a0615269d31f694db9e7b9aa7a0c))
+* **site:** use cases section on the home page; keep releases on 0.x ([1fac0dd](https://github.com/marshal-org/runlease/commit/1fac0dd39ff78748fb7c40ac7cbb7b05148a8be8))
+* **site:** use cases section; keep releases on 0.x ([f133de1](https://github.com/marshal-org/runlease/commit/f133de1bfff6d8e7f050ac12eb65ec5f95880e88))
+* **site:** website with relay plans, privacy and terms, published by GitHub Pages ([ec054d1](https://github.com/marshal-org/runlease/commit/ec054d1a30490fefae696683499d308fddd76512))
+* **userdata:** verify the relay-served agent and run it unprivileged ([176e591](https://github.com/marshal-org/runlease/commit/176e59104dcd7d91d1c0c0aa8a04440398c75a24))
+
+
+### Bug Fixes
+
+* **aws:** require IMDSv2 on launched instances ([7a9f6ee](https://github.com/marshal-org/runlease/commit/7a9f6eef10f72f2f1b2567dc6b3afcb7d600b9e0))
+* bounded waits, boot failure reporting and slot recovery in every command ([e75914e](https://github.com/marshal-org/runlease/commit/e75914e3115aa8430e542a1919d7f4022bf2bb77))
+* **deploy:** the client label is unquoted when it has no spaces ([018e75d](https://github.com/marshal-org/runlease/commit/018e75db71e2a5c3a80288ffa855f501ac7b647c))
+* **deps:** bump dependencies with known vulnerabilities ([19a3951](https://github.com/marshal-org/runlease/commit/19a3951ee4626d19494b6249ef9861de9e6406d7))
+* **down:** --leaked never deletes a running machine, and re-checks before deleting ([013ade1](https://github.com/marshal-org/runlease/commit/013ade188e89398c0ebef2415457e800df636f7a))
+* **relay:** validate slot tokens, cap slots and refuse to start without auth ([c6add82](https://github.com/marshal-org/runlease/commit/c6add827770bb205dce945a7b933b1721cd00d92))
+* review findings on the public relay branch ([8f64dd3](https://github.com/marshal-org/runlease/commit/8f64dd30fe43760d6e383eb683ff9061ec062db4))
+* **security:** no public IP and localhost-only sshd for relay-mode machines ([beef938](https://github.com/marshal-org/runlease/commit/beef938b4d14f43817c4b42ef7cd2648f4e8e66a))
+* **site:** list layout around inline code, and example manifests ([cc34670](https://github.com/marshal-org/runlease/commit/cc346705cc363b4aa2fdc8e8fa2f3238ca9a0faa))
+* **site:** list rows broke apart around inline code; add example manifests ([b1f4202](https://github.com/marshal-org/runlease/commit/b1f42022394e4033e32085079e2446250a936ecd))
+* **site:** stricter external-script check, absolute links on the 404 page, honour GPC ([9014e47](https://github.com/marshal-org/runlease/commit/9014e47f85f217ba857d826d81ab48d42e4b28e5))
+* **site:** the last two relative links on the 404 page ([78e738b](https://github.com/marshal-org/runlease/commit/78e738bde2d309a2a205545d2d40dae2fd4de1ed))
+* **site:** tolerate a tab with no panel, and CRLF checkouts in the examples test ([7e03169](https://github.com/marshal-org/runlease/commit/7e0316921d92815470eaea63cd6dfca076cd7e1b))
+* stop losing track of machines, and make the lease survive a reboot ([c7ba670](https://github.com/marshal-org/runlease/commit/c7ba67087bfadcd7ebe93b5fc7e152ed0dc97834))
+
+
+### Miscellaneous Chores
+
+* **license:** back to Apache-2.0 ([2fddd66](https://github.com/marshal-org/runlease/commit/2fddd669aea1348277179d7656913a6ab779a473))
+* **license:** Functional Source License (FSL-1.1-ALv2) in place of Apache-2.0 ([bded159](https://github.com/marshal-org/runlease/commit/bded1597b38ef68c6fa967883d20f24134bfb1a3))
+
 ## [0.4.1](https://github.com/marshal-org/runlease/compare/v0.4.0...v0.4.1) (2026-10-12)
 
 

@@ -27,6 +27,9 @@ const (
 	StatusUnknown    InstanceStatus = "unknown"
 )
 
+// A note on RequestSpot: it may return a handle together with an error. That
+// means the create request was accepted but did not finish cleanly, so the
+// instance exists or may come to exist. Callers must record or terminate it.
 type InstanceSpec struct {
 	ManifestName        string
 	InstanceType        string

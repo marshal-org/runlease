@@ -56,8 +56,9 @@ func runSnooze(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("invalid duration %q: %w", durStr, err)
 	}
-	if d <= 0 {
-		return fmt.Errorf("duration must be positive, got %q", durStr)
+	if d < time.Second {
+		// The VM takes whole seconds, and 0 would terminate it on the spot.
+		return fmt.Errorf("duration must be at least 1s, got %q", durStr)
 	}
 	secs := int(d.Seconds())
 

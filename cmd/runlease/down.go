@@ -86,7 +86,7 @@ func runDown(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if err := reg.Remove(nameOrID); err != nil {
+	if err := reg.RemoveID(entry.Handle.ID); err != nil {
 		return fmt.Errorf("updating registry: %w", err)
 	}
 

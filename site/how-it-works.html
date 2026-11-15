@@ -133,7 +133,7 @@
   <tr><td><code>runlease daemon</code> sees an expired lease</td><td>A watcher on your side</td></tr>
 </table></div>
 <ul class="measure">
-  <li><code>reclaim.ttl</code> in the manifest sets the lease. <code>reclaim.selfTermination: true</code> arms the timer inside the VM.</li>
+  <li><code>reclaim.ttl</code> in the manifest sets the lease, and the timer inside the VM is armed by default. The deadline is kept on the VM's disk and re-armed at every boot, so a reboot does not lose it.</li>
   <li><code>runlease snooze NAME 1h</code> moves the timer, over the same secure channel.</li>
   <li>On GCP the VM deletes itself through the Compute API. On AWS it powers off, and the instance is configured to terminate on shutdown.</li>
   <li>Every VM is tagged <code>runlease-managed</code>, <code>runlease-created-by</code> and <code>runlease-expires-at</code>.</li>

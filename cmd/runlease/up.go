@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -164,6 +165,16 @@ func runUp(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("initializing provider: %w", err)
 	}
+	// One name, one machine. Launching over a name that is in use would leave
+	// the first machine running with nothing tracking it.
+	reg, err := loadRegistry()
+	if err != nil {
+		return err
+	}
+	if err := freeName(ctx, cmd, reg, m.Name); err != nil {
+		return err
+	}
+
 	// Before a relay slot or a machine exists: a machine with no public IP and
 	// no NAT could never dial the relay, and would sit unreachable for its lease.
 	if err := checkPrivateEgress(ctx, cmd.ErrOrStderr(), p, m); err != nil {
@@ -225,7 +236,7 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		RelayAddr:         m.Relay.Addr,
 		RelayToken:        relayToken,
 		Provider:          m.Provider,
-		SelfTermination:   m.Reclaim.SelfTermination,
+		SelfTermination:   m.Reclaim.SelfTerminates(),
 		TTLSeconds:        ttlSeconds,
 		PasswordlessSudo:  m.Sudo.IsPasswordless(),
 		SetupSteps:        toUserdataSteps(m.Setup),
@@ -252,31 +263,52 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		ServiceAccountEmail: m.GCP.ServiceAccount,
 		NetworkTags:         m.GCP.NetworkTags,
 		PublicIP:            m.WantsPublicIP(),
-		SelfTermination:     m.Reclaim.SelfTermination,
+		SelfTermination:     m.Reclaim.SelfTerminates(),
 		DiskSizeGb:          m.DiskSizeGb,
 	})
-	if err != nil {
+	if handle == nil {
 		return fmt.Errorf("requesting spot instance: %w", err)
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "   └─ %s — waiting for running state...\n", handle.ID)
-
-	// Save credential before waiting so we can delete it if the wait fails.
+	// From here a machine exists, or may: a create error that comes with a
+	// handle means the request was accepted. Record it before anything else,
+	// so that whatever happens next, 'runlease down' can find it.
+	createErr := err
+	handle.ManifestName = m.Name
+	handle.Tags = m.Tags
+	handle.InstanceType = instanceType
+	handle.State = provider.StatusPending
+	// Set expiry from TTL, anchored to when the instance was created.
+	if m.Reclaim.TTL != "" {
+		ttl, _ := m.Reclaim.TTLDuration()
+		expiresAt := handle.CreatedAt.Add(ttl)
+		handle.ExpiresAt = &expiresAt
+	}
 	credDir := defaultCredDir()
-	masterKey, err := credential.LoadOrCreateMasterKey(defaultMasterKeyPath())
-	if err != nil {
-		return fmt.Errorf("loading master key: %w", err)
+	if err := recordLaunch(reg, credDir, cred, &registry.Entry{
+		Handle:     *handle,
+		CredDir:    credDir,
+		RelayAddr:  m.Relay.Addr,
+		RelayToken: relayToken,
+		Forwards:   manifestToRegistryForwards(m.Forwards),
+	}); err != nil {
+		// It cannot be tracked, so it must not be left running.
+		return abandonLaunch(cmd, p, handle, credDir, err)
 	}
-	if err := credential.Save(credDir, string(handle.ID), cred, masterKey); err != nil {
-		return fmt.Errorf("saving credential: %w", err)
+	// The registry entry now owns the relay slot: 'down' and 'sync' release it.
+	launched = true
+	if createErr != nil {
+		return fmt.Errorf("requesting spot instance: %w\nThe machine may still have been created. It is recorded as %q: run 'runlease down %s' to remove it",
+			createErr, m.Name, m.Name)
 	}
+	fmt.Fprintf(cmd.OutOrStdout(), "   └─ %s — waiting for running state...\n", handle.ID)
 
 	waitCtx, cancel := context.WithTimeout(ctx, upTimeout)
 	defer cancel()
 
 	running, err := p.WaitUntilRunning(waitCtx, handle.ID)
 	if err != nil {
-		_ = credential.Delete(credDir, string(handle.ID))
-		return fmt.Errorf("waiting for instance: %w\n(instance %s may still be running — check AWS console and terminate manually)", err, handle.ID)
+		return fmt.Errorf("waiting for instance: %w\nThe machine may still be starting. It is recorded as %q: run 'runlease down %s' to remove it, or 'runlease sync' to check on it",
+			err, m.Name, m.Name)
 	}
 
 	// Restore fields that DescribeInstances doesn't return. CreatedAt comes from
@@ -286,31 +318,14 @@ func runUp(cmd *cobra.Command, _ []string) error {
 	running.Tags = m.Tags
 	running.InstanceType = instanceType
 	running.CreatedAt = handle.CreatedAt
+	running.ExpiresAt = handle.ExpiresAt
 	// The project the instance was created in: later commands must use it, not
 	// whatever the env / gcloud config says at that time.
 	running.Project = handle.Project
 
-	// Set expiry from TTL, anchored to when the instance was created.
-	if m.Reclaim.TTL != "" {
-		ttl, _ := m.Reclaim.TTLDuration()
-		expiresAt := handle.CreatedAt.Add(ttl)
-		running.ExpiresAt = &expiresAt
-	}
-
-	reg, err := loadRegistry()
-	if err != nil {
-		return err
-	}
-	if err := reg.Add(&registry.Entry{
-		Handle:     *running,
-		CredDir:    credDir,
-		RelayAddr:  m.Relay.Addr,
-		RelayToken: relayToken,
-		Forwards:   manifestToRegistryForwards(m.Forwards),
-	}); err != nil {
+	if err := reg.Update(handle.ID, func(e *registry.Entry) { e.Handle = *running }); err != nil {
 		return fmt.Errorf("updating registry: %w", err)
 	}
-	launched = true
 
 	// Best-effort spot pricing — bounded so a slow/failed pricing API can never
 	// hold up or fail the launch. Any error just means "no price shown".
@@ -374,8 +389,15 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintf(out, "\n🛑 To terminate:\n")
 		fmt.Fprintf(out, "   runlease down %s\n", m.Name)
 		fmt.Fprintf(out, "   # or from inside the instance: sudo /usr/local/bin/runlease-terminate\n")
-		if running.ExpiresAt != nil {
-			fmt.Fprintf(out, "   # or wait — auto-terminates in %s\n", time.Until(*running.ExpiresAt).Round(time.Second))
+		switch {
+		case running.ExpiresAt != nil && m.Reclaim.SelfTerminates():
+			fmt.Fprintf(out, "   # or wait — it deletes itself in %s\n", time.Until(*running.ExpiresAt).Round(time.Second))
+		case running.ExpiresAt != nil:
+			fmt.Fprintf(out, "\n⚠  selfTermination is off: this machine will NOT delete itself when its lease ends in %s.\n"+
+				"   Only a running 'runlease daemon' on this computer, or 'runlease down %s', stops it.\n",
+				time.Until(*running.ExpiresAt).Round(time.Second), m.Name)
+		default:
+			fmt.Fprintf(out, "\n⚠  No lease (reclaim.ttl) is set: this machine runs, and bills, until 'runlease down %s'.\n", m.Name)
 		}
 	}
 
@@ -593,7 +615,7 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 		InstanceClass: size,
 		BaseImage:     image,
 		DiskSizeGb:    quickDiskSize,
-		Reclaim:       manifest.ReclaimPolicy{TTL: ttl, SelfTermination: quickSelfTerminate},
+		Reclaim:       manifest.ReclaimPolicy{TTL: ttl, SelfTermination: &quickSelfTerminate},
 		GCP:           gcp,
 		AWS:           aws,
 	}
@@ -942,4 +964,80 @@ func checkPrivateEgress(ctx context.Context, errOut io.Writer, p provider.CloudP
 			"  - set 'publicIp: false' if the network gets out some other way", m.Region)
 	}
 	return nil
+}
+
+// freeName makes sure no tracked machine already uses name. An entry whose
+// machine is gone from the cloud (its lease ended and it deleted itself) is
+// cleared, so re-running the same manifest just works. An entry whose machine
+// still exists stops the launch.
+func freeName(ctx context.Context, cmd *cobra.Command, reg *registry.Registry, name string) error {
+	existing, err := reg.Get(name)
+	if err != nil {
+		return nil // not in use
+	}
+	inUse := func(detail string) error {
+		return fmt.Errorf("a machine named %q is already tracked (%s, %s).\n"+
+			"Run 'runlease down %s' first, or launch under another name (--name, or 'name:' in the manifest)",
+			name, existing.Handle.ID, detail, name)
+	}
+	p, err := providerForEntry(ctx, existing.Handle, cmd.ErrOrStderr())
+	if err != nil {
+		return inUse(fmt.Sprintf("could not check it: %v", err))
+	}
+	status, err := p.Status(ctx, existing.Handle.ID)
+	if err != nil {
+		if !strings.Contains(err.Error(), "not found") && !strings.Contains(err.Error(), "InvalidInstanceID") {
+			return inUse(fmt.Sprintf("could not check it: %v", err))
+		}
+		status = provider.StatusTerminated
+	}
+	if status != provider.StatusTerminated || existing.Handle.ProjectUnknown() {
+		return inUse(string(status))
+	}
+	forgetEntry(ctx, reg, existing)
+	fmt.Fprintf(cmd.OutOrStdout(), "♻️  The previous %q (%s) is gone; cleared its record.\n", name, existing.Handle.ID)
+	return nil
+}
+
+// forgetEntry drops everything kept locally for a machine that no longer
+// exists: its key, its relay slot and its registry entry. Best effort.
+func forgetEntry(ctx context.Context, reg *registry.Registry, e *registry.Entry) {
+	_ = credential.Delete(e.CredDir, string(e.Handle.ID))
+	if e.RelayAddr != "" && e.RelayToken != "" {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+		_ = releaseRelaySlot(releaseCtx, e.RelayAddr, e.RelayToken)
+		cancel()
+	}
+	_ = reg.RemoveID(e.Handle.ID)
+}
+
+// recordLaunch writes down a machine that was just requested: its key, then
+// its registry entry. AddNew refuses a name taken since freeName looked.
+func recordLaunch(reg *registry.Registry, credDir string, cred *credential.EphemeralCredential, e *registry.Entry) error {
+	masterKey, err := credential.LoadOrCreateMasterKey(defaultMasterKeyPath())
+	if err != nil {
+		return fmt.Errorf("loading master key: %w", err)
+	}
+	if err := credential.Save(credDir, string(e.Handle.ID), cred, masterKey); err != nil {
+		return fmt.Errorf("saving credential: %w", err)
+	}
+	if err := reg.AddNew(e); err != nil {
+		return fmt.Errorf("recording the machine: %w", err)
+	}
+	return nil
+}
+
+// abandonLaunch deletes a machine that could not be recorded. It uses a
+// context of its own, because the command's may already be cancelled, and it
+// says plainly if the machine could not be removed.
+func abandonLaunch(cmd *cobra.Command, p provider.CloudProvider, h *provider.InstanceHandle, credDir string, cause error) error {
+	fmt.Fprintf(cmd.ErrOrStderr(), "The machine %s could not be recorded, so it is being deleted...\n", h.ID)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	_ = credential.Delete(credDir, string(h.ID))
+	if err := p.Terminate(ctx, h.ID); err != nil && !errors.Is(err, provider.ErrNotFound) {
+		return fmt.Errorf("%w\nDeleting it also failed: %v\nThe machine %s in %s may still be running and is NOT tracked. Delete it in your cloud console",
+			cause, err, h.ID, h.Region)
+	}
+	return fmt.Errorf("%w\nThe machine was deleted", cause)
 }

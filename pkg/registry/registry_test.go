@@ -1,7 +1,10 @@
 package registry
 
 import (
+	"errors"
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -146,5 +149,80 @@ func TestPersistence(t *testing.T) {
 	}
 	if string(got.Handle.ID) != "i-abc" {
 		t.Errorf("ID after reload = %q, want %q", got.Handle.ID, "i-abc")
+	}
+}
+
+// Two processes hold their own copy of the registry. A write from one must not
+// erase what the other wrote in the meantime.
+func TestStaleCopyDoesNotEraseOtherWrites(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.json")
+	a, _ := Load(path)
+	if err := a.Add(&Entry{Handle: provider.InstanceHandle{ID: "i-a", ManifestName: "a"}}); err != nil {
+		t.Fatal(err)
+	}
+	stale, _ := Load(path) // e.g. a `down` that is now waiting on the cloud
+	b, _ := Load(path)
+	if err := b.Add(&Entry{Handle: provider.InstanceHandle{ID: "i-b", ManifestName: "b"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := stale.Remove("a"); err != nil {
+		t.Fatal(err)
+	}
+	fresh, _ := Load(path)
+	if _, err := fresh.Get("b"); err != nil {
+		t.Error("entry written by another process was erased by a stale copy")
+	}
+	if _, err := fresh.Get("a"); err == nil {
+		t.Error("removed entry is still there")
+	}
+}
+
+func TestAddNewRefusesTakenName(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.json")
+	r, _ := Load(path)
+	e := func(id string) *Entry {
+		return &Entry{Handle: provider.InstanceHandle{ID: provider.InstanceID(id), ManifestName: "dev"}}
+	}
+	if err := r.AddNew(e("i-1")); err != nil {
+		t.Fatal(err)
+	}
+	other, _ := Load(path)
+	if err := other.AddNew(e("i-2")); !errors.Is(err, ErrExists) {
+		t.Fatalf("AddNew on a taken name = %v, want ErrExists", err)
+	}
+	got, _ := other.Get("dev")
+	if got.Handle.ID != "i-1" {
+		t.Error("the first instance's entry was overwritten")
+	}
+}
+
+func TestRemoveIDLeavesReusedName(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.json")
+	r, _ := Load(path)
+	_ = r.Add(&Entry{Handle: provider.InstanceHandle{ID: "i-new", ManifestName: "dev"}})
+	if err := r.RemoveID("i-old"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Get("dev"); err != nil {
+		t.Error("RemoveID removed an entry with a different ID")
+	}
+}
+
+func TestConcurrentWritersKeepEveryEntry(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.json")
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			r, _ := Load(path)
+			name := fmt.Sprintf("m%d", i)
+			_ = r.Add(&Entry{Handle: provider.InstanceHandle{ID: provider.InstanceID(name), ManifestName: name}})
+		}(i)
+	}
+	wg.Wait()
+	r, _ := Load(path)
+	if n := len(r.List()); n != 20 {
+		t.Errorf("%d entries survived 20 concurrent writers, want 20", n)
 	}
 }

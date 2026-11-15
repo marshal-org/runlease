@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -59,6 +60,14 @@ func runSync(cmd *cobra.Command, _ []string) error {
 				"run `GOOGLE_CLOUD_PROJECT=<project> runlease down %s`\n", name, name)
 			continue
 		}
+		if newState == provider.StatusStopped {
+			// Powered off is not deleted: the machine and its disk still exist
+			// and are still billed. Delete it before forgetting it.
+			if err := p.Terminate(ctx, e.Handle.ID); err != nil && !errors.Is(err, provider.ErrNotFound) {
+				fmt.Fprintf(out, "%-22s  stopped, and deleting it failed: %v (kept)\n", name, err)
+				continue
+			}
+		}
 		if isDead {
 			if err := credential.Delete(e.CredDir, string(e.Handle.ID)); err != nil {
 				fmt.Fprintf(out, "%-22s  warning: could not delete credentials: %v\n", name, err)
@@ -68,7 +77,7 @@ func runSync(cmd *cobra.Command, _ []string) error {
 			if e.RelayAddr != "" && e.RelayToken != "" {
 				_ = releaseRelaySlot(ctx, e.RelayAddr, e.RelayToken)
 			}
-			if err := reg.Remove(name); err != nil {
+			if err := reg.RemoveID(e.Handle.ID); err != nil {
 				fmt.Fprintf(out, "%-22s  error removing from registry: %v\n", name, err)
 				continue
 			}

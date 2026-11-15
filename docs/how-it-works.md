@@ -151,7 +151,9 @@ stateDiagram-v2
     Gone --> [*]
 ```
 
-- `reclaim.ttl` sets the lease. `reclaim.selfTermination: true` arms the timer inside the VM.
+- `reclaim.ttl` sets the lease, and the timer inside the VM is armed by default
+  (`reclaim.selfTermination: false` turns it off). The deadline is kept on the VM's disk and
+  re-armed at every boot, so a reboot does not lose it.
 - `runlease snooze <name> 1h` re-arms the timer over the same secure channel.
 - On GCP the VM deletes itself through the Compute API. On AWS it powers off, and the instance is
   configured to terminate on shutdown.

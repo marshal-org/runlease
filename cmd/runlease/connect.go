@@ -34,7 +34,7 @@ func runConnect(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if entry.RelayAddr == "" {
-		return fmt.Errorf("instance %s was not launched with a relay — use 'runlease ssh' instead", args[0])
+		return fmt.Errorf("instance %s was not launched with a relay — use 'runlease ssh' instead", entry.Handle.ManifestName)
 	}
 
 	masterKey, err := credential.LoadOrCreateMasterKey(defaultMasterKeyPath())

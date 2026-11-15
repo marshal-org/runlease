@@ -387,7 +387,7 @@
     tabs.forEach(function (t, j) {
       t.setAttribute('aria-selected', j === i ? 'true' : 'false');
       t.setAttribute('tabindex', j === i ? '0' : '-1');
-      panels[j].hidden = j !== i;
+      if (panels[j]) panels[j].hidden = j !== i;
     });
     if (focus) tabs[i].focus();
   }

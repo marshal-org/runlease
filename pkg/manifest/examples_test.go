@@ -34,8 +34,14 @@ func TestInstallPageShowsExamplesVerbatim(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(string(page), html.EscapeString(strings.TrimRight(string(raw), "\n"))) {
+		if !strings.Contains(unixLines(page), html.EscapeString(strings.TrimRight(unixLines(raw), "\n"))) {
 			t.Errorf("site/install.html does not contain examples/manifests/%s.yaml verbatim", name)
 		}
 	}
+}
+
+// unixLines undoes the CRLF line endings a Windows checkout may add, so the
+// comparison is about content.
+func unixLines(b []byte) string {
+	return strings.ReplaceAll(string(b), "\r\n", "\n")
 }

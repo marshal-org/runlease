@@ -101,11 +101,19 @@ The agent only dials out to the relay and connects to `localhost:22`. Its system
 unprivileged user with `NoNewPrivileges`, an empty capability set, a read-only view of the system
 and no access to home directories or devices.
 
-### Runlease needs no inbound port
+### SSH listens on localhost only
 
-The VM reaches the relay with an outbound connection, so Runlease asks for no inbound firewall
-rule and does not use one. Set `publicIp: false` in the manifest and the VM has no public address
-at all; it then needs a NAT gateway to reach the relay. Known limit 1 covers the default.
+With a relay, the VM gets no public address by default and its SSH server is bound to
+`127.0.0.1`. The only way in is the agent on the VM, which dials out to the relay and hands each
+connection to SSH on localhost. There is no SSH port for a firewall rule to expose.
+
+The SSH settings are written at the top of `sshd_config`, because SSH keeps the first value it
+reads. The boot script then asks SSH what it will enforce (`sshd -T`) and stops, leaving the
+machine unreachable, if passwords are on, root login is allowed, or it would listen beyond
+localhost.
+
+If your subnet has no NAT gateway, set `publicIp: true`. The address is then used for outbound
+traffic only; SSH still listens on localhost. Known limit 1 covers what that changes.
 
 ### sudo is off by default
 
@@ -139,11 +147,11 @@ Being honest about this matters more than the list above.
 
 These are real, and they are why the trust table above lists your cloud account as trusted.
 
-1. **By default the VM has a public address.** It is there so the VM can reach the relay without
-   extra network setup. Runlease opens no port on it, but whether port 22 is reachable from the
-   internet is decided by your cloud firewall, not by Runlease. The SSH server behind it accepts
-   one key, for one user, with passwords off. For no public address at all, set `publicIp: false`
-   and give the subnet a NAT gateway.
+1. **Without a NAT gateway, the VM needs a public address to reach the relay.** That is the
+   `publicIp: true` setting. Runlease's own SSH server still listens on localhost only, but
+   anything else you start on the VM that listens on all interfaces is then exposed to whatever
+   your cloud firewall allows. With no relay at all, the VM always has a public address and SSH
+   listens on it: one key, one user, passwords off.
 2. **The boot script contains the host private key and the slot token.** Anything that can read
    instance metadata can read them: an IAM principal with instance read access in your project or
    account, and any process on the VM that can reach the metadata server. With both, an attacker

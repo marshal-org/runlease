@@ -19,9 +19,11 @@ type Manifest struct {
 	// DiskSizeGb overrides the boot disk size in GB. 0 (default) uses the
 	// image's own size. Must be >= the image's minimum on both clouds.
 	DiskSizeGb int `yaml:"diskSizeGb"`
-	// PublicIP controls whether a public IP is assigned. Nil means true: the VM
-	// needs a route out to reach the relay, and a public IP is the one that
-	// works without extra network setup. Set false where the subnet has NAT.
+	// PublicIP controls whether a public IP is assigned. Nil means false when a
+	// relay is set (the VM is reached through the relay, and gets out through
+	// the subnet's NAT) and true when it is not (direct SSH is the only way in).
+	// Set true with a relay only where the subnet has no NAT: the address then
+	// carries outbound traffic, and sshd still listens on localhost only.
 	PublicIP *bool             `yaml:"publicIp"`
 	Relay    RelayConfig       `yaml:"relay"`
 	Reclaim  ReclaimPolicy     `yaml:"reclaim"`
@@ -86,13 +88,18 @@ type GCPConfig struct {
 	Subnetwork     string   `yaml:"subnetwork"` // subnetwork name or self-link; required for custom-mode VPCs
 }
 
-// WantsPublicIP returns the effective public IP setting (default true).
+// WantsPublicIP returns the effective public IP setting. Unset, it is false in
+// relay mode and true otherwise: see the PublicIP field.
 func (m *Manifest) WantsPublicIP() bool {
 	if m.PublicIP != nil {
 		return *m.PublicIP
 	}
-	return true
+	return m.Relay.Addr == ""
 }
+
+// PublicIPExplicit reports whether the manifest sets publicIp itself, as
+// opposed to taking the default.
+func (m *Manifest) PublicIPExplicit() bool { return m.PublicIP != nil }
 
 // RelayConfig enables the runlease relay tunnel. When set, launched instances
 // download runlease-agent from the relay's built-in HTTP endpoint and connect

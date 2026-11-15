@@ -428,3 +428,68 @@ func TestBuild_scriptParses(t *testing.T) {
 		}
 	}
 }
+
+// sshd keeps the first value it reads for a keyword, so the hardening block
+// has to end up ahead of the image's own sshd_config, not after it.
+func TestBuild_sshdHardeningGoesFirst(t *testing.T) {
+	out, err := Build(fullParams())
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if strings.Contains(out, "cat >> /etc/ssh/sshd_config <<") {
+		t.Error("hardening block is appended to sshd_config; sshd would ignore it where the image already sets a value")
+	}
+	block := strings.Index(out, "PasswordAuthentication no")
+	rest := strings.Index(out, "cat /etc/ssh/sshd_config >> /etc/ssh/sshd_config.runlease")
+	if block < 0 || rest < 0 || block > rest {
+		t.Errorf("hardening block (at %d) must be written before the image's config is added after it (at %d)", block, rest)
+	}
+	if !strings.Contains(out, "sshd -T") {
+		t.Error("script does not check the settings sshd will enforce")
+	}
+}
+
+func TestBuild_sshdListensOnLocalhostOnlyInRelayMode(t *testing.T) {
+	direct, err := Build(fullParams())
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if strings.Contains(direct, "ListenAddress") {
+		t.Error("direct mode must leave sshd listening on the network: it is the only way in")
+	}
+
+	p := fullParams()
+	p.RelayAddr = "wss://relay.example.com"
+	p.RelayToken = "tok"
+	relay, err := Build(p)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if !strings.Contains(relay, "\nListenAddress 127.0.0.1\n") {
+		t.Error("relay mode must bind sshd to 127.0.0.1")
+	}
+	if !strings.Contains(relay, "listenaddress 127.0.0.1:22") {
+		t.Error("relay mode must verify sshd listens on localhost only")
+	}
+}
+
+func TestBuild_scriptParsesWithAndWithoutRelay(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not available")
+	}
+	for _, relay := range []string{"", "wss://relay.example.com"} {
+		p := fullParams()
+		p.RelayAddr = relay
+		p.Provider = "gcp"
+		out, err := Build(p)
+		if err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		cmd := exec.Command(bash, "-n")
+		cmd.Stdin = strings.NewReader(out)
+		if msg, err := cmd.CombinedOutput(); err != nil {
+			t.Errorf("relay=%q: script does not parse: %v\n%s", relay, err, msg)
+		}
+	}
+}

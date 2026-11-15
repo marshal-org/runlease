@@ -45,7 +45,7 @@ Launch with `runlease up -m my-runner-manifest.yaml`.
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `publicIp` | bool | `true` | Attach a public IP. Runlease opens no port on it; it is there so the VM can reach the relay. Set `false` for no public address at all, and give the subnet a NAT gateway so the VM can still dial out. |
+| `publicIp` | bool | `false` with a relay, `true` without | Attach a public IP. With a relay the VM needs none: it dials out through your subnet's NAT gateway, and its SSH server listens on localhost only. If the subnet has no NAT gateway, set `true` (or pass `--public-ip`); the address then carries outbound traffic only. On GCP, `runlease up` checks for Cloud NAT first and refuses to launch a machine that could not reach the relay. |
 | `relay.addr` | string | — | `wss://…` or `host:port`. Enables the relay tunnel. With this set, no inbound firewall rule is needed. |
 | `relay.agentSha256` | string | digest built into release CLIs | SHA-256 the VM checks the relay-served agent against before running it. Set it when your relay serves an agent you built yourself. `unverified` skips the check on purpose. See [agent verification](security.md#the-agent-binary-is-verified-before-it-runs). |
 

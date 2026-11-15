@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/marshal-org/runlease/pkg/manifest"
@@ -139,4 +142,55 @@ func TestBuildQuickManifest_networkRouting(t *testing.T) {
 			t.Fatal("expected error for --network with aws, got nil")
 		}
 	})
+}
+
+type fakeEgressProvider struct {
+	fakeDownProvider
+	has    bool
+	err    error
+	called bool
+}
+
+func (f *fakeEgressProvider) HasPrivateEgress(context.Context, string, string) (bool, error) {
+	f.called = true
+	return f.has, f.err
+}
+
+func TestCheckPrivateEgress(t *testing.T) {
+	yes, no := true, false
+	const relayAddr = "wss://relay.example.com"
+	tests := []struct {
+		name       string
+		relay      string
+		publicIP   *bool
+		has        bool
+		checkErr   error
+		wantErr    bool
+		wantCalled bool
+		wantNote   bool
+	}{
+		{name: "no relay: nothing to check"},
+		{name: "relay, default, NAT present", relay: relayAddr, has: true, wantCalled: true},
+		{name: "relay, default, no NAT: refuse", relay: relayAddr, wantCalled: true, wantErr: true},
+		{name: "relay, default, check failed: warn and go on", relay: relayAddr, checkErr: errors.New("403"), wantCalled: true, wantNote: true},
+		{name: "relay, publicIp true: has a way out", relay: relayAddr, publicIP: &yes},
+		{name: "relay, publicIp false set on purpose: warn, do not check", relay: relayAddr, publicIP: &no, wantNote: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &fakeEgressProvider{has: tc.has, err: tc.checkErr}
+			m := &manifest.Manifest{PublicIP: tc.publicIP, Relay: manifest.RelayConfig{Addr: tc.relay}, Region: "us-central1-a"}
+			var errOut bytes.Buffer
+			err := checkPrivateEgress(context.Background(), &errOut, p, m)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
+			}
+			if p.called != tc.wantCalled {
+				t.Errorf("NAT check called = %v, want %v", p.called, tc.wantCalled)
+			}
+			if got := errOut.Len() > 0; got != tc.wantNote {
+				t.Errorf("printed a note = %v, want %v (%q)", got, tc.wantNote, errOut.String())
+			}
+		})
+	}
 }

@@ -44,7 +44,7 @@
 <div class="cards">
   <div><span class="n">01</span><h3>Keys never leave</h3><p>The SSH login key is generated on your machine, for one VM, and its private half never goes anywhere else.</p></div>
   <div><span class="n">02</span><h3>The relay is blind</h3><p>It copies bytes. It holds no key and no cloud credential, so it cannot read, change or impersonate a session.</p></div>
-  <div><span class="n">03</span><h3>The VM dials out</h3><p>Runlease needs no inbound port and no firewall rule. The VM connects outward to the relay and waits.</p></div>
+  <div><span class="n">03</span><h3>The VM dials out</h3><p>No public address, and SSH listens on localhost only. The VM connects outward to the relay and waits.</p></div>
   <div><span class="n">04</span><h3>Identity fixed before boot</h3><p>Your machine chooses the VM's SSH host key before the VM exists. Nothing is trusted on first use.</p></div>
   <div><span class="n">05</span><h3>Verified, then unprivileged</h3><p>The VM checks the agent binary against a SHA-256 before running it, then runs it with no privileges.</p></div>
   <div><span class="n">06</span><h3>Every machine expires</h3><p>A timer inside the VM deletes it when the lease ends, whether or not anyone is still watching.</p></div>
@@ -288,8 +288,8 @@
   <div class="ref"><b>Code</b>pkg/userdata/userdata.go · agent unit</div>
 </div>
 <div class="proof">
-  <div><h3>Runlease needs no inbound port</h3><p>The VM reaches the relay with an outbound connection, so Runlease asks for no inbound firewall rule and does not use one. Set <code>publicIp: false</code> in the manifest and the VM has no public address at all; it then needs a NAT gateway to reach the relay. See <a href="#limits">known limit 1</a> for the default.</p></div>
-  <div class="ref"><b>Code</b>pkg/agent/<br>pkg/manifest/manifest.go · PublicIP</div>
+  <div><h3>SSH listens on localhost only</h3><p>With a relay, the VM gets no public address by default and its SSH server is bound to <code>127.0.0.1</code>. The only way in is the agent, which dials out to the relay and hands each connection to SSH on localhost. The boot script writes the SSH settings first in the file, where SSH honours them, then asks SSH what it will enforce and stops if passwords are on, root login is allowed, or it would listen beyond localhost.</p><p>No NAT gateway on your subnet? Set <code>publicIp: true</code>. The address then carries outbound traffic only. See <a href="#limits">known limit 1</a>.</p></div>
+  <div class="ref"><b>Code</b>pkg/userdata/userdata.go · sshd<br>pkg/manifest/manifest.go · PublicIP</div>
 </div>
 <div class="proof">
   <div><h3>sudo is off by default</h3><p>The login user may run two fixed scripts as root: one that deletes the VM and one that moves the deletion timer. General <code>sudo</code> needs <code>sudo: passwordless</code> in the manifest, set before launch.</p></div>
@@ -308,7 +308,7 @@
 <p class="measure">These are real. We would rather you read them here than find them yourself.</p>
 
 <ol class="limits">
-  <li><div><p><b>By default the VM has a public address.</b> It is there so the VM can reach the relay without extra network setup. Runlease opens no port on it, but whether port 22 is reachable from the internet is decided by your cloud firewall, not by Runlease. The SSH server behind it accepts one key, for one user, with passwords off.</p><p class="do">For no public address at all, set <code>publicIp: false</code> and give the subnet a NAT gateway.</p></div></li>
+  <li><div><p><b>Without a NAT gateway, the VM needs a public address to reach the relay.</b> That is the <code>publicIp: true</code> setting. Runlease's own SSH server still listens on localhost only, but anything else you start on the VM that listens on all interfaces is then exposed to whatever your cloud firewall allows. With no relay at all, the VM always has a public address and SSH listens on it.</p><p class="do">Give the subnet a NAT gateway and keep the default, so the VM has no public address at all.</p></div></li>
   <li><div><p><b>The boot script contains the host private key and the slot token.</b> Anything that can read instance metadata can read them: an IAM principal with instance read access, and any process on the VM that can reach the metadata server. With both, an attacker who can also take the agent's place at the relay could present the right host key to your CLI. They still could not log in to the real VM.</p><p class="do">Keep instance read access narrow. On AWS, IMDSv2 is required; on GCP the metadata server already requires a custom header.</p></div></li>
   <li><div><p><b>A slot token is a bearer secret.</b> Whoever holds it can open a TCP connection to the VM's <code>sshd</code> through the relay, and can release the slot. They cannot get past SSH authentication.</p></div></li>
   <li><div><p><b>Stored keys are only as safe as your user account.</b> Key pairs are encrypted at rest, but the key that encrypts them sits beside them, readable by your user. This stops casual copying of the credentials directory. It does not stop someone who already runs code as you.</p></div></li>

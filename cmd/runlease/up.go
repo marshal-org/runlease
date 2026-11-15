@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -34,6 +35,7 @@ import (
 )
 
 var (
+	upPublicIP           bool
 	manifestPath         string
 	upTimeout            time.Duration
 	detach               bool
@@ -58,6 +60,7 @@ func init() {
 	upCmd.Flags().DurationVar(&upTimeout, "timeout", 5*time.Minute, "timeout waiting for instance to become ready")
 	upCmd.Flags().BoolVarP(&detach, "detach", "d", false, "exit after provisioning without waiting for SSH")
 	upCmd.Flags().BoolVar(&attach, "attach", false, "after provisioning, tail setup logs and apply manifest.forwards (blocks until Ctrl+C)")
+	upCmd.Flags().BoolVar(&upPublicIP, "public-ip", false, "give the instance a public IP (default: only when no relay is set); overrides the manifest")
 	upCmd.Flags().StringVarP(&quickProvider, "provider", "p", "", "provider: aws or gcp (quick mode — no manifest needed)")
 	upCmd.Flags().StringVarP(&quickRegion, "region", "r", "", "region/zone (quick mode; defaults: us-east-1 for aws, us-central1-a for gcp)")
 	upCmd.Flags().StringVarP(&quickSize, "size", "s", "compute.small", "instance class (quick mode)")
@@ -127,6 +130,10 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	if cmd.Flags().Changed("public-ip") {
+		m.PublicIP = &upPublicIP
+	}
+
 	if m.Provider == "aws" && m.BaseImage == "" {
 		fmt.Fprintf(cmd.OutOrStdout(), "🔍 Resolving latest Amazon Linux 2023 AMI for %s...\n", m.Region)
 		ami, err := awsprovider.ResolveAL2023AMI(cmd.Context(), m.Region)
@@ -150,6 +157,17 @@ func runUp(cmd *cobra.Command, _ []string) error {
 	cred, err := credential.Generate()
 	if err != nil {
 		return fmt.Errorf("generating keypair: %w", err)
+	}
+
+	ctx := cmd.Context()
+	p, err := newProvider(ctx, provider.ProviderType(m.Provider), m.Region, "")
+	if err != nil {
+		return fmt.Errorf("initializing provider: %w", err)
+	}
+	// Before a relay slot or a machine exists: a machine with no public IP and
+	// no NAT could never dial the relay, and would sit unreachable for its lease.
+	if err := checkPrivateEgress(ctx, cmd.ErrOrStderr(), p, m); err != nil {
+		return err
 	}
 
 	var relayToken string
@@ -201,18 +219,9 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("building user-data: %w", err)
 	}
 
-	ctx := cmd.Context()
-	p, err := newProvider(ctx, provider.ProviderType(m.Provider), m.Region, "")
-	if err != nil {
-		return fmt.Errorf("initializing provider: %w", err)
-	}
-
 	// Merge auto-tags (user tags take precedence on conflict).
 	m.Tags = mergeAutoTags(m.Tags, m.Name, ttlSeconds)
 
-	if !m.WantsPublicIP() && provider.ProviderType(m.Provider) == provider.ProviderGCP {
-		fmt.Fprintf(cmd.OutOrStdout(), "⚠️  Launching without a public IP — ensure Cloud NAT is configured so the instance can reach the relay.\n")
-	}
 	fmt.Fprintf(cmd.OutOrStdout(), "⚡ Requesting spot instance (%s in %s)...\n", instanceType, m.Region)
 	handle, err := p.RequestSpot(ctx, provider.InstanceSpec{
 		ManifestName:        m.Name,
@@ -310,8 +319,13 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintf(out, "\n✅ Instance ready!\n")
 		fmt.Fprintf(out, "   Name:      %s\n", m.Name)
 		fmt.Fprintf(out, "   ID:        %s\n", running.ID)
-		if running.PublicIP != "" {
+		switch {
+		case running.PublicIP != "" && m.Relay.Addr != "":
+			fmt.Fprintf(out, "   Public IP: %s (outbound only: SSH listens on localhost)\n", running.PublicIP)
+		case running.PublicIP != "":
 			fmt.Fprintf(out, "   Public IP: %s\n", running.PublicIP)
+		case m.Relay.Addr != "":
+			fmt.Fprintf(out, "   Public IP: none\n")
 		}
 		if running.ExpiresAt != nil {
 			fmt.Fprintf(out, "   Expires:   %s (%s)\n", running.ExpiresAt.Format(time.RFC3339), time.Until(*running.ExpiresAt).Round(time.Second))
@@ -877,4 +891,39 @@ func resolveAgentSHA256(fromManifest, fromBuild string) (string, error) {
 		return "", fmt.Errorf("relay.agentSha256 must be 64 hex characters or %q", agentUnverified)
 	}
 	return v, nil
+}
+
+// checkPrivateEgress stops a relay-mode launch that takes the default of no
+// public IP on a network with no NAT: the agent could not reach the relay, so
+// the machine would be unreachable and still billed until its lease ran out.
+//
+// It only blocks when it is sure. A check that cannot be made (no permission to
+// list routers, a provider that has no check) prints a note and lets the launch
+// go on, and a manifest that sets publicIp itself is taken at its word.
+func checkPrivateEgress(ctx context.Context, errOut io.Writer, p provider.CloudProvider, m *manifest.Manifest) error {
+	if m.Relay.Addr == "" || m.WantsPublicIP() {
+		return nil
+	}
+	const note = "⚠  This machine gets no public IP. It reaches the relay through your subnet's NAT gateway; without one it will never connect.\n   To give it a public IP for outbound traffic, set 'publicIp: true' (SSH still listens on localhost only).\n"
+	checker, ok := p.(provider.EgressChecker)
+	if !ok || m.PublicIPExplicit() {
+		fmt.Fprint(errOut, note)
+		return nil
+	}
+	checkCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	has, err := checker.HasPrivateEgress(checkCtx, m.GCP.Network, m.GCP.Subnetwork)
+	if err != nil {
+		fmt.Fprint(errOut, note)
+		fmt.Fprintf(errOut, "   (could not check for a NAT gateway: %v)\n", err)
+		return nil
+	}
+	if !has {
+		return fmt.Errorf("no Cloud NAT found for this network in %s, and by default a relay-mode machine gets no public IP, so it could not reach the relay.\n"+
+			"Do one of:\n"+
+			"  - add Cloud NAT to the network (the machine then has no public address at all)\n"+
+			"  - set 'publicIp: true' in the manifest, or pass --public-ip (outbound only: SSH listens on localhost)\n"+
+			"  - set 'publicIp: false' if the network gets out some other way", m.Region)
+	}
+	return nil
 }

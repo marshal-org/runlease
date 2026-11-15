@@ -60,6 +60,10 @@ func runSSH(cmd *cobra.Command, args []string) error {
 		}
 		return sshOverConn(conn, entry.RelayAddr, cred)
 	}
+	if entry.RelayAddr != "" {
+		return fmt.Errorf("instance %s was launched through a relay, so its SSH server listens on localhost only; connect with: runlease connect %s",
+			entry.Handle.ID, entry.Handle.ManifestName)
+	}
 	if entry.Handle.PublicIP == "" {
 		return fmt.Errorf("instance %s has no public IP and no relay configured", entry.Handle.ID)
 	}

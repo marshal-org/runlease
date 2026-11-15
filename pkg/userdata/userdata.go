@@ -90,10 +90,11 @@ chmod 644 /etc/ssh/ssh_host_ed25519_key.pub
 rm -f /etc/ssh/ssh_host_rsa_key* /etc/ssh/ssh_host_ecdsa_key* /etc/ssh/ssh_host_dsa_key*
 
 # ── sshd hardening ───────────────────────────────────────────────────────────
-# Append a hardening block; later values override earlier ones in sshd_config.
-cat >> /etc/ssh/sshd_config << 'SSHD_EOF'
-
-# runlease hardening — appended at launch, overrides any distro defaults
+# sshd keeps the FIRST value it reads for a keyword, so this block goes at the
+# top of sshd_config: ahead of the image's own settings and of any Include of
+# sshd_config.d. Appending it would let the image's values win.
+cat > /etc/ssh/sshd_config.runlease << 'SSHD_EOF'
+# runlease hardening, written at launch. Keep this block first in the file.
 PasswordAuthentication no
 PermitEmptyPasswords no
 PubkeyAuthentication yes
@@ -104,9 +105,55 @@ MaxAuthTries 3
 LoginGraceTime 20
 ClientAliveInterval 120
 ClientAliveCountMax 2
+{{- if .RelayAddr }}
+# Relay mode: the agent on this machine is the only way in, and it dials sshd
+# on localhost. Nothing listens on the network.
+ListenAddress 127.0.0.1
+{{- end }}
 SSHD_EOF
+{{- if .RelayAddr }}
+# ListenAddress is additive, not first-wins, so the image's own lines have to go.
+sed -i -E '/^[[:space:]]*ListenAddress[[:space:]]/Id' /etc/ssh/sshd_config
+for f in /etc/ssh/sshd_config.d/*.conf; do
+  [ -f "$f" ] && sed -i -E '/^[[:space:]]*ListenAddress[[:space:]]/Id' "$f"
+done
+{{- end }}
+echo >> /etc/ssh/sshd_config.runlease
+cat /etc/ssh/sshd_config >> /etc/ssh/sshd_config.runlease
+# Write through the existing file so its owner, mode and label are kept.
+cat /etc/ssh/sshd_config.runlease > /etc/ssh/sshd_config
+rm -f /etc/ssh/sshd_config.runlease
 
-systemctl restart sshd 2>/dev/null || service ssh restart 2>/dev/null || true
+# Images that start sshd from a systemd socket (Ubuntu 24.04) take the listen
+# address from a unit generated out of sshd_config, so regenerate and restart
+# the socket too.
+systemctl daemon-reload
+if systemctl is-active --quiet ssh.socket 2>/dev/null; then
+  systemctl stop ssh.service 2>/dev/null || true
+  systemctl restart ssh.socket
+else
+  systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null || service ssh restart 2>/dev/null || true
+fi
+
+# Check what sshd will actually enforce. If the hardening did not take, stop
+# sshd and stop the bootstrap: the machine stays unreachable and the
+# self-termination timer armed above removes it.
+mkdir -p /run/sshd
+SSHD_EFFECTIVE=$(sshd -T 2>/dev/null || true)
+sshd_ok=1
+for want in 'passwordauthentication no' 'permitemptypasswords no' 'permitrootlogin no' \
+            'authenticationmethods publickey' 'allowusers runlease-agent'; do
+  echo "$SSHD_EFFECTIVE" | grep -qix "$want" || { echo "runlease: sshd setting not in effect: $want" >&2; sshd_ok=0; }
+done
+{{- if .RelayAddr }}
+if echo "$SSHD_EFFECTIVE" | grep -i '^listenaddress ' | grep -qvix 'listenaddress 127.0.0.1:22'; then
+  echo 'runlease: sshd would listen beyond localhost' >&2; sshd_ok=0
+fi
+{{- end }}
+if [ "$sshd_ok" -ne 1 ]; then
+  systemctl stop ssh.socket ssh.service sshd.service 2>/dev/null || true
+  exit 1
+fi
 {{- if .PasswordlessSudo }}
 
 # ── passwordless sudo (opt-in via manifest.sudo: passwordless) ───────────────

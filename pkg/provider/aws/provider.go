@@ -70,12 +70,22 @@ func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) 
 			{ResourceType: types.ResourceTypeInstance, Tags: tags},
 		},
 	}
+	// The public address is decided here, not left to the subnet's
+	// auto-assign setting, so `publicIp` in the manifest means the same thing
+	// in every VPC. EC2 only takes that choice on a network interface, and
+	// then the subnet and security groups have to be given there too.
+	nic := types.InstanceNetworkInterfaceSpecification{
+		DeviceIndex:              awssdk.Int32(0),
+		AssociatePublicIpAddress: awssdk.Bool(spec.PublicIP),
+		DeleteOnTermination:      awssdk.Bool(true),
+	}
 	if len(spec.SecurityGroupIDs) > 0 {
-		input.SecurityGroupIds = spec.SecurityGroupIDs
+		nic.Groups = spec.SecurityGroupIDs
 	}
 	if spec.SubnetID != "" {
-		input.SubnetId = awssdk.String(spec.SubnetID)
+		nic.SubnetId = awssdk.String(spec.SubnetID)
 	}
+	input.NetworkInterfaces = []types.InstanceNetworkInterfaceSpecification{nic}
 	if spec.InstanceProfileARN != "" {
 		input.IamInstanceProfile = &types.IamInstanceProfileSpecification{
 			Arn: awssdk.String(spec.InstanceProfileARN),

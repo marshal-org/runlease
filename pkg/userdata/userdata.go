@@ -141,12 +141,17 @@ fi
 mkdir -p /run/sshd
 SSHD_EFFECTIVE=$(sshd -T 2>/dev/null || true)
 sshd_ok=1
+# grep reads a here-string, not a pipe from echo: grep -q exits at the first
+# match, and with pipefail an echo still writing would then fail the check.
 for want in 'passwordauthentication no' 'permitemptypasswords no' 'permitrootlogin no' \
             'authenticationmethods publickey' 'allowusers runlease-agent'; do
-  echo "$SSHD_EFFECTIVE" | grep -qix "$want" || { echo "runlease: sshd setting not in effect: $want" >&2; sshd_ok=0; }
+  grep -qix "$want" <<< "$SSHD_EFFECTIVE" || { echo "runlease: sshd setting not in effect: $want" >&2; sshd_ok=0; }
 done
 {{- if .RelayAddr }}
-if echo "$SSHD_EFFECTIVE" | grep -i '^listenaddress ' | grep -qvix 'listenaddress 127.0.0.1:22'; then
+# No pipe here either: a grep -q that exits early would turn the pipeline's
+# status into a failure, and this check would then pass when it should not.
+SSHD_LISTEN=$(grep -i '^listenaddress ' <<< "$SSHD_EFFECTIVE" || true)
+if [ -z "$SSHD_LISTEN" ] || grep -qvix 'listenaddress 127.0.0.1:22' <<< "$SSHD_LISTEN"; then
   echo 'runlease: sshd would listen beyond localhost' >&2; sshd_ok=0
 fi
 {{- end }}

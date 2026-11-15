@@ -171,6 +171,9 @@ func runUp(cmd *cobra.Command, _ []string) error {
 	}
 
 	var relayToken string
+	// launched turns true once the machine is in the registry, where
+	// 'runlease down' can find it and give its relay slot back.
+	launched := false
 	if m.Relay.Addr != "" {
 		raw := make([]byte, 32)
 		if _, err := rand.Read(raw); err != nil {
@@ -185,6 +188,18 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		if err := registerRelayToken(cmd.Context(), m.Relay.Addr, relayToken); err != nil {
 			return fmt.Errorf("relay registration: %w", err)
 		}
+		// A launch that fails from here on leaves nothing behind that could
+		// release the slot, so release it now. Otherwise every failed attempt
+		// would count against the owner's tier until the relay timed it out.
+		// Not tied to the command's context: that is already cancelled on Ctrl+C.
+		defer func() {
+			if launched {
+				return
+			}
+			releaseCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			_ = releaseRelaySlot(releaseCtx, m.Relay.Addr, relayToken)
+		}()
 	}
 
 	var ttlSeconds int
@@ -295,6 +310,7 @@ func runUp(cmd *cobra.Command, _ []string) error {
 	}); err != nil {
 		return fmt.Errorf("updating registry: %w", err)
 	}
+	launched = true
 
 	// Best-effort spot pricing — bounded so a slow/failed pricing API can never
 	// hold up or fail the launch. Any error just means "no price shown".
@@ -912,16 +928,16 @@ func checkPrivateEgress(ctx context.Context, errOut io.Writer, p provider.CloudP
 	}
 	checkCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	has, err := checker.HasPrivateEgress(checkCtx, m.GCP.Network, m.GCP.Subnetwork)
+	has, err := checker.HasPrivateEgress(checkCtx, m.GCP.Network, subnetForProvider(m))
 	if err != nil {
 		fmt.Fprint(errOut, note)
 		fmt.Fprintf(errOut, "   (could not check for a NAT gateway: %v)\n", err)
 		return nil
 	}
 	if !has {
-		return fmt.Errorf("no Cloud NAT found for this network in %s, and by default a relay-mode machine gets no public IP, so it could not reach the relay.\n"+
+		return fmt.Errorf("no NAT gateway found for this subnet in %s, and by default a relay-mode machine gets no public IP, so it could not reach the relay.\n"+
 			"Do one of:\n"+
-			"  - add Cloud NAT to the network (the machine then has no public address at all)\n"+
+			"  - add a NAT gateway to the subnet (the machine then has no public address at all)\n"+
 			"  - set 'publicIp: true' in the manifest, or pass --public-ip (outbound only: SSH listens on localhost)\n"+
 			"  - set 'publicIp: false' if the network gets out some other way", m.Region)
 	}

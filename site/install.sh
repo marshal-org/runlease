@@ -76,6 +76,8 @@ if command -v cosign >/dev/null 2>&1; then
       --certificate-oidc-issuer https://token.actions.githubusercontent.com >/dev/null 2>&1 ||
       die "the signature on checksums.txt did not verify. Nothing was installed."
     say "Signature verified with cosign."
+  else
+    say "No signature could be downloaded for this release: skipped the signature check (the checksum was still verified)."
   fi
 else
   say "cosign not found: skipped the signature check (the checksum was still verified)."

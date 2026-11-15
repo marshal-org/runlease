@@ -118,7 +118,7 @@ flowchart LR
 3. The agent connects to the relay with `role: instance, token: …` and gets `status: registered`.
 4. The relay wraps the agent WS in `yamux.Client` and the slot is ready (`/ready` returns 200).
 5. Each CLI subcommand opens a fresh WebSocket with `role: client, token: …` — relay does `session.OpenStream()` and bridges the stream to the CLI WebSocket.
-6. Token TTL = 24h (`tokenTTL`); past that the slot is removed and reconnects are rejected.
+6. A slot lives for its tier's `slotTTL` (24h when no tiers file sets one) and is dropped earlier after `idleTTL` with no agent or client. Past that, reconnects are rejected until the CLI registers the token again (`runlease connect` does). `down`, `sync`, the daemon and a failed `up` release the slot at once.
 
 ### What lives where
 
@@ -133,7 +133,7 @@ flowchart LR
 
 These must hold regardless of feature work:
 
-1. **The relay is credential-less.** It never sees SSH keys, ID tokens, or plaintext bytes from the SSH session. Even on the agent side, the relay holds yamux frames — the SSH protocol on top is end-to-end between CLI and sshd. Don't add anything that requires the relay to inspect application bytes.
+1. **The relay holds nothing that can open a session.** It never sees SSH keys or plaintext bytes from the SSH session. It does see two things: the Google ID token a CLI presents to register a slot or call `/me`, which it verifies and does not store, and the OAuth client ID and secret of the sign-in client, which it publishes to CLIs (an installed-application client; Google does not treat that secret as confidential). Don't give the relay any secret that grants access to a VM or a cloud account. Even on the agent side, the relay holds yamux frames — the SSH protocol on top is end-to-end between CLI and sshd. Don't add anything that requires the relay to inspect application bytes.
 2. **Host keys are pre-issued, not TOFU.** `runlease up` generates the instance's ed25519 host keypair locally; the public key is embedded in the userdata for sshd and the private key is base64'd into the userdata. The CLI side uses `cryptossh.FixedHostKey` against the known public key. Don't introduce `InsecureIgnoreHostKey` or trust-on-first-use anywhere.
 3. **sshd is hardened by the bootstrap.** `PasswordAuthentication no`, `AllowUsers runlease-agent`, `PermitRootLogin no`, only ed25519 host key offered. Don't relax this without explicit user request.
 4. **Sudo is locked by default.** Only `/usr/local/bin/runlease-terminate` and `/usr/local/bin/runlease-snooze` are NOPASSWD (the latter re-arms the named `runlease-selfterminate` timer for `runlease snooze`). `manifest.sudo: passwordless` is the opt-in. Don't add fields that quietly grant elevated privileges, and gate any new NOPASSWD entry to a single specific script.

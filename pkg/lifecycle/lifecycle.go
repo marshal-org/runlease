@@ -21,6 +21,11 @@ type Manager struct {
 	factory      ProviderFactory
 	log          *slog.Logger
 	pollInterval time.Duration // how often to check for spot interruption / unexpected termination
+
+	// OnCleanup, if set, runs just before an entry is dropped from the
+	// registry. The entry holds the relay token, so this is the last chance to
+	// give the relay slot back. It must not block for long.
+	OnCleanup func(e *registry.Entry)
 }
 
 func New(reg *registry.Registry, factory ProviderFactory, log *slog.Logger) *Manager {
@@ -175,6 +180,9 @@ func (m *Manager) terminate(ctx context.Context, p provider.CloudProvider, e *re
 func (m *Manager) cleanup(e *registry.Entry) {
 	if err := credential.Delete(e.CredDir, string(e.Handle.ID)); err != nil {
 		m.log.Error("deleting credential", "id", e.Handle.ID, "err", err)
+	}
+	if m.OnCleanup != nil {
+		m.OnCleanup(e)
 	}
 	if err := m.reg.Remove(e.Handle.ManifestName); err != nil {
 		m.log.Error("removing from registry", "name", e.Handle.ManifestName, "err", err)

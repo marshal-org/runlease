@@ -447,6 +447,11 @@ func TestBuild_sshdHardeningGoesFirst(t *testing.T) {
 	if !strings.Contains(out, "sshd -T") {
 		t.Error("script does not check the settings sshd will enforce")
 	}
+	// The script runs with pipefail, and grep -q exits at its first match. Fed
+	// by a pipe from echo, a correct config could then fail the check.
+	if strings.Contains(out, `echo "$SSHD_EFFECTIVE" |`) {
+		t.Error("sshd settings are piped into grep -q; under pipefail that fails at random on a correct config")
+	}
 }
 
 func TestBuild_sshdListensOnLocalhostOnlyInRelayMode(t *testing.T) {

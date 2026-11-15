@@ -289,11 +289,24 @@ func (s Store) save(all map[string]Session) error {
 	if err != nil {
 		return err
 	}
-	tmp := s.Path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0600); err != nil {
+	// A temp file of its own (created 0600), so two CLIs refreshing at the same
+	// time cannot write through, or rename away, each other's file.
+	tmp, err := os.CreateTemp(filepath.Dir(s.Path), filepath.Base(s.Path)+".*.tmp")
+	if err != nil {
 		return fmt.Errorf("writing sign-in file: %w", err)
 	}
-	return os.Rename(tmp, s.Path)
+	_, err = tmp.Write(raw)
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp.Name(), s.Path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp.Name())
+		return fmt.Errorf("writing sign-in file: %w", err)
+	}
+	return nil
 }
 
 // Get returns the session for a relay, if there is one.

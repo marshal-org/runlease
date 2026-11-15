@@ -25,6 +25,26 @@ type mockEC2 struct {
 	describeErr  error
 	imagesOut    *ec2.DescribeImagesOutput
 	imagesErr    error
+	subnetsOut   *ec2.DescribeSubnetsOutput
+	subnetsErr   error
+	// routeTables is keyed by the name of the first filter in the request:
+	// "association.subnet-id" for a subnet's own table, "vpc-id" for the main one.
+	routeTables map[string]*ec2.DescribeRouteTablesOutput
+	routesErr   error
+}
+
+func (m *mockEC2) DescribeSubnets(_ context.Context, _ *ec2.DescribeSubnetsInput, _ ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error) {
+	return m.subnetsOut, m.subnetsErr
+}
+
+func (m *mockEC2) DescribeRouteTables(_ context.Context, in *ec2.DescribeRouteTablesInput, _ ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
+	if m.routesErr != nil {
+		return nil, m.routesErr
+	}
+	if out, ok := m.routeTables[awssdk.ToString(in.Filters[0].Name)]; ok {
+		return out, nil
+	}
+	return &ec2.DescribeRouteTablesOutput{}, nil
 }
 
 func (m *mockEC2) RunInstances(_ context.Context, in *ec2.RunInstancesInput, _ ...func(*ec2.Options)) (*ec2.RunInstancesOutput, error) {

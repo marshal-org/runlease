@@ -238,7 +238,7 @@ func runWhoami(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("%w\nRun 'runlease login' to sign in", err)
 	}
 	out := cmd.OutOrStdout()
-	if outputMode == "json" {
+	if jsonOutput() {
 		return json.NewEncoder(out).Encode(a)
 	}
 	fmt.Fprintf(out, "%s on %s\n", a.Email, relayAddr)

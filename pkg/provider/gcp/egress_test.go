@@ -45,19 +45,23 @@ func TestNATCovers(t *testing.T) {
 func TestSubnetLocation(t *testing.T) {
 	p := &Provider{projectID: "mine", zone: "europe-west1-b"}
 	tests := []struct {
-		subnet                    string
+		network, subnet           string
 		project, region, wantName string
 	}{
-		{"", "mine", "europe-west1", "default"},
-		{"apps", "mine", "europe-west1", "apps"},
-		{"regions/us-east1/subnetworks/apps", "mine", "us-east1", "apps"},
-		{"projects/host/regions/us-east1/subnetworks/shared", "host", "us-east1", "shared"},
+		{"", "", "mine", "europe-west1", "default"},
+		// An auto-mode network other than "default" names its subnetworks after itself.
+		{"vpc", "", "mine", "europe-west1", "vpc"},
+		{"global/networks/vpc", "", "mine", "europe-west1", "vpc"},
+		{"", "apps", "mine", "europe-west1", "apps"},
+		{"vpc", "apps", "mine", "europe-west1", "apps"},
+		{"", "regions/us-east1/subnetworks/apps", "mine", "us-east1", "apps"},
+		{"", "projects/host/regions/us-east1/subnetworks/shared", "host", "us-east1", "shared"},
 	}
 	for _, tc := range tests {
-		project, region, name := p.subnetLocation(tc.subnet)
+		project, region, name := p.subnetLocation(tc.network, tc.subnet)
 		if project != tc.project || region != tc.region || name != tc.wantName {
-			t.Errorf("subnetLocation(%q) = %s, %s, %s; want %s, %s, %s",
-				tc.subnet, project, region, name, tc.project, tc.region, tc.wantName)
+			t.Errorf("subnetLocation(%q, %q) = %s, %s, %s; want %s, %s, %s",
+				tc.network, tc.subnet, project, region, name, tc.project, tc.region, tc.wantName)
 		}
 	}
 }

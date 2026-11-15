@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -99,6 +100,80 @@ func scanScopes(reg *registry.Registry) []cloudScope {
 	}
 	return scopes
 }
+
+// cloudsSetUp reports which clouds look signed in on this computer. A variable
+// so a test does not depend on the computer it runs on.
+var cloudsSetUp = func() (gcp, aws bool) { return hasGCPSetup(), hasAWSSetup() }
+
+// resolveScopes works out where to look for untracked machines.
+//
+// With --provider or --region given, it is that one place, and the half not
+// given is filled in: the provider from how the region is written, the region
+// from that provider's default. Otherwise it is wherever scanScopes finds. If
+// that is nowhere and detect is set, it falls back to each cloud that looks
+// signed in here, in its default region; why then says so, for the caller to
+// pass on. No scopes and no error means there is nothing to go on.
+func resolveScopes(reg *registry.Registry, prov, region string, detect bool) (scopes []cloudScope, why string, err error) {
+	cfg, _ := rlconfig.Load(defaultConfigPath())
+	if cfg == nil {
+		cfg = &rlconfig.Config{}
+	}
+	if prov != "" || region != "" {
+		if prov == "" {
+			switch {
+			case gcpLocation.MatchString(region):
+				prov = "gcp"
+			case awsLocation.MatchString(region):
+				prov = "aws"
+			default:
+				return nil, "", fmt.Errorf("%q is not a region of either cloud: %s, %s", region, regionExample("aws"), regionExample("gcp"))
+			}
+		}
+		if prov != "gcp" && prov != "aws" {
+			return nil, "", fmt.Errorf("unknown provider %q — supported: aws, gcp", prov)
+		}
+		if region == "" {
+			region, _ = defaultRegionFor(prov, cfg)
+		} else if !regionFits(prov, region) {
+			return nil, "", fmt.Errorf("%q does not fit %s: %s", region, prov, regionExample(prov))
+		}
+		return []cloudScope{{provider: provider.ProviderType(prov), region: region}}, "", nil
+	}
+
+	if scopes = scanScopes(reg); len(scopes) > 0 || !detect {
+		return scopes, "", nil
+	}
+	gcp, aws := cloudsSetUp()
+	// A saved provider with no saved region is as good as a sign-in.
+	gcp = gcp || cfg.Defaults.Provider == "gcp"
+	aws = aws || cfg.Defaults.Provider == "aws"
+	for _, c := range []struct {
+		on   bool
+		prov string
+	}{{gcp, "gcp"}, {aws, "aws"}} {
+		if c.on {
+			r, _ := defaultRegionFor(c.prov, cfg)
+			scopes = append(scopes, cloudScope{provider: provider.ProviderType(c.prov), region: r})
+		}
+	}
+	if len(scopes) == 0 {
+		return nil, "", nil
+	}
+	return scopes, "this computer tracks no machines and has no default provider and region, so this is every cloud signed in here, in its default place", nil
+}
+
+// scopeNames is the scopes as text, for a message.
+func scopeNames(scopes []cloudScope) []string {
+	names := make([]string, 0, len(scopes))
+	for _, s := range scopes {
+		names = append(names, s.String())
+	}
+	return names
+}
+
+// errNowhereToLook is the error for a scan with nothing to go on. It names the
+// flags, because they are the way out.
+var errNowhereToLook = errors.New("nowhere to look: this computer tracks no machines, has no default provider and region, and no cloud sign-in was found. Say where with --provider gcp|aws and --region REGION, or run 'runlease configure' first")
 
 // findUntracked lists runlease instances in each scope and returns those the
 // registry does not hold, with why each is worth mentioning. Scopes that

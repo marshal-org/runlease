@@ -289,3 +289,122 @@ func TestClassify_onlyStoppedPastLeaseIsRemovable(t *testing.T) {
 		}
 	}
 }
+
+// setUp says which clouds look signed in, and what region the AWS setup names.
+func setUp(t *testing.T, gcp, aws bool, awsRegion string) {
+	t.Helper()
+	origClouds, origRegion := cloudsSetUp, configuredAWSRegion
+	t.Cleanup(func() { cloudsSetUp, configuredAWSRegion = origClouds, origRegion })
+	cloudsSetUp = func() (bool, bool) { return gcp, aws }
+	configuredAWSRegion = func(context.Context) string { return awsRegion }
+}
+
+func TestResolveScopes(t *testing.T) {
+	names := func(s []cloudScope) string { return strings.Join(scopeNames(s), ", ") }
+	tests := []struct {
+		name         string
+		prov, region string
+		gcp, aws     bool
+		tracked      bool
+		want         string
+		wantWhy      bool
+		wantErr      string
+	}{
+		{name: "nothing to go on", want: ""},
+		{name: "falls back to the clouds signed in here", gcp: true, aws: true, want: "gcp (default project), aws eu-north-1", wantWhy: true},
+		{name: "falls back to the one cloud signed in", aws: true, want: "aws eu-north-1", wantWhy: true},
+		{name: "a tracked machine says where, so no fallback", gcp: true, aws: true, tracked: true, want: "gcp project proj"},
+		{name: "flags win over everything", prov: "aws", region: "us-west-2", gcp: true, tracked: true, want: "aws us-west-2"},
+		{name: "provider alone takes its default region", prov: "aws", want: "aws eu-north-1"},
+		{name: "region alone names its cloud", region: "us-west-2", want: "aws us-west-2"},
+		{name: "a zone alone names Google Cloud", region: "europe-west1-b", want: "gcp (default project)"},
+		{name: "a region of the other cloud", prov: "aws", region: "us-central1-a", wantErr: "does not fit aws"},
+		{name: "not a region at all", region: "mars", wantErr: "not a region of either cloud"},
+		{name: "unknown provider", prov: "azure", wantErr: "unknown provider"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := untrackedHarness(t, &cloudFake{})
+			setUp(t, tc.gcp, tc.aws, "eu-north-1")
+			if tc.tracked {
+				if err := reg.Add(trackedEntry(t, "mine", "rl-mine-eeeeee")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			scopes, why, err := resolveScopes(reg, tc.prov, tc.region, true)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := names(scopes); got != tc.want || (why != "") != tc.wantWhy {
+				t.Errorf("scopes = %q (why %q), want %q, a reason: %v", got, why, tc.want, tc.wantWhy)
+			}
+		})
+	}
+}
+
+// Without detect (a plain `list`), nowhere known means nothing is asked.
+func TestResolveScopes_noFallbackUnlessAsked(t *testing.T) {
+	reg := untrackedHarness(t, &cloudFake{})
+	setUp(t, true, true, "eu-north-1")
+	if scopes, _, err := resolveScopes(reg, "", "", false); err != nil || len(scopes) != 0 {
+		t.Errorf("scopes = %v, err = %v; want none", scopes, err)
+	}
+}
+
+// The bug: nothing tracked and no default saved used to end in "nowhere to
+// look", with a leaked machine sitting in the cloud this computer is signed
+// in to.
+func TestDownLeaked_fallsBackToTheCloudSignedIn(t *testing.T) {
+	cloud := &cloudFake{managed: []provider.ManagedInstance{managed("rl-leak-bbbbbb", provider.StatusStopped, -time.Hour)}}
+	reg := untrackedHarness(t, cloud)
+	setUp(t, true, false, "")
+	out, err := runLeaked(t, reg)
+	if err != nil {
+		t.Fatalf("runDownLeaked: %v\n%s", err, out)
+	}
+	if len(cloud.terminated) != 1 || cloud.terminated[0] != "rl-leak-bbbbbb" {
+		t.Errorf("deleted %v, want the leaked machine", cloud.terminated)
+	}
+	if !strings.Contains(out, "Looking in gcp (default project)") || !strings.Contains(out, "--provider and --region") {
+		t.Errorf("output does not say where it looked:\n%s", out)
+	}
+}
+
+func TestDownLeaked_flagsSayWhere(t *testing.T) {
+	cloud := &cloudFake{}
+	reg := untrackedHarness(t, cloud)
+	setUp(t, false, false, "")
+	var asked []string
+	newProvider = func(_ context.Context, pt provider.ProviderType, region, _ string) (provider.CloudProvider, error) {
+		asked = append(asked, string(pt)+" "+region)
+		return cloud, nil
+	}
+	downProvider, downRegion = "aws", "eu-north-1"
+	t.Cleanup(func() { downProvider, downRegion = "", "" })
+	out, err := runLeaked(t, reg)
+	if err != nil || !strings.Contains(out, "Nothing leaked") {
+		t.Fatalf("err = %v\n%s", err, out)
+	}
+	if len(asked) != 1 || asked[0] != "aws eu-north-1" {
+		t.Errorf("asked %v, want aws eu-north-1", asked)
+	}
+	if strings.Contains(out, "Looking in") {
+		t.Errorf("a place the user chose needs no announcement:\n%s", out)
+	}
+}
+
+// Still nowhere to look: the error names the flags that would say where.
+func TestDownLeaked_nowhereToLookNamesTheFlags(t *testing.T) {
+	reg := untrackedHarness(t, &cloudFake{})
+	setUp(t, false, false, "")
+	_, err := runLeaked(t, reg)
+	if err == nil || !strings.Contains(err.Error(), "--provider") || !strings.Contains(err.Error(), "--region") {
+		t.Errorf("err = %v, want it to name --provider and --region", err)
+	}
+}

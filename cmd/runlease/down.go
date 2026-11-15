@@ -15,13 +15,17 @@ import (
 )
 
 var (
-	downYes    bool
-	downLeaked bool
+	downYes      bool
+	downLeaked   bool
+	downProvider string
+	downRegion   string
 )
 
 func init() {
 	downCmd.Flags().BoolVarP(&downYes, "yes", "y", false, "skip confirmation prompt")
 	downCmd.Flags().BoolVar(&downLeaked, "leaked", false, "delete runlease machines found in the cloud that this computer does not track, are stopped, and are past their lease (their disks still bill). Never deletes a running machine")
+	downCmd.Flags().StringVarP(&downProvider, "provider", "p", "", "with --leaked: the cloud to look in, gcp or aws (default: where this computer has launched before, its saved default, or every cloud signed in here)")
+	downCmd.Flags().StringVarP(&downRegion, "region", "r", "", "with --leaked: the AWS region to look in, or any zone of the Google Cloud project (default: that cloud's default)")
 	rootCmd.AddCommand(downCmd)
 }
 
@@ -42,6 +46,9 @@ func runDown(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("--leaked takes no instance name: it finds the machines itself")
 		}
 		return runDownLeaked(cmd, reg)
+	}
+	if downProvider != "" || downRegion != "" {
+		return fmt.Errorf("--provider and --region go with --leaked: a tracked machine is found by its name")
 	}
 
 	nameOrID, err := resolveInstance(cmd, reg, args, "down")
@@ -100,16 +107,23 @@ func runDown(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runDownLeaked deletes the runlease machines that `list` reports as leaked or
-// expired: found in the cloud by label, not in the registry, and either
-// stopped with a disk still billing or running past their lease. A machine
-// that is running within its lease is never touched: it is someone's.
+// runDownLeaked deletes the runlease machines that `list` reports as leaked:
+// found in the cloud by label, not in the registry, stopped with a disk still
+// billing, and past their lease. A running machine is never touched: it may
+// be someone's.
 func runDownLeaked(cmd *cobra.Command, reg *registry.Registry) error {
 	out := cmd.OutOrStdout()
 	ctx := cmd.Context()
-	scopes := scanScopes(reg)
+	scopes, why, err := resolveScopes(reg, downProvider, downRegion, true)
+	if err != nil {
+		return err
+	}
 	if len(scopes) == 0 {
-		return fmt.Errorf("nowhere to look: this computer tracks no machines and has no default provider and region. Run 'runlease configure' first")
+		return errNowhereToLook
+	}
+	if why != "" {
+		// Nobody chose these places, so say which they are.
+		fmt.Fprintf(cmd.ErrOrStderr(), "Looking in %s (%s). Choose with --provider and --region.\n", strings.Join(scopeNames(scopes), " and "), why)
 	}
 	found, notes := findUntracked(ctx, reg, scopes)
 	var doomed []untrackedInstance

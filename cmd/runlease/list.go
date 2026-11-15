@@ -19,12 +19,16 @@ var (
 	labelFilters  []string
 	listLocal     bool
 	listUntracked bool
+	listProvider  string
+	listRegion    string
 )
 
 func init() {
 	listCmd.Flags().StringArrayVarP(&labelFilters, "label", "l", nil, "filter by label key=value (repeatable, ANDed)")
 	listCmd.Flags().BoolVar(&listLocal, "local", false, "show only what this computer tracks; do not ask the cloud for runlease machines it has lost track of")
 	listCmd.Flags().BoolVar(&listUntracked, "untracked", false, "with --output json: also list runlease machines found in the cloud that this computer does not track (\"tracked\": false)")
+	listCmd.Flags().StringVarP(&listProvider, "provider", "p", "", "the cloud to ask for untracked machines, gcp or aws (default: where this computer has launched before and its saved default)")
+	listCmd.Flags().StringVarP(&listRegion, "region", "r", "", "the AWS region to ask, or any zone of the Google Cloud project (default: that cloud's default)")
 	rootCmd.AddCommand(listCmd)
 }
 
@@ -55,9 +59,22 @@ func runList(cmd *cobra.Command, _ []string) error {
 		scanDone  = make(chan struct{})
 	)
 	if !listLocal && (!jsonOutput() || listUntracked) {
+		// A plain `list` asks only the places it already knows. Asked for the
+		// untracked ones by name, with nowhere known, it tries every cloud
+		// signed in here, as `down --leaked` does.
+		scopes, why, err := resolveScopes(reg, listProvider, listRegion, listUntracked)
+		if err != nil {
+			return err
+		}
+		if listUntracked && len(scopes) == 0 {
+			return errNowhereToLook
+		}
+		if why != "" {
+			fmt.Fprintf(cmd.ErrOrStderr(), "Looking in %s (%s). Choose with --provider and --region.\n", strings.Join(scopeNames(scopes), " and "), why)
+		}
 		go func() {
 			defer close(scanDone)
-			untracked, scanNotes = findUntracked(cmd.Context(), reg, scanScopes(reg))
+			untracked, scanNotes = findUntracked(cmd.Context(), reg, scopes)
 		}()
 	} else {
 		close(scanDone)

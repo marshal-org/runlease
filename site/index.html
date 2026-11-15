@@ -187,6 +187,24 @@
   [data-step="5"] #b-vm { stroke: var(--lease); stroke-dasharray: 4 4; }
   [data-step="5"] #h5 { fill: var(--lease); }
 
+  /* built by Marshal: a strip under the hero, and a fuller section near the end */
+  section.by-strip { background: var(--ink); color: var(--paper); padding-block: 0; }
+  .by-strip .wrap { display: flex; align-items: center; justify-content: space-between; gap: 10px 28px; flex-wrap: wrap; padding-block: 16px; }
+  .by-strip p { font-size: .98rem; min-width: 0; }
+  .by-strip b { font-family: var(--display); font-size: 1.08rem; letter-spacing: -.01em; }
+  .by-strip a { color: inherit; font-family: var(--mono); font-size: .8rem; font-weight: 600; border: 1px solid currentColor; padding: 8px 14px; text-decoration: none; white-space: nowrap; }
+  .by-strip a:hover, .by-strip a:focus-visible { background: var(--paper); color: var(--ink); }
+  .by { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 44px; align-items: start; }
+  .by h2 { font-size: clamp(1.9rem, 3.6vw, 2.8rem); line-height: 1.05; font-weight: 700; margin-top: 12px; }
+  .by p { color: var(--ink-2); margin-top: 16px; font-size: 1.05rem; max-width: 34em; }
+  .by ul { list-style: none; margin: 0; padding: 0; border-top: 2px solid var(--ink); }
+  .by li { padding: 16px 0; border-bottom: 1px solid var(--rule); color: var(--ink-2); font-size: .97rem; }
+  .by li b { display: block; color: var(--ink); font-weight: 600; margin-bottom: 2px; }
+
+  /* the thirty-second clip */
+  .clip-frame { border: 1px solid var(--rule); background: var(--sheet); overflow-x: auto; }
+  .clip-frame img { display: block; width: 100%; min-width: 760px; height: auto; }
+
   /* use cases */
   .uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 2px solid var(--ink); border-left: 1px solid var(--rule); }
   .usecase { display: flex; flex-direction: column; min-width: 0; padding: 22px 22px 0; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); background: var(--sheet); }
@@ -320,6 +338,7 @@
   @media (max-width: 560px) {
     body { font-size: 16px; }
     .claims, .cc, .posture, .uses { grid-template-columns: minmax(0, 1fr); }
+    .by { grid-template-columns: minmax(0, 1fr); gap: 28px; }
     .plan + .plan { border-left: 0; border-top: 1px dashed var(--rule); }
     .claim { border-right: 0; margin-right: 0; border-top: 1px solid var(--rule); }
     .claim:first-child { border-top: 0; }
@@ -338,6 +357,7 @@
     <a class="mark" href="#top"><img src="logo.svg" alt="" width="28" height="28">runlease</a>
     <nav aria-label="Main">
       <ul>
+        <li><a href="#clip">Demo</a></li>
         <li><a href="#uses">Use cases</a></li>
         <li><a href="security.html">Security</a></li>
         <li><a href="how-it-works.html">How it works</a></li>
@@ -396,6 +416,24 @@
     </div>
   </div>
 </div>
+
+<section class="by-strip band" aria-label="Built by Marshal">
+  <div class="wrap">
+    <p>Built by <b>Marshal</b>: AI coding agents at full speed, with full receipts.</p>
+    <a href="https://marshal.codes">marshal.codes &rarr;</a>
+  </div>
+</section>
+
+<section class="band" id="clip" aria-labelledby="clip-h">
+  <div class="wrap">
+    <div class="sec-hd">
+      <p class="eyebrow">Thirty seconds</p>
+      <h2 id="clip-h">Watch a machine get leased, used and gone.</h2>
+      <p>The terminal is on the left. On the right is what each command builds: where the keys are made, what the relay holds, where the machine runs, and what is left when the lease ends.</p>
+    </div>
+    <div class="clip-frame"><img src="demo.svg" width="1200" height="600" alt="A terminal runs runlease up, exec, snooze and list. Beside it a diagram builds step by step: keys are made on your computer, a slot is reserved at the relay, a spot machine starts in your cloud account and dials out, SSH runs end to end through the relay, the lease is extended, and the machine deletes itself."></div>
+  </div>
+</section>
 
 <section class="alt band" aria-labelledby="why-h">
   <div class="wrap">
@@ -830,6 +868,27 @@
 </section>
 
 </main>
+
+<section class="band" id="marshal" aria-labelledby="by-h">
+  <div class="wrap">
+    <div class="by">
+      <div>
+        <p class="eyebrow">Who makes this</p>
+        <h2 id="by-h">Runlease is built by Marshal.</h2>
+        <p>Marshal runs AI coding agents in isolated pods inside your own VPC, with credential isolation, audited egress and live tool policies. Full speed, with full receipts.</p>
+        <p>Runlease is the tool we built to give agents and tests a real machine for an hour, and we use it ourselves. It is open source and stands alone: you do not need Marshal to use it.</p>
+        <div class="links">
+          <a class="btn" href="https://marshal.codes">See Marshal</a>
+        </div>
+      </div>
+      <ul>
+        <li><b>Runlease gives an agent a machine.</b>A leased spot VM in your cloud, reached over SSH, gone when the lease ends.</li>
+        <li><b>Marshal runs the agents.</b>Isolated workspaces, the credentials they may use, and a record of everything they did.</li>
+        <li><b>The same idea in both.</b>Your infrastructure, your keys, and nothing left running that you did not ask for.</li>
+      </ul>
+    </div>
+  </div>
+</section>
 
 <footer class="band">
   <div class="wrap">

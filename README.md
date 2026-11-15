@@ -14,6 +14,15 @@
   <a href="https://pkg.go.dev/github.com/marshal-org/runlease"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/marshal-org/runlease.svg"></a>
 </p>
 
+<p align="center">
+  Built by <a href="https://marshal.codes"><strong>Marshal</strong></a>: AI coding agents at full speed, with full receipts.<br>
+  Marshal runs coding agents in isolated pods inside your own VPC. Runlease is the tool we built to give them, and our tests, a real machine for an hour.
+</p>
+
+<p align="center">
+  <img src="site/demo.svg" width="100%" alt="A terminal runs runlease up, exec, snooze and list. Beside it a diagram builds step by step: keys are made on your computer, a slot is reserved at the relay, a spot machine starts in your cloud account and dials out, SSH runs end to end through the relay, the lease is extended, and the machine deletes itself.">
+</p>
+
 ```bash
 runlease up --provider gcp --size compute.large --ttl 2h   # a spot VM in your account
 runlease exec <name> -- make test                          # run something on it
@@ -225,5 +234,11 @@ Pre-1.0. The CLI and the manifest format can still change between minor versions
 
 [Apache License 2.0](LICENSE).
 
-Runlease is built and maintained by the team behind [Marshal](https://marshal.codes), the
-platform for running AI agent work with policy, credentials and audit built in.
+## Built by Marshal
+
+Runlease is built and maintained by [Marshal](https://marshal.codes). Marshal runs AI coding
+agents in isolated pods inside your own VPC, with credential isolation, audited egress and live
+tool policies.
+
+Runlease stands alone: you do not need Marshal to use it. We built it to give agents and tests a
+real machine for an hour, and we use it ourselves.

@@ -27,7 +27,6 @@ deploy/relay/         Terraform module for a relay VM (gcp/) + tiers.example.yam
 site/                 Project website, published by .github/workflows/pages.yml
 docs/                 Reference + integration docs (Mermaid only — no ASCII diagrams)
                       - manifest.md            full schema reference (CLI: `runlease manifest schema`)
-                      - private-ar-k3s.md      kubelet CredentialProvider pattern for private GCP AR pulls
                       - k3s-bastion-integration.md  proposed `k3s:` manifest convenience layer
 examples/manifests/   Sample manifest YAMLs
 ```

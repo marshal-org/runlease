@@ -207,7 +207,6 @@ concrete type per cloud. Run `runlease catalog` to see the mapping.
 | [The public relay](docs/relay-service.md) | Sign in, free tier limits, what it logs |
 | [Self-hosting the relay](docs/self-hosting-relay.md) | Deploy, authenticate, set tiers, operate |
 | [CI and release pipeline](docs/ci.md) | How changes are tested and how releases are built and signed |
-| [Private registry pulls on k3s](docs/private-ar-k3s.md) | A worked recipe |
 
 ## Contributing
 

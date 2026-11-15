@@ -15,7 +15,7 @@ Everything below follows from it.
 
 | | Untrusted lane | Trusted lane |
 |---|---|---|
-| Workflows | `ci.yml`, `codeql.yml` | `release-please.yml`, `e2e.yml`, `scorecard.yml` |
+| Workflows | `ci.yml`, `codeql.yml` | `release-please.yml`, `e2e.yml`, `scorecard.yml`, `pages.yml` |
 | Triggered by | Any pull request, including from a fork | A push to `main`, a schedule, or a maintainer by hand |
 | Code it runs | Whatever the pull request contains | Code a maintainer has reviewed and merged |
 | Token | Read-only | Write, only where a job needs it |
@@ -115,6 +115,20 @@ while the repository is private.
 
 How to check a download: [verifying a release](security.md#verifying-a-release).
 
+## The website
+
+`pages.yml` publishes the `site/` directory to GitHub Pages when a change to it reaches `main`.
+
+- It needs no secret. Pages deployment uses the workflow's own OIDC identity.
+- It skips itself until Pages is switched on for the repository, so merging the workflow
+  publishes nothing by accident.
+- `scripts/check-site.sh` runs first, and on every pull request: every page is complete, every
+  local link resolves, and no page loads a script from another site.
+
+Switching it on is a repository setting: *Settings, Pages, Source: GitHub Actions*, then the
+custom domain. With the domain's DNS at another provider, the apex needs A records for GitHub
+Pages' four addresses and `www` needs a CNAME to `marshal-org.github.io`.
+
 ## Supply chain upkeep
 
 - **Dependabot** opens grouped weekly updates for Go modules and for GitHub Actions.
@@ -136,6 +150,8 @@ in the GitHub UI:
 | Secret scanning and push protection | On |
 | Dependency graph, Dependabot alerts | On |
 | Environment `e2e` | Required reviewer, restricted to `main` |
+| Environment `github-pages` | Restricted to `main` |
+| Pages | Source: GitHub Actions; custom domain; enforce HTTPS |
 | Actions: require actions to be pinned to a full-length commit SHA | On |
 
 ## Isolation from the rest of the organisation

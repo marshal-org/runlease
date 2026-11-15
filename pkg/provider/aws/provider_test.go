@@ -25,6 +25,30 @@ type mockEC2 struct {
 	describeErr  error
 	imagesOut    *ec2.DescribeImagesOutput
 	imagesErr    error
+	subnetsOut   *ec2.DescribeSubnetsOutput
+	subnetsErr   error
+	// routeTables is keyed by the name of the first filter in the request:
+	// "association.subnet-id" for a subnet's own table, "vpc-id" for the main one.
+	routeTables map[string]*ec2.DescribeRouteTablesOutput
+	routesErr   error
+}
+
+func (m *mockEC2) GetConsoleOutput(_ context.Context, _ *ec2.GetConsoleOutputInput, _ ...func(*ec2.Options)) (*ec2.GetConsoleOutputOutput, error) {
+	return &ec2.GetConsoleOutputOutput{}, nil
+}
+
+func (m *mockEC2) DescribeSubnets(_ context.Context, _ *ec2.DescribeSubnetsInput, _ ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error) {
+	return m.subnetsOut, m.subnetsErr
+}
+
+func (m *mockEC2) DescribeRouteTables(_ context.Context, in *ec2.DescribeRouteTablesInput, _ ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
+	if m.routesErr != nil {
+		return nil, m.routesErr
+	}
+	if out, ok := m.routeTables[awssdk.ToString(in.Filters[0].Name)]; ok {
+		return out, nil
+	}
+	return &ec2.DescribeRouteTablesOutput{}, nil
 }
 
 func (m *mockEC2) RunInstances(_ context.Context, in *ec2.RunInstancesInput, _ ...func(*ec2.Options)) (*ec2.RunInstancesOutput, error) {
@@ -275,5 +299,39 @@ func TestRequestSpot_requiresIMDSv2(t *testing.T) {
 	mo := mock.lastRunInput.MetadataOptions
 	if mo == nil || mo.HttpTokens != types.HttpTokensStateRequired {
 		t.Fatalf("instance must require IMDSv2 session tokens, got %+v", mo)
+	}
+}
+
+// The public address is set on the request, so it does not depend on the
+// subnet's auto-assign setting.
+func TestRequestSpot_publicIPIsExplicit(t *testing.T) {
+	for _, want := range []bool{false, true} {
+		mock := &mockEC2{runOut: runOut("i-abc")}
+		_, err := newProvider(mock).RequestSpot(context.Background(), provider.InstanceSpec{
+			ManifestName:     "ci-runner",
+			InstanceType:     "c5.xlarge",
+			ImageID:          "ami-123",
+			SubnetID:         "subnet-1",
+			SecurityGroupIDs: []string{"sg-1"},
+			PublicIP:         want,
+		})
+		if err != nil {
+			t.Fatalf("RequestSpot: %v", err)
+		}
+		in := mock.lastRunInput
+		if len(in.NetworkInterfaces) != 1 {
+			t.Fatalf("NetworkInterfaces = %d, want 1", len(in.NetworkInterfaces))
+		}
+		nic := in.NetworkInterfaces[0]
+		if got := awssdk.ToBool(nic.AssociatePublicIpAddress); got != want {
+			t.Errorf("AssociatePublicIpAddress = %v, want %v", got, want)
+		}
+		if awssdk.ToString(nic.SubnetId) != "subnet-1" || len(nic.Groups) != 1 || nic.Groups[0] != "sg-1" {
+			t.Errorf("subnet and security groups must move to the network interface, got %q %v", awssdk.ToString(nic.SubnetId), nic.Groups)
+		}
+		// EC2 rejects a request that names them in both places.
+		if in.SubnetId != nil || len(in.SecurityGroupIds) != 0 {
+			t.Error("subnet / security groups must not also be set at the top level")
+		}
 	}
 }

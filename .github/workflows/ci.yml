@@ -66,6 +66,7 @@ jobs:
         with:
           persist-credentials: false
       - run: scripts/check-workflows.sh
+      - run: scripts/check-site.sh
 
   lint:
     name: Static analysis

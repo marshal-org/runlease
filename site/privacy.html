@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- PRE-LAUNCH: remove this line when the repository goes public. -->
+<meta name="robots" content="noindex">
+<title>Runlease privacy notice</title>
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<link rel="stylesheet" href="page.css">
+</head>
+<body>
+<div class="wrap">
+<header><a class="mark" href="./"><img src="logo.svg" alt="" width="26" height="26">runlease</a></header>
+<main class="plain">
+<div class="draft"><b>Draft</b>This page is published for review and is not final. It has not had legal review.</div>
+<h1>Privacy notice</h1>
+<p class="meta">Draft for review. Applies to the public relay at connect.runlease.online and to this website.</p>
+
+<p>Runlease is open source software that you run yourself. This notice covers the two things we operate: the public relay and this website. It does not cover relays that other people run.</p>
+
+<h2>The short version</h2>
+<p>To use the public relay you sign in with a Google account. We receive your email address and nothing else from Google. The relay carries your sessions as encrypted traffic that it cannot read. We keep connection logs for a limited time to run the service and to deal with abuse.</p>
+
+<h2>What we collect</h2>
+<div class="scroll"><table>
+<tr><th>What</th><th>Why</th><th>Kept for</th></tr>
+<tr><td>Your Google account email address, when you sign in with <code>runlease login</code></td><td>To apply your tier's limits and to contact you about your use of the service</td><td>While you use the service, and up to 90 days in logs</td></tr>
+<tr><td>When you open and close a relay slot, and the first characters of its token</td><td>To enforce limits and investigate abuse</td><td>Up to 90 days</td></tr>
+<tr><td>Network addresses that connect to the relay, and the amount of data carried</td><td>To operate and protect the service</td><td>Up to 90 days</td></tr>
+<tr><td>Standard web server logs for this website</td><td>To operate the site</td><td>As kept by the hosting provider</td></tr>
+</table></div>
+
+<h2>What we do not collect</h2>
+<ul>
+<li>Your SSH keys or cloud credentials. They never leave your machine.</li>
+<li>The contents of your sessions: commands, files and forwarded connections. They pass through the relay encrypted end to end between your machine and your VM.</li>
+<li>Anything from your Google account other than the email address. Sign-in requests the <code>openid</code> and <code>email</code> scopes only.</li>
+<li>Usage data from the command-line tool. It has no telemetry.</li>
+</ul>
+
+<h2>Who we share it with</h2>
+<p>We do not sell personal data. The relay runs on Google Cloud and this site is served by GitHub Pages; both process data on our behalf as hosting providers. We disclose data when the law requires it.</p>
+
+<h2>Your choices</h2>
+<p><code>runlease logout</code> removes the saved sign-in from your machine. You can remove the app's access in your Google account's security settings. To ask for the data we hold about your email address, or to have it deleted, write to <code>privacy@marshal.codes</code>.</p>
+<p>If you would rather we see nothing at all, run your own relay. It is the same software.</p>
+
+<h2>Changes</h2>
+<p>We will update this page when the practice changes, and note the date at the top.</p>
+</main>
+<footer>
+  <a href="./">Home</a>
+  <a href="privacy.html">Privacy</a>
+  <a href="terms.html">Terms</a>
+  <a href="https://github.com/marshal-org/runlease">GitHub</a>
+</footer>
+</div>
+</body>
+</html>

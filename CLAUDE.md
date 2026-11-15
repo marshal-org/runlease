@@ -22,6 +22,9 @@ pkg/config/           ~/.runlease/config.yaml — user defaults
 pkg/provider/         Cloud provider interface + aws/, gcp/, azure/ implementations
 pkg/instanceclass/    compute.small → e2-standard-2 etc. catalog resolver
 pkg/lifecycle/        Reclaim daemon (TTL expiry sweeper)
+pkg/signin/           `runlease login`: Google device sign-in flow + saved session (~/.runlease/auth.json)
+deploy/relay/         Terraform module for a relay VM (gcp/) + tiers.example.yaml
+site/                 Project website, published by .github/workflows/pages.yml
 docs/                 Reference + integration docs (Mermaid only — no ASCII diagrams)
                       - manifest.md            full schema reference (CLI: `runlease manifest schema`)
                       - private-ar-k3s.md      kubelet CredentialProvider pattern for private GCP AR pulls
@@ -115,7 +118,21 @@ flowchart LR
 3. The agent connects to the relay with `role: instance, token: …` and gets `status: registered`.
 4. The relay wraps the agent WS in `yamux.Client` and the slot is ready (`/ready` returns 200).
 5. Each CLI subcommand opens a fresh WebSocket with `role: client, token: …` — relay does `session.OpenStream()` and bridges the stream to the CLI WebSocket.
-6. Token TTL = 24h (`tokenTTL`); past that the slot is removed and reconnects are rejected.
+6. A slot lives for its tier's `slotTTL` (24h when no tiers file sets one) and is dropped earlier after `idleTTL` with no agent or client. Past that, reconnects are rejected until the CLI registers the token again (`runlease connect` does). `down`, `sync`, the daemon and a failed `up` release the slot at once.
+
+### Instance lifecycle
+
+The registry is the only local record of a machine, so these rules keep it from losing one:
+
+1. `up` refuses a name that is in the registry and whose machine still exists (`freeName`). If the machine is gone, the stale entry is cleared first.
+2. The entry is written (`State: pending`) as soon as the create request is accepted, before the wait for running. A create error that comes with a handle still gets recorded. A machine that cannot be recorded is deleted (`abandonLaunch`).
+3. Every registry write goes through `Registry.mutate`: file lock, re-read, one change, atomic rename. Never write back a map loaded earlier. Remove by instance ID (`RemoveID`), not by name.
+4. Gone means the cloud says not found (or AWS `terminated`). Powered off (`StatusStopped`, including GCP `TERMINATED`) still exists and is billed: `sync` and the daemon delete it before dropping the entry.
+5. The lease is a deadline on the VM's disk (`/var/lib/runlease/lease-deadline`), re-armed at each boot by `runlease-lease.service`. The boot script runs once (`/var/lib/runlease/booted`). `selfTermination` defaults to true.
+7. Waiting for the agent is bounded and explains itself (`waitForAgent`): the slot is gone (relay 404), the boot script failed (it writes `RUNLEASE_BOOT_FAILED stage=… exit=…` to the serial console, read through `provider.ConsoleReader`), or the time is up. A setup step that fails ends the log with `__RUNLEASE_SETUP_FAILED__`.
+8. Commands reach a machine through `openRelay`, which registers the slot again when the relay answers "unauthorized". Don't call `dialRelay` directly from a command.
+9. `up` compares the relay's agent with the digest the VM will check (`checkRelayAgent`) before it reserves a slot or creates anything.
+6. The daemon rescans the registry every poll, retries a failed terminate, and reads the registry again before acting on a deadline.
 
 ### What lives where
 
@@ -130,7 +147,7 @@ flowchart LR
 
 These must hold regardless of feature work:
 
-1. **The relay is credential-less.** It never sees SSH keys, ID tokens, or plaintext bytes from the SSH session. Even on the agent side, the relay holds yamux frames — the SSH protocol on top is end-to-end between CLI and sshd. Don't add anything that requires the relay to inspect application bytes.
+1. **The relay holds nothing that can open a session.** It never sees SSH keys or plaintext bytes from the SSH session. It does see two things: the Google ID token a CLI presents to register a slot or call `/me`, which it verifies and does not store, and the OAuth client ID and secret of the sign-in client, which it publishes to CLIs (an installed-application client; Google does not treat that secret as confidential). Don't give the relay any secret that grants access to a VM or a cloud account. Even on the agent side, the relay holds yamux frames — the SSH protocol on top is end-to-end between CLI and sshd. Don't add anything that requires the relay to inspect application bytes.
 2. **Host keys are pre-issued, not TOFU.** `runlease up` generates the instance's ed25519 host keypair locally; the public key is embedded in the userdata for sshd and the private key is base64'd into the userdata. The CLI side uses `cryptossh.FixedHostKey` against the known public key. Don't introduce `InsecureIgnoreHostKey` or trust-on-first-use anywhere.
 3. **sshd is hardened by the bootstrap.** `PasswordAuthentication no`, `AllowUsers runlease-agent`, `PermitRootLogin no`, only ed25519 host key offered. Don't relax this without explicit user request.
 4. **Sudo is locked by default.** Only `/usr/local/bin/runlease-terminate` and `/usr/local/bin/runlease-snooze` are NOPASSWD (the latter re-arms the named `runlease-selfterminate` timer for `runlease snooze`). `manifest.sudo: passwordless` is the opt-in. Don't add fields that quietly grant elevated privileges, and gate any new NOPASSWD entry to a single specific script.

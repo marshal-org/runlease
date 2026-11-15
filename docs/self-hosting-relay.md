@@ -80,7 +80,10 @@ through, and idle timeouts on the proxy should be long: sessions are held open.
 | `--audience` | The relay's public URL. Sets the audience the identity token must carry. |
 | `--allowed-emails` | Comma-separated accounts that may open slots. |
 | `--allowed-domains` | Comma-separated email domains that may open slots. |
-| `--max-slots` | Refuse new slots beyond this many. Default 5000, `0` for no cap. |
+| `--google-client-id` | OAuth client IDs whose ID tokens are accepted. `runlease login` signs people in with the first. |
+| `--google-client-secret` | Secret of that client, handed to CLIs for the sign-in flow. Also read from `RUNLEASE_GOOGLE_CLIENT_SECRET`. |
+| `--tiers-file` | YAML file of tiers and per-identity limits. |
+| `--max-slots` | Refuse new slots beyond this many, across everyone. Default 5000, `0` for no cap. |
 | `--insecure-no-auth` | Run with no authentication. The relay will not start open without it. |
 
 ## Who may open a slot
@@ -93,6 +96,57 @@ gets one from application default credentials or from `gcloud`.
 - Only verified email addresses are matched.
 - Agents and CLI clients do not present an identity. They present the slot token, which only
   works for a slot that an allowed identity opened.
+
+## Sign-in with `runlease login`
+
+A relay with only `--audience` expects people to have `gcloud` or a service account. To let
+anyone with a Google account sign in from the CLI, give the relay an OAuth client:
+
+1. In the Google Cloud console, configure the OAuth consent screen (scopes `openid` and `email`)
+   and create an OAuth client of type **TVs and Limited Input devices**.
+2. Start the relay with `--google-client-id` and `--google-client-secret`.
+
+The relay publishes both at `/.well-known/runlease-relay`, and `runlease login` reads them from
+there. For this client type the secret is not confidential; Google documents it that way for
+installed applications.
+
+With a client ID and no allow-list, any verified Google account may sign in. Use tiers to decide
+what each of them gets.
+
+## Tiers and limits
+
+A tiers file gives each identity a set of limits:
+
+```yaml
+default: free
+tiers:
+  free:
+    maxSlots: 2      # machines one person may have connected at once
+    slotTTL: 8h      # a slot lives this long at most
+    idleTTL: 15m     # a slot whose machine has been gone this long is given back
+  team:
+    maxSlots: 20
+assign:
+  emails:
+    someone@example.com: team
+  domains:
+    example.com: team
+```
+
+- Everyone lands in `default` unless an assignment names another tier. An exact email wins over
+  a domain.
+- A slot is given back when its owner runs `runlease down`, when its machine's agent has been
+  absent for `idleTTL`, or when `slotTTL` runs out.
+- `runlease whoami` shows a person their tier and usage. `GET /me` is the same thing for scripts.
+- The file is read at start. Restart the relay to change limits.
+- An unknown field in the file is an error, so a misspelt limit cannot silently mean "unlimited".
+
+A full example is in [`deploy/relay/tiers.example.yaml`](../deploy/relay/tiers.example.yaml).
+
+## Deploy with Terraform
+
+[`deploy/relay/gcp`](../deploy/relay/gcp) stands up everything on this page on one Google Cloud
+VM: network, firewall, static address, verified binaries, the systemd unit and TLS.
 
 ## Point the CLI at it
 

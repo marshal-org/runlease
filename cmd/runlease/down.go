@@ -78,7 +78,15 @@ func runDown(cmd *cobra.Command, args []string) error {
 
 	_ = credential.Delete(entry.CredDir, string(entry.Handle.ID))
 
-	if err := reg.Remove(nameOrID); err != nil {
+	// Give the relay slot back now, so it stops counting against the owner's
+	// tier. Best effort: the relay also drops a slot whose agent stays away.
+	if entry.RelayAddr != "" && entry.RelayToken != "" {
+		if err := releaseRelaySlot(ctx, entry.RelayAddr, entry.RelayToken); err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "note: could not release the relay slot (%v). It will expire on its own.\n", err)
+		}
+	}
+
+	if err := reg.RemoveID(entry.Handle.ID); err != nil {
 		return fmt.Errorf("updating registry: %w", err)
 	}
 

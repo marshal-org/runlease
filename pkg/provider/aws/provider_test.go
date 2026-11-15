@@ -277,3 +277,37 @@ func TestRequestSpot_requiresIMDSv2(t *testing.T) {
 		t.Fatalf("instance must require IMDSv2 session tokens, got %+v", mo)
 	}
 }
+
+// The public address is set on the request, so it does not depend on the
+// subnet's auto-assign setting.
+func TestRequestSpot_publicIPIsExplicit(t *testing.T) {
+	for _, want := range []bool{false, true} {
+		mock := &mockEC2{runOut: runOut("i-abc")}
+		_, err := newProvider(mock).RequestSpot(context.Background(), provider.InstanceSpec{
+			ManifestName:     "ci-runner",
+			InstanceType:     "c5.xlarge",
+			ImageID:          "ami-123",
+			SubnetID:         "subnet-1",
+			SecurityGroupIDs: []string{"sg-1"},
+			PublicIP:         want,
+		})
+		if err != nil {
+			t.Fatalf("RequestSpot: %v", err)
+		}
+		in := mock.lastRunInput
+		if len(in.NetworkInterfaces) != 1 {
+			t.Fatalf("NetworkInterfaces = %d, want 1", len(in.NetworkInterfaces))
+		}
+		nic := in.NetworkInterfaces[0]
+		if got := awssdk.ToBool(nic.AssociatePublicIpAddress); got != want {
+			t.Errorf("AssociatePublicIpAddress = %v, want %v", got, want)
+		}
+		if awssdk.ToString(nic.SubnetId) != "subnet-1" || len(nic.Groups) != 1 || nic.Groups[0] != "sg-1" {
+			t.Errorf("subnet and security groups must move to the network interface, got %q %v", awssdk.ToString(nic.SubnetId), nic.Groups)
+		}
+		// EC2 rejects a request that names them in both places.
+		if in.SubnetId != nil || len(in.SecurityGroupIds) != 0 {
+			t.Error("subnet / security groups must not also be set at the top level")
+		}
+	}
+}

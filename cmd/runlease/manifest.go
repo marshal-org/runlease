@@ -76,7 +76,9 @@ instanceClass: compute.small   # Portable class: micro | small | medium | large 
 
 # ── Networking ──────────────────────────────────────────────────────────────
 # publicIp: true               # Default: true if no relay, false if relay set.
-                               # On GCP, false requires Cloud NAT for egress.
+                               # false needs a NAT gateway on the subnet so the
+                               # VM can reach the relay. With a relay, SSH
+                               # listens on localhost only either way.
 relay:
   addr: wss://relay.runlease.online   # Set for tunneled access (no inbound firewall).
                                    # Leave empty to use direct SSH on the public IP.
@@ -172,7 +174,7 @@ relay:
 sudo: passwordless              # NOPASSWD: ALL for runlease-agent
 {{- end }}
 # Optional fields (uncomment to use):
-# publicIp: true
+# publicIp: true               # only if the subnet has no NAT gateway
 # tags:
 #   env: dev
 #   team: platform

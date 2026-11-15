@@ -392,7 +392,7 @@
     </div>
     <div class="claims">
       <div class="claim"><span class="k">Cheap</span><h3>Spot prices, on your bill</h3><p>Spot capacity costs 60 to 90% less than on-demand. You pay your cloud directly, at your own rates, with nothing added. The hourly price and the cost of the whole lease are shown before launch.</p></div>
-      <div class="claim"><span class="k">Safe</span><h3>Keys never leave you</h3><p>SSH keys are made on your machine and stay there. The VM dials out, so there is no inbound port to open, and the relay in the middle holds no key and sees only ciphertext.</p></div>
+      <div class="claim"><span class="k">Safe</span><h3>Keys never leave you</h3><p>SSH keys are made on your machine and stay there. The VM has no public address and its SSH server listens on localhost only: it dials out. The relay in the middle holds no key and sees only ciphertext.</p></div>
       <div class="claim"><span class="k">Yours</span><h3>In your own cloud</h3><p>Machines run in your GCP or AWS account, in your network, under your IAM and your audit logs. No machine of yours ever lives in an account of ours.</p></div>
       <div class="claim"><span class="k">Self-managing</span><h3>Nothing to run</h3><p>No control plane and no scheduler. The lease logic is written into each machine at boot, and the machine deletes itself on time.</p></div>
     </div>
@@ -540,7 +540,7 @@
       <div><h3>Verified agent</h3><p>The boot script checks the agent's SHA-256 against the one compiled into the CLI, then runs it.</p><span class="ref">pkg/userdata/userdata.go</span></div>
       <div><h3>Unprivileged by default</h3><p>The agent runs with no capabilities. sudo on the VM is locked unless the manifest opts in.</p><span class="ref">pkg/userdata/userdata.go</span></div>
       <div><h3>Relay fails closed</h3><p>It will not start without authentication, validates every token and caps its slots.</p><span class="ref">pkg/relay/server.go</span></div>
-      <div><h3>Hardened sshd</h3><p>Public key only, one allowed user, no root login, one ed25519 host key.</p><span class="ref">pkg/userdata/userdata.go</span></div>
+      <div><h3>Hardened sshd</h3><p>Bound to localhost. Public key only, one allowed user, no root login. The boot script checks what sshd enforces and stops if it differs.</p><span class="ref">pkg/userdata/userdata.go</span></div>
       <div><h3>Signed releases</h3><p>Checksums signed with Sigstore, build provenance for every binary, actions pinned by commit.</p><span class="ref">.github/workflows/release-please.yml</span></div>
     </div>
     <div class="links"><a class="btn" href="security.html">Read the full threat model</a></div>
@@ -588,7 +588,7 @@
       <ol class="steps" role="tablist" aria-label="Launch steps" id="steps">
         <li><button role="tab" aria-selected="true" data-step="1" id="s1"><span class="n">01</span><b>Keys are made on your machine</b><span class="d">The CLI generates a login key and the VM's SSH host key before the VM exists. The private login key never leaves.</span></button></li>
         <li><button role="tab" aria-selected="false" data-step="2" id="s2"><span class="n">02</span><b>A slot is reserved at the relay</b><span class="d">A random 256-bit token, registered under your identity. The relay now knows a machine is coming. It knows nothing else.</span></button></li>
-        <li><button role="tab" aria-selected="false" data-step="3" id="s3"><span class="n">03</span><b>The VM boots and dials out</b><span class="d">No inbound port is needed. The VM verifies the agent binary against a checksum, starts it without privileges, and the agent claims the slot.</span></button></li>
+        <li><button role="tab" aria-selected="false" data-step="3" id="s3"><span class="n">03</span><b>The VM boots and dials out</b><span class="d">No public address, and SSH listens on localhost only. The VM verifies the agent binary against a checksum, starts it without privileges, and the agent claims the slot.</span></button></li>
         <li><button role="tab" aria-selected="false" data-step="4" id="s4"><span class="n">04</span><b>SSH runs end to end</b><span class="d">Your session passes through the relay as ciphertext. The CLI accepts one host key only: the one it made in step one.</span></button></li>
         <li><button role="tab" aria-selected="false" data-step="5" id="s5"><span class="n">05</span><b>The lease ends</b><span class="d">A timer inside the VM deletes the instance. Nobody has to remember, and nothing is left running.</span></button></li>
       </ol>

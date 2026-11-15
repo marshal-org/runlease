@@ -21,7 +21,7 @@ runlease down <name> --yes                                 # or let the lease de
 ```
 
 One command gives an agent, a CI job or you a real Linux machine. It runs in **your** cloud
-account at spot prices, needs **no inbound ports**, and **deletes itself** when its lease runs out.
+account at spot prices, has **no public address**, and **deletes itself** when its lease runs out.
 
 ---
 
@@ -34,7 +34,7 @@ break something and try again. A laptop is the wrong place and a long-lived dev 
 |---|---|
 | **Yours** | The VM runs in your own GCP or AWS account, on your network, under your IAM. Nothing is hosted for you and nothing leaves your account. |
 | **Cheap** | Spot capacity. `runlease up` shows the hourly price and the projected cost of the lease before it launches. |
-| **Closed** | Runlease needs no inbound firewall rule. The VM dials out to a relay; you reach it through that tunnel. With `publicIp: false` it has no public address at all. |
+| **Closed** | By default the VM has no public address and its SSH server listens on localhost only. The VM dials out to a relay; you reach it through that tunnel. |
 | **Private** | The relay carries SSH. It holds no keys and cannot read, alter or impersonate a session. [How that works](docs/security.md). |
 | **Managed** | Every machine has a lease. It deletes itself at the end of it, whether or not your laptop is still online. |
 | **Scriptable** | `--output json` on every command, non-interactive `exec`, `push`, `pull` and `forward`. Built to be driven by an agent. |

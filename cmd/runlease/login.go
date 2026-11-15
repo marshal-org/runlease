@@ -144,20 +144,19 @@ const publicRelay = "wss://connect.runlease.online"
 func runLogin(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	out := cmd.OutOrStdout()
-	relayAddr, err := relayFromFlagOrConfig()
+	// First run: no relay named and none saved. Signing in can then only mean
+	// the public one. It is saved once sign-in has worked, not before, so a
+	// cancelled login leaves later launches as they were.
+	cfg, err := config.Load(defaultConfigPath())
 	if err != nil {
-		// First run: nothing chosen yet. Signing in with no relay named can
-		// only mean the public one, so use it and remember it.
-		cfg, loadErr := config.Load(defaultConfigPath())
-		if loadErr != nil || loginRelay != "" || cfg.Relay.Addr != "" {
-			return err
-		}
-		cfg.Relay.Addr = publicRelay
-		if saveErr := config.Save(defaultConfigPath(), cfg); saveErr != nil {
-			return saveErr
-		}
-		relayAddr = publicRelay
-		fmt.Fprintf(out, "No relay chosen yet: using the free public relay %s (saved; change it with 'runlease config set relay.addr').\n", publicRelay)
+		return err
+	}
+	firstRun := loginRelay == "" && cfg.Relay.Addr == ""
+	relayAddr := publicRelay
+	if firstRun {
+		fmt.Fprintf(out, "No relay chosen yet: using the free public relay %s.\n", publicRelay)
+	} else if relayAddr, err = relayFromFlagOrConfig(); err != nil {
+		return err
 	}
 
 	d, err := fetchDiscovery(ctx, relayAddr)
@@ -195,6 +194,13 @@ func runLogin(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	fmt.Fprintf(out, "\n✅ Signed in as %s\n", tok.Email)
+	if firstRun {
+		cfg.Relay.Addr = publicRelay
+		if err := config.Save(defaultConfigPath(), cfg); err != nil {
+			return fmt.Errorf("signed in, but could not save the relay: %w\nRun: runlease config set relay.addr %s", err, publicRelay)
+		}
+		fmt.Fprintf(out, "   Saved as your relay. Change it with: runlease config set relay.addr ADDRESS\n")
+	}
 	if d.DefaultTier != nil && d.DefaultTier.MaxSlots > 0 {
 		fmt.Fprintf(out, "   %s tier: up to %d machines at once, each for up to %s.\n",
 			d.DefaultTier.Name, d.DefaultTier.MaxSlots, d.DefaultTier.SlotTTL)

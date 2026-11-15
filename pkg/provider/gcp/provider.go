@@ -34,6 +34,7 @@ const DefaultImageFamily = "projects/debian-cloud/global/images/family/debian-12
 //
 // The manifest `region` field is treated as a GCP zone (e.g. "us-central1-a").
 type Provider struct {
+	egressNetwork string // set by HasPrivateEgress: the network it checked
 	svc           *compute.Service
 	projectID     string
 	zone          string

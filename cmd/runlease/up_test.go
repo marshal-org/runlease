@@ -172,7 +172,6 @@ func TestCheckPrivateEgress(t *testing.T) {
 		wantErr    bool
 		wantCalled bool
 		wantNote   bool
-		wantPublic bool
 	}{
 		{name: "no relay: nothing to check"},
 		{name: "relay, default, NAT present", relay: relayAddr, has: true, wantCalled: true},
@@ -191,8 +190,8 @@ func TestCheckPrivateEgress(t *testing.T) {
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
 			}
-			if got := m.PublicIP != nil && *m.PublicIP && tc.publicIP == nil; got != tc.wantPublic {
-				t.Errorf("switched to a public IP = %v, want %v", got, tc.wantPublic)
+			if tc.publicIP == nil && m.PublicIP != nil {
+				t.Error("the check must never set publicIp itself")
 			}
 			if p.called != tc.wantCalled {
 				t.Errorf("NAT check called = %v, want %v", p.called, tc.wantCalled)

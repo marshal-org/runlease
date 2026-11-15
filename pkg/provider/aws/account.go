@@ -6,6 +6,7 @@ import (
 	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
@@ -27,6 +28,16 @@ func (p *Provider) DescribeAccount(ctx context.Context) string {
 		return s
 	}
 	return fmt.Sprintf("AWS account %s, region %s, as %s", awssdk.ToString(out.Account), p.region, awssdk.ToString(out.Arn))
+}
+
+// ConfiguredRegion is the region the user's AWS setup already names, from the
+// environment or the active profile. Empty if it names none.
+func ConfiguredRegion(ctx context.Context) string {
+	cfg, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		return ""
+	}
+	return cfg.Region
 }
 
 // NATAdvice explains the AWS way out. There is no two-line command for it: a

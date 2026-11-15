@@ -1,15 +1,12 @@
 package main
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
-
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 )
 
 // A cloud SDK error is accurate and unreadable. explainCloudError keeps the
@@ -26,19 +23,14 @@ func explainCloudError(err error) error {
 	return err
 }
 
-var errCloudSignIn = errors.New("cloud sign-in expired or missing")
-
 // isSignInError reports whether err says the cloud credentials are expired or
 // absent, as opposed to the request itself being wrong.
 func isSignInError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, errCloudSignIn) {
-		return true
-	}
 	s := err.Error()
-	return containsAny(s, gcpSignInMarks) || containsAny(s, awsSignInMarks)
+	return !isRelaySignIn(s) && (containsAny(s, gcpSignInMarks) || containsAny(s, awsSignInMarks))
 }
 
 var (
@@ -49,13 +41,22 @@ var (
 	awsSignInMarks = []string{
 		"ExpiredToken", "RequestExpired", "session has expired",
 		"failed to refresh cached credentials", "failed to retrieve credentials",
-		"no EC2 IMDS role found", "InvalidClientTokenId", "AuthFailure",
+		"no EC2 IMDS role found", "InvalidClientTokenId",
 		"SSO session", "token has expired",
 	}
 )
 
+// isRelaySignIn reports whether the message is about the relay's own sign-in.
+// Google answers an expired relay session with the same "invalid_grant" it
+// uses for an expired cloud one, and that message already names its fix.
+func isRelaySignIn(s string) bool {
+	return strings.Contains(s, "runlease login")
+}
+
 func cloudErrorHint(s string) string {
 	switch {
+	case isRelaySignIn(s):
+		return ""
 	case containsAny(s, gcpSignInMarks):
 		return "Your Google Cloud sign-in has expired or is missing. Sign in again, then retry:\n  gcloud auth application-default login"
 	case containsAny(s, awsSignInMarks):
@@ -97,25 +98,10 @@ func regionFits(prov, region string) bool {
 	return true
 }
 
-// awsConfiguredRegion is the region the user's AWS setup already names: the
-// environment first, then the active profile in ~/.aws/config. Empty if none.
-func awsConfiguredRegion() string {
-	for _, k := range []string{"AWS_REGION", "AWS_DEFAULT_REGION"} {
-		if v := os.Getenv(k); v != "" {
-			return v
-		}
-	}
-	cfg, err := awsconfig.LoadDefaultConfig(context.Background())
-	if err != nil {
-		return ""
-	}
-	return cfg.Region
-}
-
 // detectProvider picks the cloud for a bare 'runlease up' when exactly one is
 // set up on this computer. It returns the provider and why, or "" and what it
 // found, so the caller can ask instead of guessing between two.
-func detectProvider(ctx context.Context) (prov, why string) {
+func detectProvider() (prov, why string) {
 	gcp := hasGCPSetup()
 	aws := hasAWSSetup()
 	switch {
@@ -133,7 +119,12 @@ func hasGCPSetup() bool {
 	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") != "" {
 		return true
 	}
+	// Where gcloud keeps application default credentials: CLOUDSDK_CONFIG if
+	// set, %APPDATA%\\gcloud on Windows, ~/.config/gcloud everywhere else.
 	dir := os.Getenv("CLOUDSDK_CONFIG")
+	if dir == "" && runtime.GOOS == "windows" && os.Getenv("APPDATA") != "" {
+		dir = filepath.Join(os.Getenv("APPDATA"), "gcloud")
+	}
 	if dir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -151,6 +142,7 @@ func hasAWSSetup() bool {
 	for _, k := range []string{
 		"AWS_ACCESS_KEY_ID", "AWS_PROFILE", "AWS_ROLE_ARN", "AWS_WEB_IDENTITY_TOKEN_FILE",
 		"AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+		"AWS_CONFIG_FILE", "AWS_SHARED_CREDENTIALS_FILE",
 	} {
 		if os.Getenv(k) != "" {
 			return true

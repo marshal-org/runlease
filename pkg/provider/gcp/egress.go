@@ -26,6 +26,7 @@ func (p *Provider) HasPrivateEgress(ctx context.Context, network, subnet string)
 		}
 		network = sn.Network
 	}
+	p.egressNetwork = network // NATAdvice names the network this check looked at
 
 	var routers []*compute.Router
 	err := p.svc.Routers.List(project, region).Context(ctx).Pages(ctx, func(l *compute.RouterList) error {

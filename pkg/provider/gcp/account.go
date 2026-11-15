@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2/google"
@@ -41,11 +42,13 @@ func adcIdentity(ctx context.Context) string {
 	if err != nil {
 		return ""
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		"https://oauth2.googleapis.com/tokeninfo?access_token="+url.QueryEscape(tok.AccessToken), nil)
+	// In the body, not the URL: URLs end up in proxy and debug logs.
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://oauth2.googleapis.com/tokeninfo",
+		strings.NewReader(url.Values{"access_token": {tok.AccessToken}}.Encode()))
 	if err != nil {
 		return ""
 	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return ""
@@ -64,6 +67,11 @@ func adcIdentity(ctx context.Context) string {
 // network and region, filled in for this project.
 func (p *Provider) NATAdvice(network, subnet string) string {
 	project, region, _ := p.subnetLocation(network, subnet)
+	// With only a subnet given, the network is the one HasPrivateEgress read
+	// from that subnet, not "default".
+	if network == "" {
+		network = p.egressNetwork
+	}
 	net := "default"
 	if network != "" {
 		net = lastSegment(network)

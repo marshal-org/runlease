@@ -128,7 +128,7 @@ func runUp(cmd *cobra.Command, _ []string) error {
 				if err != nil {
 					return err
 				}
-			} else if prov, why := detectProvider(cmd.Context()); prov != "" {
+			} else if prov, why := detectProvider(); prov != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "☁  Using %s (%s). Choose with --provider, or save a default with: runlease configure\n", prov, why)
 				quickProvider = prov
 				m, err = buildQuickManifest()
@@ -419,6 +419,13 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	if !detach && !attach && !term.IsTerminal(int(os.Stdin.Fd())) {
+		// A script or an agent launched this: there is no terminal to give a
+		// shell to. The machine is up, which is what was asked for, so this
+		// is --detach, not an error. --attach is left alone: it needs no shell.
+		fmt.Fprintf(cmd.ErrOrStderr(), "No terminal here, so no shell is opened (same as --detach). Run commands with: runlease exec %s -- COMMAND\n", m.Name)
+		detach = true
+	}
 	if detach {
 		return nil
 	}
@@ -513,12 +520,6 @@ func pollAndConnectViaRelay(cmd *cobra.Command, relayAddr, token, name string, c
 	if err != nil {
 		return err
 	}
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		// A script or an agent launched this: there is no terminal to give a
-		// shell to, and the machine is ready. That is success, not an error.
-		fmt.Fprintf(out, "✅ Agent connected. No terminal here, so no shell was opened. Run commands with: runlease exec %s -- COMMAND\n", name)
-		return nil
-	}
 	fmt.Fprintf(out, "🔗 Agent connected — opening SSH session...\n")
 	conn, err := dialRelay(relayAddr, token)
 	if err != nil {
@@ -579,7 +580,7 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 			region = "us-central1-a"
 		case "aws":
 			// The region the user's own AWS setup names, before a guess.
-			region = awsConfiguredRegion()
+			region = awsprovider.ConfiguredRegion(context.Background())
 			if region == "" {
 				region = "us-east-1"
 			}

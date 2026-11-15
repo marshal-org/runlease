@@ -49,4 +49,15 @@ func TestExplainCloudError(t *testing.T) {
 	if !isSignInError(errors.New(`auth: "invalid_grant"`)) || isSignInError(plain) {
 		t.Error("isSignInError misclassified")
 	}
+	// An expired relay session carries Google's invalid_grant too, and already
+	// names its own fix. It must not be sent to gcloud.
+	relay := errors.New("refreshing sign-in: invalid_grant Token has been expired or revoked.: run 'runlease login' again")
+	if explainCloudError(relay) != relay || isSignInError(relay) {
+		t.Error("a relay sign-in error was treated as a cloud one")
+	}
+	// A permission error is not an expired sign-in.
+	perm := errors.New("api error AuthFailure.ServiceLinkedRoleCreationNotPermitted: not permitted")
+	if explainCloudError(perm) != perm {
+		t.Error("an AWS permission error got the sign-in hint")
+	}
 }

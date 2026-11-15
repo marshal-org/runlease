@@ -335,3 +335,35 @@ func TestRequestSpot_publicIPIsExplicit(t *testing.T) {
 		}
 	}
 }
+
+func TestListManaged(t *testing.T) {
+	launch := time.Date(2026, 10, 13, 15, 0, 0, 0, time.UTC)
+	mock := &mockEC2{describeOuts: []*ec2.DescribeInstancesOutput{{
+		Reservations: []types.Reservation{{Instances: []types.Instance{{
+			InstanceId:   awssdk.String("i-leak"),
+			InstanceType: types.InstanceTypeT3Small,
+			State:        &types.InstanceState{Name: types.InstanceStateNameStopped},
+			LaunchTime:   &launch,
+			Tags: []types.Tag{
+				{Key: awssdk.String("runlease-managed"), Value: awssdk.String("true")},
+				{Key: awssdk.String("runlease:name"), Value: awssdk.String("ci-runner")},
+				{Key: awssdk.String("runlease-created-by"), Value: awssdk.String("ada")},
+				{Key: awssdk.String("runlease-expires-at"), Value: awssdk.String("2026-10-13T17:00:00Z")},
+			},
+		}}}},
+	}}}
+	got, err := newProvider(mock).ListManaged(context.Background())
+	if err != nil {
+		t.Fatalf("ListManaged: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d instances, want 1", len(got))
+	}
+	m := got[0]
+	if m.ID != "i-leak" || m.Name != "ci-runner" || m.CreatedBy != "ada" || m.State != provider.StatusStopped || m.Region != "us-east-1" {
+		t.Errorf("fields wrong: %+v", m)
+	}
+	if m.ExpiresAt == nil || !m.ExpiresAt.Equal(time.Date(2026, 10, 13, 17, 0, 0, 0, time.UTC)) {
+		t.Errorf("ExpiresAt = %v", m.ExpiresAt)
+	}
+}

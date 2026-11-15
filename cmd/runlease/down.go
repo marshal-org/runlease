@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,12 +11,17 @@ import (
 
 	"github.com/marshal-org/runlease/pkg/credential"
 	"github.com/marshal-org/runlease/pkg/provider"
+	"github.com/marshal-org/runlease/pkg/registry"
 )
 
-var downYes bool
+var (
+	downYes    bool
+	downLeaked bool
+)
 
 func init() {
 	downCmd.Flags().BoolVarP(&downYes, "yes", "y", false, "skip confirmation prompt")
+	downCmd.Flags().BoolVar(&downLeaked, "leaked", false, "delete runlease machines found in the cloud that this computer does not track, are stopped, and are past their lease (their disks still bill). Never deletes a running machine")
 	rootCmd.AddCommand(downCmd)
 }
 
@@ -31,6 +37,12 @@ func runDown(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if downLeaked {
+		if len(args) > 0 {
+			return fmt.Errorf("--leaked takes no instance name: it finds the machines itself")
+		}
+		return runDownLeaked(cmd, reg)
+	}
 
 	nameOrID, err := resolveInstance(cmd, reg, args, "down")
 	if err != nil || nameOrID == "" {
@@ -42,16 +54,10 @@ func runDown(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if !downYes {
-		out := cmd.OutOrStdout()
-		fmt.Fprintf(out, "Terminate %s (%s, %s)? [y/N] ",
-			entry.Handle.ManifestName, entry.Handle.ID, entry.Handle.Region)
-		scanner := bufio.NewScanner(cmd.InOrStdin())
-		scanner.Scan()
-		if strings.ToLower(strings.TrimSpace(scanner.Text())) != "y" {
-			fmt.Fprintln(out, "Aborted.")
-			return nil
-		}
+	if !downYes && !confirm(cmd, fmt.Sprintf("Terminate %s (%s, %s)?",
+		entry.Handle.ManifestName, entry.Handle.ID, entry.Handle.Region)) {
+		fmt.Fprintln(cmd.OutOrStdout(), "Aborted.")
+		return nil
 	}
 
 	ctx := cmd.Context()
@@ -92,4 +98,102 @@ func runDown(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintln(cmd.OutOrStdout(), done)
 	return nil
+}
+
+// runDownLeaked deletes the runlease machines that `list` reports as leaked or
+// expired: found in the cloud by label, not in the registry, and either
+// stopped with a disk still billing or running past their lease. A machine
+// that is running within its lease is never touched: it is someone's.
+func runDownLeaked(cmd *cobra.Command, reg *registry.Registry) error {
+	out := cmd.OutOrStdout()
+	ctx := cmd.Context()
+	scopes := scanScopes(reg)
+	if len(scopes) == 0 {
+		return fmt.Errorf("nowhere to look: this computer tracks no machines and has no default provider and region. Run 'runlease configure' first")
+	}
+	found, notes := findUntracked(ctx, reg, scopes)
+	var doomed []untrackedInstance
+	for _, u := range found {
+		if u.removable() {
+			doomed = append(doomed, u)
+		}
+	}
+	for _, n := range notes {
+		fmt.Fprintf(cmd.ErrOrStderr(), "note: %s\n", n)
+	}
+	if len(doomed) == 0 {
+		if len(notes) > 0 {
+			// A place that could not be asked is not a place with nothing in it.
+			return fmt.Errorf("%d of %d places could not be checked, so this is not an all-clear; nothing leaked was found in the rest", len(notes), len(scopes))
+		}
+		fmt.Fprintln(out, "Nothing leaked: no stopped or expired runlease machines found outside the registry.")
+		return nil
+	}
+
+	// Name and creator are shown because these are machines this computer did
+	// not launch: whoever answers the prompt should see whose they are.
+	fmt.Fprintf(out, "To be deleted (%d):\n", len(doomed))
+	for _, u := range doomed {
+		fmt.Fprintf(out, "  %s  name %s, by %s  %s %s  %s\n", u.ID, orDash(u.Name), orDash(u.CreatedBy), u.Provider, u.Region, explain(u))
+	}
+	if !downYes && !confirm(cmd, "Delete them?") {
+		fmt.Fprintln(out, "Aborted.")
+		return nil
+	}
+
+	var failed int
+	for _, u := range doomed {
+		kept, err := deleteLeaked(ctx, u)
+		switch {
+		case err != nil:
+			failed++
+			fmt.Fprintf(out, "❌ %s: %v\n", u.ID, err)
+		case kept != "":
+			fmt.Fprintf(out, "⏭️  %s left alone: %s\n", u.ID, kept)
+		default:
+			fmt.Fprintf(out, "✅ %s deleted\n", u.ID)
+		}
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d of %d machines could not be deleted", failed, len(doomed))
+	}
+	return nil
+}
+
+// deleteLeaked deletes one machine the scan found. kept is set, with the
+// reason, when the machine turned out not to need deleting after all.
+func deleteLeaked(ctx context.Context, u untrackedInstance) (kept string, err error) {
+	p, err := newProvider(ctx, u.Provider, u.Region, u.Project)
+	if err != nil {
+		return "", err
+	}
+	if u.Problem == problemLeaked {
+		// The listing is as old as the prompt was left open. A machine is
+		// deleted for being stopped only if it still is: its owner may have
+		// started it again in the meantime.
+		status, err := p.Status(ctx, u.ID)
+		if err != nil {
+			return "", fmt.Errorf("checking it is still stopped: %w", err)
+		}
+		switch status {
+		case provider.StatusStopped:
+		case provider.StatusTerminated:
+			return "", nil // gone already
+		default:
+			return fmt.Sprintf("it is %s now, not stopped", status), nil
+		}
+	}
+	if err := p.Terminate(ctx, u.ID); err != nil && !errors.Is(err, provider.ErrNotFound) {
+		return "", err
+	}
+	return "", nil
+}
+
+// confirm asks a yes/no question and reports whether the answer was "y".
+// Anything else, including no answer at all, is a no.
+func confirm(cmd *cobra.Command, question string) bool {
+	fmt.Fprintf(cmd.OutOrStdout(), "%s [y/N] ", question)
+	scanner := bufio.NewScanner(cmd.InOrStdin())
+	scanner.Scan()
+	return strings.ToLower(strings.TrimSpace(scanner.Text())) == "y"
 }

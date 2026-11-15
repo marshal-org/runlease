@@ -15,10 +15,16 @@ import (
 	"github.com/marshal-org/runlease/pkg/registry"
 )
 
-var labelFilters []string
+var (
+	labelFilters  []string
+	listLocal     bool
+	listUntracked bool
+)
 
 func init() {
 	listCmd.Flags().StringArrayVarP(&labelFilters, "label", "l", nil, "filter by label key=value (repeatable, ANDed)")
+	listCmd.Flags().BoolVar(&listLocal, "local", false, "show only what this computer tracks; do not ask the cloud for runlease machines it has lost track of")
+	listCmd.Flags().BoolVar(&listUntracked, "untracked", false, "with --output json: also list runlease machines found in the cloud that this computer does not track (\"tracked\": false)")
 	rootCmd.AddCommand(listCmd)
 }
 
@@ -40,16 +46,41 @@ func runList(cmd *cobra.Command, _ []string) error {
 	}
 
 	entries := filterEntries(reg.List(), filters)
+	// Ask the cloud, in the background, for runlease machines the registry
+	// does not hold. The table is about what this computer tracks; this is
+	// about what it has lost. JSON output stays as it was unless asked.
+	var (
+		untracked []untrackedInstance
+		scanNotes []string
+		scanDone  = make(chan struct{})
+	)
+	if !listLocal && (!jsonOutput() || listUntracked) {
+		go func() {
+			defer close(scanDone)
+			untracked, scanNotes = findUntracked(cmd.Context(), reg, scanScopes(reg))
+		}()
+	} else {
+		close(scanDone)
+	}
+
 	// Resolve spot rates for all instances concurrently. Each lookup is cached
 	// (24h) and bounded by its own timeout, so a cold cache or a slow/credential-
 	// less provider can't make `list` hang for timeout×N — the table waits at
 	// most one timeout regardless of how many instances are listed.
 	rates := fetchRates(cmd.Context(), entries)
+	<-scanDone
 	if jsonOutput() {
-		return writeListJSON(cmd, entries, rates)
+		// The JSON has no place for a note, and a place that could not be
+		// checked must not read as a place with nothing untracked in it.
+		for _, n := range scanNotes {
+			fmt.Fprintf(cmd.ErrOrStderr(), "note: %s\n", n)
+		}
+		return writeListJSON(cmd, entries, rates, untracked)
 	}
 	if len(entries) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "No active instances.")
+		// Not "nothing is running": only that this computer tracks nothing.
+		fmt.Fprintln(cmd.OutOrStdout(), "No active instances tracked on this computer.")
+		printUntracked(cmd.OutOrStdout(), untracked, scanNotes)
 		return nil
 	}
 
@@ -89,6 +120,7 @@ func runList(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "\n💡 $/HR unavailable — for live rates, %s\n", priceHint)
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "\nState is cached — run 'runlease sync' to refresh")
+	printUntracked(cmd.OutOrStdout(), untracked, scanNotes)
 	return nil
 }
 
@@ -264,9 +296,15 @@ type listJSONEntry struct {
 	LeaseCostUSD *float64          `json:"leaseCostUsd,omitempty"`
 	PriceApprox  bool              `json:"priceApprox,omitempty"`
 	Tags         map[string]string `json:"tags,omitempty"`
+	// Set only on rows added by --untracked: machines found in the cloud that
+	// this computer does not track. Tracked is then false, and Problem is
+	// "leaked", "expired" or "elsewhere".
+	Tracked *bool  `json:"tracked,omitempty"`
+	Problem string `json:"problem,omitempty"`
+	DiskGB  int64  `json:"diskGb,omitempty"`
 }
 
-func writeListJSON(cmd *cobra.Command, entries []*registry.Entry, rates []rateResult) error {
+func writeListJSON(cmd *cobra.Command, entries []*registry.Entry, rates []rateResult, untracked []untrackedInstance) error {
 	out := make([]listJSONEntry, 0, len(entries))
 	for i, e := range entries {
 		h := e.Handle
@@ -297,6 +335,27 @@ func writeListJSON(cmd *cobra.Command, entries []*registry.Entry, rates []rateRe
 				lease := rate.LeaseCost(d)
 				row.LeaseCostUSD = &lease
 			}
+		}
+		out = append(out, row)
+	}
+	for _, u := range untracked {
+		no := false
+		row := listJSONEntry{
+			Name:         u.Name,
+			ID:           string(u.ID),
+			Provider:     string(u.Provider),
+			InstanceType: u.InstanceType,
+			State:        string(u.State),
+			Region:       u.Region,
+			Tracked:      &no,
+			Problem:      u.Problem,
+			DiskGB:       u.DiskGB,
+		}
+		if !u.CreatedAt.IsZero() {
+			row.CreatedAt = u.CreatedAt.UTC().Format(time.RFC3339)
+		}
+		if u.ExpiresAt != nil {
+			row.ExpiresAt = u.ExpiresAt.UTC().Format(time.RFC3339)
 		}
 		out = append(out, row)
 	}

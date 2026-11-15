@@ -1,5 +1,5 @@
 ---
-name: runlease-sandbox
+name: sandbox
 description: Run untrusted or risky code on a throwaway Runlease machine instead of this computer. Use for generated code, an unfamiliar repository, an install script from the internet, a destructive migration rehearsal, or a full test suite that should not touch local state.
 ---
 

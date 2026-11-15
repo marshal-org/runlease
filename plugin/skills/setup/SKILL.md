@@ -1,5 +1,5 @@
 ---
-name: runlease-setup
+name: setup
 description: Install Runlease and get to a first working machine. Use when `runlease` is not installed, the person asks to set Runlease up, or a Runlease command fails because of a missing sign-in, project, region or relay.
 ---
 

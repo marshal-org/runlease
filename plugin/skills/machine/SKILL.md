@@ -1,5 +1,5 @@
 ---
-name: runlease-machine
+name: machine
 description: Launch, use and return a leased cloud machine with Runlease. Use when a task needs a separate machine - a long build or test run, more cores or a GPU, a clean Linux box, a port to preview, or work that should not run on this computer.
 ---
 

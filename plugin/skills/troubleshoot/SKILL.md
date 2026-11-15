@@ -1,5 +1,5 @@
 ---
-name: runlease-troubleshoot
+name: troubleshoot
 description: Diagnose a failing Runlease command or an unreachable machine. Use when `runlease up`, `exec`, `connect` or `down` errors, a machine never connects, or the person suspects machines were left running.
 ---
 

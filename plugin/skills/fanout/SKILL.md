@@ -1,5 +1,5 @@
 ---
-name: runlease-fanout
+name: fanout
 description: Split a job across several Runlease machines and collect the results. Use for test shards, a matrix of versions or configurations, or independent tasks that can run at the same time.
 ---
 

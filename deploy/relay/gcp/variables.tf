@@ -151,3 +151,9 @@ variable "labels" {
   type    = map(string)
   default = {}
 }
+
+variable "console_to_cloud_logging" {
+  description = "Store the VM's serial console output, which includes the relay's log, in Cloud Logging. Needed by the usage module (usage/). Off by default: the relay's log contains the email addresses of the people who use it."
+  type        = bool
+  default     = false
+}

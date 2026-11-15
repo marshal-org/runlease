@@ -85,6 +85,7 @@ You need credentials for one cloud: `gcloud auth application-default login` (and
 
 ```bash
 runlease login                          # the free public relay: approve a short code in a browser
+runlease doctor                         # optional: checks sign-ins, project and network, prints the fix
 runlease up -p gcp -n box -d            # or -p aws: a small spot machine, gone in two hours
                                         # no NAT gateway on the subnet? it stops and says so: add --public-ip
 runlease exec box -- uname -a           # run something
@@ -137,10 +138,29 @@ launched from another computer, or left behind stopped with a disk that still bi
 runlease list             # tracked machines, then anything found in the cloud
 runlease down --leaked    # delete the stopped ones whose lease is over
 runlease list --local     # skip the cloud lookup
+runlease down --leaked --provider aws --region eu-north-1   # say where to look
 ```
 
 `down --leaked` never deletes a running machine. It only removes machines that are stopped and
 past their lease.
+
+Both look where this computer has launched before and in its saved default. With neither,
+`down --leaked` and `list --untracked` look in each cloud signed in on this computer, in its
+default region, and say so.
+
+### When something is not working
+
+```bash
+runlease doctor                                       # every cloud signed in on this computer
+runlease doctor --provider aws --region eu-north-1    # one cloud, one region
+runlease doctor --output json                         # {"ok": bool, "checks": [{id, title, status, detail, fix}]}
+```
+
+`runlease doctor` creates nothing. It checks this CLI, the relay (set, reachable, signed in,
+serving the agent this CLI expects) and each cloud (credentials, project or account, region,
+network, NAT gateway), runs every check whatever the one before it found, and prints the
+command that fixes each problem. It exits 1 if a check failed; a warning, such as a subnet
+with no NAT gateway, does not fail it.
 
 ## How it works
 

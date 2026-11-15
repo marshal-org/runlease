@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://github.com/marshal-org/runlease/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/marshal-org/runlease/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/marshal-org/runlease/releases"><img alt="Release" src="https://img.shields.io/github/v/release/marshal-org/runlease"></a>
-  <a href="LICENSE"><img alt="License: FSL-1.1-ALv2" src="https://img.shields.io/badge/license-FSL--1.1--ALv2-blue"></a>
+  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
   <a href="https://pkg.go.dev/github.com/marshal-org/runlease"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/marshal-org/runlease.svg"></a>
 </p>
 
@@ -224,15 +224,7 @@ Pre-1.0. The CLI and the manifest format can still change between minor versions
 
 ## License
 
-[Functional Source License, Version 1.1, ALv2 Future License](LICENSE) (FSL-1.1-ALv2). In short:
-
-- **You may** use Runlease, change it and pass it on, for your own work and inside your company,
-  including commercial work.
-- **You may not** offer it, or something substantially the same, to others as a product or
-  service that competes with it. That covers selling it and hosting a paid relay.
-- **Two years after each release**, that release becomes plain Apache-2.0.
-
-The [license text](LICENSE) is what governs; this summary is not a substitute for it.
+[Apache License 2.0](LICENSE).
 
 Runlease is built and maintained by the team behind [Marshal](https://marshal.codes), the
 platform for running AI agent work with policy, credentials and audit built in.

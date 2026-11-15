@@ -1,6 +1,6 @@
 # CI and release pipeline
 
-A project developed in public runs code written by strangers. This page says how Runlease does that
+An open source project runs code written by strangers. This page says how Runlease does that
 without handing those strangers its infrastructure, its cloud account or its release keys.
 
 ---
@@ -55,7 +55,7 @@ All of them are required before merge.
 
 - **`pull_request`, never `pull_request_target`.** A fork's workflow run gets a read-only token and
   no secrets. `pull_request_target` would run with the base repository's secrets, and is the cause
-  of most CI compromises in public projects. It is not used anywhere in this repository.
+  of most CI compromises in open source. It is not used anywhere in this repository.
 - **GitHub-hosted runners.** Every job runs on `ubuntu-latest`: a fresh virtual machine that is
   destroyed after the job. A self-hosted runner that executes fork code is a foothold on your
   network that survives the job, so none is used.

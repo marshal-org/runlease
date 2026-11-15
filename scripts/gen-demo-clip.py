@@ -7,6 +7,9 @@ Usage: scripts/gen-demo-clip.py site/demo.svg [FREEZE_SECONDS]   (freeze = a sti
 """
 import sys, html
 
+if len(sys.argv) < 2:
+    print("Usage: scripts/gen-demo-clip.py site/demo.svg [FREEZE_SECONDS]", file=sys.stderr)
+    sys.exit(2)
 OUT = sys.argv[1]
 FREEZE = float(sys.argv[2]) if len(sys.argv) > 2 else None
 T = 30.0          # one loop, seconds
@@ -188,5 +191,5 @@ text{{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",m
 {chr(10).join(body)}
 </svg>
 '''
-open(OUT, "w").write(svg)
+open(OUT, "w", encoding="utf-8").write(svg)
 print(OUT, len(svg), "bytes")

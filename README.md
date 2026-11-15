@@ -127,6 +127,19 @@ runlease up -m agent-box.yaml --attach
 `runlease manifest new` writes one interactively. Every field is in the
 [manifest reference](docs/manifest.md).
 
+### For coding agents: the MCP server
+
+`runlease mcp` serves the same commands as typed tools over the
+[Model Context Protocol](https://modelcontextprotocol.io), so an agent launches, uses and deletes
+machines without composing shell commands:
+
+```bash
+claude mcp add runlease -- runlease mcp      # Claude Code
+```
+
+Any other MCP client takes `{"command": "runlease", "args": ["mcp"]}`. The tools and the safety
+notes are in [docs/mcp.md](docs/mcp.md).
+
 ### Finding machines this computer has forgotten
 
 `runlease list` shows what this computer launched and still remembers. It also asks your cloud
@@ -217,6 +230,7 @@ concrete type per cloud. Run `runlease catalog` to see the mapping.
 | [How it works](docs/how-it-works.md) | Architecture, protocol, boot sequence, lease lifecycle |
 | [Security and threat model](docs/security.md) | What each party can do, known limits, release verification |
 | [Manifest reference](docs/manifest.md) | Every field |
+| [MCP server](docs/mcp.md) | `runlease mcp`: typed tools for coding agents, how to register it, safety notes |
 | [The public relay](docs/relay-service.md) | Sign in, free tier limits, what it logs |
 | [Self-hosting the relay](docs/self-hosting-relay.md) | Deploy, authenticate, set tiers, operate |
 | [CI and release pipeline](docs/ci.md) | How changes are tested and how releases are built and signed |

@@ -72,14 +72,7 @@ have the right to submit it under the project's license.
 git commit -s -m "fix(exec): close the session on every error path"
 ```
 
-## Contributor agreement
-
-Runlease is distributed under the [Functional Source License](LICENSE). For the project to keep
-doing that with code it did not write, it needs a license from each contributor. That is what the
-[Contributor License Agreement](CLA.md) is. You keep ownership of your work.
-
-To agree, add one line for yourself to [`CONTRIBUTORS.md`](CONTRIBUTORS.md) in your first pull
-request. You do this once.
+There is no contributor license agreement to sign.
 
 ## Security rules for changes
 

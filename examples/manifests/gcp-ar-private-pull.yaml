@@ -23,13 +23,13 @@ reclaim:
   selfTermination: true
 
 relay:
-  addr: wss://relay.runlease.online
+  addr: wss://relay.example.com
 
 sudo: passwordless
 
 gcp:
   # Must have roles/artifactregistry.reader on the AR repos you intend to pull from.
-  serviceAccount: ar-puller@marshal-dev-495114.iam.gserviceaccount.com
+  serviceAccount: ar-puller@YOUR_PROJECT.iam.gserviceaccount.com
 
 setup:
   - name: install-auth-provider-gcp

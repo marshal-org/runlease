@@ -11,8 +11,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/runlease/runlease/pkg/pricing"
-	"github.com/runlease/runlease/pkg/registry"
+	"github.com/marshal-org/runlease/pkg/pricing"
+	"github.com/marshal-org/runlease/pkg/registry"
 )
 
 var labelFilters []string

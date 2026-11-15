@@ -4,12 +4,14 @@
 // localhost:22 (sshd). On disconnect it reconnects automatically.
 //
 // Required env vars (written to /etc/runlease-agent.env by user-data):
-//   RUNLEASE_RELAY_ADDR  – relay address: host:port or ws[s]://host[:port]
-//   RUNLEASE_RELAY_TOKEN – per-instance secret pre-registered by the CLI
+//
+//	RUNLEASE_RELAY_ADDR  – relay address: host:port or ws[s]://host[:port]
+//	RUNLEASE_RELAY_TOKEN – per-instance secret pre-registered by the CLI
 //
 // Optional:
-//   RUNLEASE_LOCAL_TARGET – TCP target each yamux stream is bridged to.
-//                           Defaults to "localhost:22".
+//
+//	RUNLEASE_LOCAL_TARGET – TCP target each yamux stream is bridged to.
+//	                        Defaults to "localhost:22".
 package main
 
 import (
@@ -18,7 +20,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/runlease/runlease/pkg/agent"
+	"github.com/marshal-org/runlease/pkg/agent"
 )
 
 func main() {

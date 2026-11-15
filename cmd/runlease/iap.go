@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/runlease/runlease/pkg/credential"
+	"github.com/marshal-org/runlease/pkg/credential"
 )
 
 func init() {

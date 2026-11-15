@@ -30,3 +30,11 @@ coverage.html
 
 # Runlease local state
 ~/.runlease/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.example.tfvars

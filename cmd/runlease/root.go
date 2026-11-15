@@ -9,11 +9,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/runlease/runlease/pkg/provider"
-	awsprovider "github.com/runlease/runlease/pkg/provider/aws"
-	azureprovider "github.com/runlease/runlease/pkg/provider/azure"
-	gcpprovider "github.com/runlease/runlease/pkg/provider/gcp"
-	"github.com/runlease/runlease/pkg/registry"
+	"github.com/marshal-org/runlease/pkg/provider"
+	awsprovider "github.com/marshal-org/runlease/pkg/provider/aws"
+	azureprovider "github.com/marshal-org/runlease/pkg/provider/azure"
+	gcpprovider "github.com/marshal-org/runlease/pkg/provider/gcp"
+	"github.com/marshal-org/runlease/pkg/registry"
 )
 
 var (
@@ -67,11 +67,10 @@ func runleaseHome() string {
 	return filepath.Join(home, ".runlease")
 }
 
-func defaultCredDir() string        { return filepath.Join(runleaseHome(), "credentials") }
-func defaultRegistryPath() string   { return filepath.Join(runleaseHome(), "registry.json") }
-func defaultMasterKeyPath() string  { return filepath.Join(runleaseHome(), "master.key") }
-func defaultConfigPath() string     { return filepath.Join(runleaseHome(), "config.yaml") }
-
+func defaultCredDir() string       { return filepath.Join(runleaseHome(), "credentials") }
+func defaultRegistryPath() string  { return filepath.Join(runleaseHome(), "registry.json") }
+func defaultMasterKeyPath() string { return filepath.Join(runleaseHome(), "master.key") }
+func defaultConfigPath() string    { return filepath.Join(runleaseHome(), "config.yaml") }
 
 func loadRegistry() (*registry.Registry, error) {
 	return registry.Load(defaultRegistryPath())

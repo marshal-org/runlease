@@ -1,13 +1,14 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 
-	"github.com/runlease/runlease/pkg/credential"
-	"github.com/runlease/runlease/pkg/provider"
+	"github.com/marshal-org/runlease/pkg/credential"
+	"github.com/marshal-org/runlease/pkg/provider"
 )
 
 func init() {
@@ -59,11 +60,24 @@ func runSync(cmd *cobra.Command, _ []string) error {
 				"run `GOOGLE_CLOUD_PROJECT=<project> runlease down %s`\n", name, name)
 			continue
 		}
+		if newState == provider.StatusStopped {
+			// Powered off is not deleted: the machine and its disk still exist
+			// and are still billed. Delete it before forgetting it.
+			if err := p.Terminate(ctx, e.Handle.ID); err != nil && !errors.Is(err, provider.ErrNotFound) {
+				fmt.Fprintf(out, "%-22s  stopped, and deleting it failed: %v (kept)\n", name, err)
+				continue
+			}
+		}
 		if isDead {
 			if err := credential.Delete(e.CredDir, string(e.Handle.ID)); err != nil {
 				fmt.Fprintf(out, "%-22s  warning: could not delete credentials: %v\n", name, err)
 			}
-			if err := reg.Remove(name); err != nil {
+			// The token leaves with the registry entry, so this is the last
+			// chance to give the relay slot back. Best effort, as in 'down'.
+			if e.RelayAddr != "" && e.RelayToken != "" {
+				_ = releaseRelaySlot(ctx, e.RelayAddr, e.RelayToken)
+			}
+			if err := reg.RemoveID(e.Handle.ID); err != nil {
 				fmt.Fprintf(out, "%-22s  error removing from registry: %v\n", name, err)
 				continue
 			}

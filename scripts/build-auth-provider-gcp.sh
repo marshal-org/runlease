@@ -55,7 +55,7 @@ curl -sfL https://github.com/$REPO/releases/download/$TAG/$ASSET \\
 chmod +x /usr/local/lib/kubelet/credential-providers/auth-provider-gcp
 \`\`\`
 
-See [runlease docs/private-ar-k3s.md](https://github.com/ofirmakmal/runlease/blob/main/docs/private-ar-k3s.md)." \
+See [runlease docs/private-ar-k3s.md](https://github.com/marshal-org/runlease/blob/main/docs/private-ar-k3s.md)." \
   "$WORK/$ASSET"
 
 echo

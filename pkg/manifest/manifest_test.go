@@ -235,9 +235,9 @@ setup:
 
 func TestSudoMode_defaultsAndValid(t *testing.T) {
 	cases := []struct {
-		mode    SudoMode
-		ok      bool
-		pwLess  bool
+		mode   SudoMode
+		ok     bool
+		pwLess bool
 	}{
 		{"", true, false},
 		{SudoLocked, true, false},
@@ -305,4 +305,30 @@ func writeTempFile(t *testing.T, content string) string {
 	}
 	f.Close()
 	return f.Name()
+}
+
+func TestWantsPublicIP(t *testing.T) {
+	yes, no := true, false
+	tests := []struct {
+		name  string
+		relay string
+		set   *bool
+		want  bool
+	}{
+		{name: "relay, unset: no public IP", relay: "wss://relay.example.com", want: false},
+		{name: "no relay, unset: public IP, the only way in", want: true},
+		{name: "relay, set true", relay: "wss://relay.example.com", set: &yes, want: true},
+		{name: "no relay, set false", set: &no, want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &Manifest{PublicIP: tc.set, Relay: RelayConfig{Addr: tc.relay}}
+			if got := m.WantsPublicIP(); got != tc.want {
+				t.Errorf("WantsPublicIP = %v, want %v", got, tc.want)
+			}
+			if got := m.PublicIPExplicit(); got != (tc.set != nil) {
+				t.Errorf("PublicIPExplicit = %v, want %v", got, tc.set != nil)
+			}
+		})
+	}
 }

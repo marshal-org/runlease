@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- PRE-LAUNCH: remove this line when the repository goes public. -->
+<meta name="robots" content="noindex">
+<meta name="description" content="The Runlease threat model: who holds which key, what a compromised relay can and cannot do, and the limits we know about.">
+<title>Runlease security and threat model</title>
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<link rel="stylesheet" href="page.css">
+</head>
+<body>
+<div class="wrap wide">
+<header>
+  <a class="mark" href="./"><img src="logo.svg" alt="" width="26" height="26">runlease</a>
+  <nav aria-label="Main">
+    <a href="how-it-works.html">How it works</a>
+    <a href="security.html" aria-current="page">Security</a>
+    <a href="install.html">Install</a>
+    <a href="relay.html">Relay</a>
+    <a href="https://github.com/marshal-org/runlease">GitHub</a>
+  </nav>
+</header>
+<main>
+
+<p class="eyebrow">Security and threat model</p>
+<h1>Your keys stay on your machine. Everything else is built around that.</h1>
+<p class="lede">This page says what Runlease protects, from whom, and where the protection stops. Each claim names the code that backs it, so you can check it.</p>
+
+<nav class="toc" aria-label="On this page">
+  <a href="#custody">Who holds what</a>
+  <a href="#tunnel">The tunnel</a>
+  <a href="#attackers">Pick an attacker</a>
+  <a href="#guarantees">Guarantees</a>
+  <a href="#limits">Known limits</a>
+  <a href="#leases">Leases</a>
+  <a href="#releases">Verify a release</a>
+  <a href="#report">Report a vulnerability</a>
+</nav>
+
+<h2 id="short">The short version</h2>
+<div class="cards">
+  <div><span class="n">01</span><h3>Keys never leave</h3><p>The SSH login key is generated on your machine, for one VM, and its private half never goes anywhere else.</p></div>
+  <div><span class="n">02</span><h3>The relay is blind</h3><p>It copies bytes. It holds no key and no cloud credential, so it cannot read, change or impersonate a session.</p></div>
+  <div><span class="n">03</span><h3>The VM dials out</h3><p>No public address, and SSH listens on localhost only. The VM connects outward to the relay and waits.</p></div>
+  <div><span class="n">04</span><h3>Identity fixed before boot</h3><p>Your machine chooses the VM's SSH host key before the VM exists. Nothing is trusted on first use.</p></div>
+  <div><span class="n">05</span><h3>Verified, then unprivileged</h3><p>The VM checks the agent binary against a SHA-256 before running it, then runs it with no privileges.</p></div>
+  <div><span class="n">06</span><h3>Every machine expires</h3><p>A timer inside the VM deletes it when the lease ends, whether or not anyone is still watching.</p></div>
+</div>
+
+<h2 id="custody">Who holds what</h2>
+<p class="measure">Four parties are involved in a session. Read down the highlighted column: the relay, the only shared and internet-facing part, ends up holding almost nothing.</p>
+
+<div class="scroll">
+<table class="custody">
+  <thead>
+    <tr><th scope="col">Secret</th><th scope="col">Your machine</th><th scope="col" class="relay">The relay</th><th scope="col">Your VM</th><th scope="col">The network</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th scope="row">Login private key<small>Proves you to the VM</small></th>
+      <td><span class="has" role="img" aria-label="Holds it"></span></td>
+      <td class="relay"><span class="none" aria-label="Never sees it">–</span></td>
+      <td><span class="pub" role="img" aria-label="Public half only"></span></td>
+      <td><span class="none" aria-label="Never sees it">–</span></td>
+    </tr>
+    <tr>
+      <th scope="row">VM host private key<small>Proves the VM to you</small></th>
+      <td><span class="has" role="img" aria-label="Holds it"></span></td>
+      <td class="relay"><span class="none" aria-label="Never sees it">–</span></td>
+      <td><span class="has" role="img" aria-label="Holds it"></span></td>
+      <td><span class="none" aria-label="Never sees it">–</span></td>
+    </tr>
+    <tr>
+      <th scope="row">Session contents<small>Commands, files, forwarded traffic</small></th>
+      <td><span class="has" role="img" aria-label="Sees it"></span></td>
+      <td class="relay">ciphertext</td>
+      <td><span class="has" role="img" aria-label="Sees it"></span></td>
+      <td>ciphertext</td>
+    </tr>
+    <tr>
+      <th scope="row">Cloud credentials<small>What launches and deletes VMs</small></th>
+      <td><span class="has" role="img" aria-label="Holds it"></span></td>
+      <td class="relay"><span class="none" aria-label="Never sees it">–</span></td>
+      <td>only what you attach</td>
+      <td><span class="none" aria-label="Never sees it">–</span></td>
+    </tr>
+    <tr>
+      <th scope="row">Slot token<small>Matches your connections to your VM</small></th>
+      <td><span class="has" role="img" aria-label="Holds it"></span></td>
+      <td class="relay"><span class="has" role="img" aria-label="Holds it"></span></td>
+      <td><span class="has" role="img" aria-label="Holds it"></span></td>
+      <td>hidden by TLS</td>
+    </tr>
+    <tr>
+      <th scope="row">Who you are<small>The email you signed in with</small></th>
+      <td><span class="has" role="img" aria-label="Knows it"></span></td>
+      <td class="relay"><span class="has" role="img" aria-label="Knows it"></span></td>
+      <td><span class="none" aria-label="Does not know it">–</span></td>
+      <td>hidden by TLS</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+<p class="legend"><span><i class="has"></i> holds it</span><span><i class="pub"></i> public half only</span><span>– never sees it</span></p>
+
+<p class="measure">The relay holds two things: a slot token and your email address. The token is a routing label. It gets a connection as far as the VM's SSH server and no further, because logging in still needs the login key. Your email is how the relay applies limits.</p>
+
+<h2 id="tunnel">The tunnel</h2>
+<p class="measure">There are two layers of encryption, and they end in different places. TLS protects each hop to the relay. SSH runs inside it, from your machine all the way to the VM, with keys only those two ends have.</p>
+
+<figure class="diagram">
+  <svg viewBox="0 0 900 318" role="img" aria-label="Diagram. An SSH tunnel runs unbroken from the runlease CLI on your machine, through the relay, to the SSH server on your VM. Around it, TLS covers each hop separately and ends at the relay. The relay box is marked: sees ciphertext only, holds no keys.">
+    <!-- your machine -->
+    <rect class="g-zone" x="14" y="26" width="226" height="266"></rect>
+    <text class="g-l" x="26" y="46">YOUR MACHINE</text>
+    <rect class="g-box" x="34" y="92" width="186" height="150"></rect>
+    <text class="g-t" x="48" y="118">runlease CLI</text>
+    <rect class="g-key" x="48" y="198" width="10" height="10"></rect>
+    <text class="g-s" x="64" y="207">login key (private)</text>
+    <rect class="g-key" x="48" y="218" width="10" height="10"></rect>
+    <text class="g-s" x="64" y="227">VM host key, pinned</text>
+
+    <!-- relay -->
+    <rect class="g-box" x="360" y="62" width="180" height="210"></rect>
+    <text class="g-t" x="450" y="88" text-anchor="middle">relay</text>
+    <text class="g-sig" x="450" y="228" text-anchor="middle">sees ciphertext only</text>
+    <text class="g-sig" x="450" y="246" text-anchor="middle">holds no keys</text>
+
+    <!-- cloud -->
+    <rect class="g-zone" x="660" y="26" width="226" height="266"></rect>
+    <text class="g-l" x="672" y="46">YOUR CLOUD ACCOUNT</text>
+    <rect class="g-box" x="680" y="92" width="186" height="150"></rect>
+    <text class="g-t" x="694" y="118">spot VM · sshd</text>
+    <rect class="g-key" x="694" y="198" width="10" height="10"></rect>
+    <text class="g-s" x="710" y="207">VM host key</text>
+    <circle cx="699" cy="223" r="5" fill="none" stroke="var(--ink-3)" stroke-width="2"></circle>
+    <text class="g-s" x="710" y="227">login key (public half)</text>
+
+    <!-- outer TLS, one per hop -->
+    <rect class="g-tls" x="220" y="132" width="140" height="56"></rect>
+    <rect class="g-tls" x="540" y="132" width="140" height="56"></rect>
+    <text class="g-s" x="290" y="124" text-anchor="middle">TLS, hop 1</text>
+    <text class="g-s" x="610" y="124" text-anchor="middle">TLS, hop 2</text>
+    <text class="g-s" x="290" y="206" text-anchor="middle">you dial out</text>
+    <text class="g-s" x="610" y="206" text-anchor="middle">VM dials out</text>
+
+    <!-- inner SSH, end to end -->
+    <rect class="g-ssh" x="120" y="148" width="660" height="24"></rect>
+    <text class="g-ssh-t" x="450" y="164" text-anchor="middle">SSH · encrypted and authenticated end to end</text>
+    <circle class="g-ssh" cx="120" cy="160" r="9"></circle>
+    <circle class="g-ssh" cx="780" cy="160" r="9"></circle>
+  </svg>
+  <figcaption>The blue band is your SSH session. It starts and ends at the two machines you control. The relay only ever handles it from the outside.</figcaption>
+</figure>
+
+<p class="measure">Both connections to the relay are outbound: one from your machine, one from the VM. That is why the VM needs no inbound port, and why the relay is the only part that must be reachable from the internet.</p>
+
+<h2 id="attackers">Pick an attacker</h2>
+<p class="measure">The useful question about any security design is what a specific attacker walks away with. Choose one.</p>
+
+<div class="threat" id="threat">
+  <div class="threat-tabs" role="tablist" aria-label="Attackers">
+    <button role="tab" id="tt-relay" aria-controls="tp-relay" aria-selected="true">A compromised relay</button>
+    <button role="tab" id="tt-token" aria-controls="tp-token" aria-selected="false">A stolen slot token</button>
+    <button role="tab" id="tt-net" aria-controls="tp-net" aria-selected="false">The network</button>
+    <button role="tab" id="tt-cloud" aria-controls="tp-cloud" aria-selected="false">Read access to your cloud project</button>
+    <button role="tab" id="tt-vm" aria-controls="tp-vm" aria-selected="false">Hostile code on the VM</button>
+  </div>
+
+  <div class="threat-panel" role="tabpanel" id="tp-relay" aria-labelledby="tt-relay">
+    <h3>The relay is compromised, or its operator is hostile</h3>
+    <p class="who">The case the design is built for. This applies to the public relay and to one you run yourself.</p>
+    <div class="gets">
+      <div class="y"><h4>They get</h4><ul>
+        <li>The power to refuse or drop your connections</li>
+        <li>Connection metadata: your email, source addresses, timing, byte counts, slot tokens</li>
+        <li>A TCP connection to your VM's SSH server, where they can try to log in</li>
+        <li>The chance to serve a different agent binary to a booting VM</li>
+      </ul></div>
+      <div class="n"><h4>They do not get</h4><ul>
+        <li>Your commands, files or forwarded traffic. They see ciphertext</li>
+        <li>A way to pose as your VM. The host key was fixed before boot, and the CLI accepts no other</li>
+        <li>A login. They hold no key, and password login is off</li>
+        <li>Their binary executed. The VM checks its SHA-256 and stops on a mismatch</li>
+        <li>Anything in your cloud account</li>
+      </ul></div>
+    </div>
+    <p class="do"><b>If this matters</b>Run your own relay to keep the metadata inside your organisation. Nothing else changes.</p>
+  </div>
+
+  <div class="threat-panel" role="tabpanel" id="tp-token" aria-labelledby="tt-token">
+    <h3>Someone has a slot token</h3>
+    <p class="who">For example from a leaked log line or a copied registry file.</p>
+    <div class="gets">
+      <div class="y"><h4>They get</h4><ul>
+        <li>A TCP connection, through the relay, to that one VM's SSH server</li>
+        <li>The ability to release the slot, which interrupts your session</li>
+      </ul></div>
+      <div class="n"><h4>They do not get</h4><ul>
+        <li>A login. That needs the login private key</li>
+        <li>Your existing sessions. Each one is its own SSH connection</li>
+        <li>Any other VM. A token names one slot</li>
+      </ul></div>
+    </div>
+    <p class="do"><b>Built in</b>A token is 256 random bits, lives only in the relay's memory, and dies with its slot after 24 hours at most.</p>
+  </div>
+
+  <div class="threat-panel" role="tabpanel" id="tp-net" aria-labelledby="tt-net">
+    <h3>Someone is watching the network</h3>
+    <p class="who">Between you and the relay, or between the VM and the relay.</p>
+    <div class="gets">
+      <div class="y"><h4>They get</h4><ul>
+        <li>That you are talking to a relay, when, and how much</li>
+        <li>On a plain <code>ws://</code> relay only: the slot token and the agent download, in the clear</li>
+      </ul></div>
+      <div class="n"><h4>They do not get</h4><ul>
+        <li>Session contents. SSH protects them on any transport</li>
+        <li>Any key</li>
+        <li>On <code>wss://</code>: the slot token or your identity</li>
+      </ul></div>
+    </div>
+    <p class="do"><b>What to do</b>Use a <code>wss://</code> relay address anywhere outside a private network. The public relay is <code>wss://</code> only.</p>
+  </div>
+
+  <div class="threat-panel" role="tabpanel" id="tp-cloud" aria-labelledby="tt-cloud">
+    <h3>Someone can read instances in your cloud project</h3>
+    <p class="who">An IAM principal with instance read access. This is the weakest point, and the reason your cloud account counts as trusted.</p>
+    <div class="gets">
+      <div class="y"><h4>They get</h4><ul>
+        <li>The VM's boot script, which contains the host private key and the slot token</li>
+        <li>With both, plus control of a relay, a way to present the right host key to your CLI and pose as the VM</li>
+      </ul></div>
+      <div class="n"><h4>They do not get</h4><ul>
+        <li>A login to the real VM. The login private key is not in the boot script</li>
+        <li>Your past sessions</li>
+      </ul></div>
+    </div>
+    <p class="do"><b>What to do</b>Keep instance read access in that project narrow. Launch agent machines in a project of their own.</p>
+  </div>
+
+  <div class="threat-panel" role="tabpanel" id="tp-vm" aria-labelledby="tt-vm">
+    <h3>Code you do not trust runs on the VM</h3>
+    <p class="who">Which is the normal case: the VM exists to run an agent and whatever it downloads.</p>
+    <div class="gets">
+      <div class="y"><h4>It gets</h4><ul>
+        <li>Everything on that VM, for as long as the lease lasts</li>
+        <li>The instance metadata server, and so the boot script with the host key and slot token</li>
+        <li>The permissions of any service account or instance profile you attached</li>
+        <li>Root, only if the manifest set <code>sudo: passwordless</code></li>
+      </ul></div>
+      <div class="n"><h4>It does not get</h4><ul>
+        <li>Your login private key, or the keys of any other VM</li>
+        <li>A path back to your machine. Sessions are opened from your side only</li>
+        <li>Your cloud credentials, unless you put them there</li>
+      </ul></div>
+    </div>
+    <p class="do"><b>What to do</b>Attach no service account, or one with a single narrow role. Leave sudo off. Keep leases short. Treat the VM as already lost and make sure nothing on it is worth keeping.</p>
+  </div>
+</div>
+
+<h2 id="guarantees">Guarantees, and the code behind them</h2>
+
+<div class="proof">
+  <div><h3>The relay cannot read or alter a session</h3><p>The relay bridges a raw byte stream between the CLI and the agent. What flows through it is the SSH protocol, negotiated end to end between the CLI and the VM's <code>sshd</code>. SSH encrypts and authenticates every packet with keys the relay never sees.</p></div>
+  <div class="ref"><b>Code</b>pkg/relay/server.go · bridge</div>
+</div>
+<div class="proof">
+  <div><h3>The relay cannot impersonate the VM</h3><p>The CLI generates the VM's host key before the VM exists and pins it on every connection. A relay that routes you to any other machine fails the host key check and the connection is dropped. There is no trust-on-first-use anywhere in the code base, and host key checking is never turned off.</p></div>
+  <div class="ref"><b>Code</b>cmd/runlease/exec.go · ssh.FixedHostKey<br>cmd/runlease/forward.go</div>
+</div>
+<div class="proof">
+  <div><h3>The relay cannot log in</h3><p>It never holds the login key. <code>sshd</code> on the VM accepts public-key authentication only, for one user, with root login off.</p></div>
+  <div class="ref"><b>Code</b>pkg/userdata/userdata.go · sshd hardening</div>
+</div>
+<div class="proof">
+  <div><h3>The agent binary is verified before it runs</h3><p>The VM downloads <code>runlease-agent</code> from the relay at boot. The relay is not trusted, so the boot script checks the download against a SHA-256 and stops if it does not match. Release builds of the CLI have the digest of the matching agent compiled in. With a self-built relay, pin the digest in the manifest:</p>
+<pre><span class="k">relay</span>:
+  <span class="k">addr</span>: wss://relay.internal.example.com
+  <span class="k">agentSha256</span>: 3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e</pre>
+  <p>A plain <code>go build</code> of the CLI has no digest and prints a warning at <code>up</code>.</p></div>
+  <div class="ref"><b>Code</b>pkg/userdata/userdata.go<br>cmd/runlease/up.go · resolveAgentSHA256</div>
+</div>
+<div class="proof">
+  <div><h3>The agent has no privileges</h3><p>The agent only dials out to the relay and connects to <code>localhost:22</code>. Its systemd unit runs as an unprivileged user with <code>NoNewPrivileges</code>, an empty capability set, a read-only view of the system and no access to home directories or devices.</p></div>
+  <div class="ref"><b>Code</b>pkg/userdata/userdata.go · agent unit</div>
+</div>
+<div class="proof">
+  <div><h3>SSH listens on localhost only</h3><p>With a relay, the VM gets no public address by default and its SSH server is bound to <code>127.0.0.1</code>. The only way in is the agent, which dials out to the relay and hands each connection to SSH on localhost. The boot script writes the SSH settings first in the file, where SSH honours them, then asks SSH what it will enforce and stops if passwords are on, root login is allowed, or it would listen beyond localhost.</p><p>No NAT gateway on your subnet? Set <code>publicIp: true</code>. The address then carries outbound traffic only. See <a href="#limits">known limit 1</a>.</p></div>
+  <div class="ref"><b>Code</b>pkg/userdata/userdata.go · sshd<br>pkg/manifest/manifest.go · PublicIP</div>
+</div>
+<div class="proof">
+  <div><h3>sudo is off by default</h3><p>The login user may run two fixed scripts as root: one that deletes the VM and one that moves the deletion timer. General <code>sudo</code> needs <code>sudo: passwordless</code> in the manifest, set before launch.</p></div>
+  <div class="ref"><b>Code</b>pkg/userdata/userdata.go · sudoers</div>
+</div>
+<div class="proof">
+  <div><h3>The relay fails closed</h3><p>It refuses to start without authentication unless you pass <code>--insecure-no-auth</code>. It validates every slot token, caps live slots in total and per signed-in identity, gives a slot back when its machine has gone, and expires a slot after at most 24 hours.</p></div>
+  <div class="ref"><b>Code</b>cmd/runlease-relay/main.go<br>pkg/relay/server.go</div>
+</div>
+<div class="proof">
+  <div><h3>AWS instances require IMDSv2</h3><p>Instances are launched with <code>HttpTokens: required</code>, which blocks the usual request-forgery route to instance metadata.</p></div>
+  <div class="ref"><b>Code</b>pkg/provider/aws/provider.go</div>
+</div>
+
+<h2 id="limits">Known limits</h2>
+<p class="measure">These are real. We would rather you read them here than find them yourself.</p>
+
+<ol class="limits">
+  <li><div><p><b>Without a NAT gateway, the VM needs a public address to reach the relay.</b> That is the <code>publicIp: true</code> setting. Runlease's own SSH server still listens on localhost only, but anything else you start on the VM that listens on all interfaces is then exposed to whatever your cloud firewall allows. With no relay at all, the VM always has a public address and SSH listens on it.</p><p class="do">Give the subnet a NAT gateway and keep the default, so the VM has no public address at all.</p></div></li>
+  <li><div><p><b>The boot script contains the host private key and the slot token.</b> Anything that can read instance metadata can read them: an IAM principal with instance read access, and any process on the VM that can reach the metadata server. With both, an attacker who can also take the agent's place at the relay could present the right host key to your CLI. They still could not log in to the real VM.</p><p class="do">Keep instance read access narrow. On AWS, IMDSv2 is required; on GCP the metadata server already requires a custom header.</p></div></li>
+  <li><div><p><b>A slot token is a bearer secret.</b> Whoever holds it can open a TCP connection to the VM's <code>sshd</code> through the relay, and can release the slot. They cannot get past SSH authentication.</p></div></li>
+  <li><div><p><b>Stored keys are only as safe as your user account.</b> Key pairs are encrypted at rest, but the key that encrypts them sits beside them, readable by your user. This stops casual copying of the credentials directory. It does not stop someone who already runs code as you.</p></div></li>
+  <li><div><p><b>Relay sign-in is Google identity only</b>, for now. The relay learns the email address of whoever signs in, and logs it with each slot they open.</p></div></li>
+  <li><div><p><b>Limits are per identity, not per person.</b> Someone with several Google accounts gets the free allowance for each. A cap on total slots is the backstop.</p></div></li>
+  <li><div><p><b>The relay sees who talks to what, and when.</b></p><p class="do">Run your own if that metadata matters.</p></div></li>
+  <li><div><p><b><code>ws://</code> and bare <code>host:port</code> relay addresses are plaintext at the transport layer.</b> SSH still protects the session, but the slot token and the agent download cross the network in the clear.</p><p class="do">Use <code>wss://</code> outside a private network.</p></div></li>
+  <li><div><p><b>A manifest is code.</b> Its <code>setup</code> steps run as root on the VM.</p><p class="do">Read a manifest before you launch one you did not write.</p></div></li>
+  <li><div><p><b>Self-deletion on GCP needs the VM's service account to be able to delete the VM.</b> A custom <code>gcp.serviceAccount</code> is attached with the <code>cloud-platform</code> scope, so its IAM roles are the only limit on what code on the VM can do. Without that permission the VM powers itself off at the end of the lease instead: compute billing stops, but the stopped instance and its disk stay until something removes them.</p><p class="do">Use a dedicated service account with only that permission.</p></div></li>
+  <li><div><p><b>Spot VMs can be reclaimed by the cloud at any time.</b> That is a property of spot capacity, not a failure.</p></div></li>
+</ol>
+
+<h2 id="leases">Leases: making sure machines go away</h2>
+<p class="measure">A VM that outlives its purpose costs money and widens your attack surface. Three mechanisms overlap, so that no single failure leaves one running.</p>
+<ol class="seq">
+  <li><span class="who vm">Inside the VM</span><p>A systemd timer deletes the instance at the end of the lease. It is armed before anything in the boot script that can fail, and it does not depend on your machine being online.</p></li>
+  <li><span class="who">In your cloud</span><p>Every VM is tagged <code>runlease-managed</code>, with who created it and when it expires, so anything that reads your inventory can find and remove strays.</p></li>
+  <li><span class="who cli">On your machine</span><p><code>runlease daemon</code> watches leases from your side and terminates what has expired.</p></li>
+</ol>
+<p class="measure">On GCP a reclaimed spot VM is deleted, not stopped. On AWS the instance terminates on shutdown.</p>
+
+<h2 id="releases">Verify a release</h2>
+<p class="measure">Every release publishes <code>checksums.txt</code> with the SHA-256 of each binary. The <a href="install.html">install script</a> checks it for you.</p>
+<pre><span class="p">$</span> sha256sum --check --ignore-missing checksums.txt</pre>
+<p class="measure"><code>checksums.txt</code> is signed with <a href="https://www.sigstore.dev/">Sigstore</a> keyless signing, bound to the identity of the release workflow:</p>
+<pre><span class="p">$</span> cosign verify-blob checksums.txt \
+    --bundle checksums.txt.sigstore.json \
+    --certificate-identity-regexp '^https://github.com/marshal-org/runlease/\.github/workflows/release-please\.yml@refs/heads/main$' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com</pre>
+<p class="measure">Each binary also carries a build provenance attestation:</p>
+<pre><span class="p">$</span> gh attestation verify runlease-linux-amd64 --repo marshal-org/runlease</pre>
+
+<h3>How the project itself is protected</h3>
+<ul class="measure">
+  <li>Every pull request runs tests, static analysis, a known-vulnerability scan and a secret scan.</li>
+  <li>Pull requests from forks run on GitHub-hosted machines with a read-only token and no secrets.</li>
+  <li>Cloud credentials exist only in one workflow that never runs on a pull request.</li>
+  <li>Every GitHub Action is pinned to a commit, and dependencies are updated weekly.</li>
+</ul>
+
+<h2 id="report">Report a vulnerability</h2>
+<p class="measure">Please do not open a public issue. Email <code>security@marshal.codes</code>, or use the private advisory form on the GitHub repository. Say what an attacker can do, what they need to already have, the version, and how to reproduce it.</p>
+<div class="scroll"><table>
+  <tr><th>When</th><th>What</th></tr>
+  <tr><td>Within 2 working days</td><td>We confirm we received the report</td></tr>
+  <tr><td>Within 7 days</td><td>We tell you whether we can reproduce it and how serious we think it is</td></tr>
+  <tr><td>Within 30 days</td><td>A fix is released for confirmed issues, sooner for critical ones</td></tr>
+  <tr><td>At release</td><td>An advisory is published, with credit to you unless you prefer otherwise</td></tr>
+</table></div>
+<p class="measure">We will not take legal action against anyone who reports in good faith.</p>
+
+<div class="next">
+  <a class="btn" href="how-it-works.html">How it works, step by step</a>
+  <a class="btn" href="relay.html">The relay: ours or yours</a>
+</div>
+
+</main>
+<footer>
+  <span>Built by the team behind <a href="https://marshal.codes">Marshal</a>. Apache-2.0.</span>
+  <a href="how-it-works.html">How it works</a>
+  <a href="security.html">Security</a>
+  <a href="install.html">Install</a>
+  <a href="relay.html">Relay</a>
+  <a href="privacy.html">Privacy</a>
+  <a href="terms.html">Terms</a>
+</footer>
+</div>
+
+<script>
+(function () {
+  // The attacker picker. Without JavaScript every panel stays visible, in order.
+  var root = document.getElementById('threat');
+  var tabs = Array.prototype.slice.call(root.querySelectorAll('[role="tab"]'));
+  var panels = tabs.map(function (t) { return document.getElementById(t.getAttribute('aria-controls')); });
+  function select(i, focus) {
+    tabs.forEach(function (t, j) {
+      t.setAttribute('aria-selected', j === i ? 'true' : 'false');
+      t.setAttribute('tabindex', j === i ? '0' : '-1');
+      panels[j].hidden = j !== i;
+    });
+    if (focus) tabs[i].focus();
+  }
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { select(i, false); });
+    t.addEventListener('keydown', function (e) {
+      var n = null;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') n = (i + 1) % tabs.length;
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') n = (i - 1 + tabs.length) % tabs.length;
+      if (n === null) return;
+      e.preventDefault(); select(n, true);
+    });
+  });
+  select(0, false);
+})();
+</script>
+</body>
+</html>

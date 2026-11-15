@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/runlease/runlease/pkg/provider"
+	"github.com/marshal-org/runlease/pkg/provider"
 )
 
 // cacheTTL is how long a fetched rate is considered fresh. Spot prices drift

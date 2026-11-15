@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	cryptossh "golang.org/x/crypto/ssh"
 
-	"github.com/runlease/runlease/pkg/credential"
+	"github.com/marshal-org/runlease/pkg/credential"
 )
 
 func init() {
@@ -90,9 +90,9 @@ func runExec(cmd *cobra.Command, args []string) error {
 	}
 
 	if entry.RelayAddr != "" && !execDirect {
-		conn, err := dialRelay(entry.RelayAddr, entry.RelayToken)
+		conn, err := openRelay(cmd.Context(), cmd.ErrOrStderr(), entry)
 		if err != nil {
-			return fmt.Errorf("relay: %w", err)
+			return err
 		}
 		return execOverConn(conn, entry.RelayAddr, cred, remoteArgs)
 	}
@@ -191,9 +191,13 @@ func writeExecJSON(argv []string, exitCode int, errStr string) {
 }
 
 // quoteRemoteCommand joins argv into a single shell string. Each token is
-// single-quoted; embedded single quotes are escaped as '\''. This avoids
-// surprises from glob/${var} expansion in the *caller's* shell — the user's
-// argv reaches the remote shell verbatim.
+// single-quoted, and a single quote inside a token is written as
+//
+//	'\''
+//
+// (close the quote, an escaped quote, open it again). This avoids surprises
+// from glob/${var} expansion in the *caller's* shell — the user's argv reaches
+// the remote shell verbatim.
 func quoteRemoteCommand(argv []string) string {
 	var b strings.Builder
 	for i, a := range argv {
@@ -206,4 +210,3 @@ func quoteRemoteCommand(argv []string) string {
 	}
 	return b.String()
 }
-

@@ -27,22 +27,25 @@ const (
 	StatusUnknown    InstanceStatus = "unknown"
 )
 
+// A note on RequestSpot: it may return a handle together with an error. That
+// means the create request was accepted but did not finish cleanly, so the
+// instance exists or may come to exist. Callers must record or terminate it.
 type InstanceSpec struct {
-	ManifestName       string
-	InstanceType       string
-	Region             string
-	ImageID            string
-	SecurityGroupIDs   []string          // AWS: security group IDs
-	SubnetID           string            // AWS: subnet ID; GCP: subnetwork name or self-link
-	NetworkID          string            // GCP only: VPC network name or self-link (subnetwork alone usually suffices)
-	UserData           string            // raw script; provider is responsible for encoding
-	Tags               map[string]string // AWS: instance tags; GCP: labels
-	InstanceProfileARN string            // AWS only: IAM instance profile (enables SSM)
-	ServiceAccountEmail string           // GCP only: service account email (enables IAP etc.)
-	NetworkTags        []string          // GCP only: network tags for firewall rule matching
-	PublicIP           bool              // assign a public IP; default false (relay mode) or true (direct SSH)
-	SelfTermination    bool              // install runlease-terminate and grant compute-delete scope (GCP)
-	DiskSizeGb         int               // boot disk size in GB; 0 = use the image's default
+	ManifestName        string
+	InstanceType        string
+	Region              string
+	ImageID             string
+	SecurityGroupIDs    []string          // AWS: security group IDs
+	SubnetID            string            // AWS: subnet ID; GCP: subnetwork name or self-link
+	NetworkID           string            // GCP only: VPC network name or self-link (subnetwork alone usually suffices)
+	UserData            string            // raw script; provider is responsible for encoding
+	Tags                map[string]string // AWS: instance tags; GCP: labels
+	InstanceProfileARN  string            // AWS only: IAM instance profile (enables SSM)
+	ServiceAccountEmail string            // GCP only: service account email (enables IAP etc.)
+	NetworkTags         []string          // GCP only: network tags for firewall rule matching
+	PublicIP            bool              // assign a public IP; default false (relay mode) or true (direct SSH)
+	SelfTermination     bool              // install runlease-terminate and grant compute-delete scope (GCP)
+	DiskSizeGb          int               // boot disk size in GB; 0 = use the image's default
 }
 
 type InstanceHandle struct {
@@ -74,4 +77,22 @@ type CloudProvider interface {
 // "wrong project": never treat it as proof the VM is gone.
 func (h InstanceHandle) ProjectUnknown() bool {
 	return h.Provider == ProviderGCP && h.Project == ""
+}
+
+// EgressChecker is implemented by providers that can tell, before anything is
+// created, whether an instance with no public IP would have a route out.
+type EgressChecker interface {
+	// HasPrivateEgress reports whether the subnet (or, with none given, the
+	// one the provider would pick) has a NAT gateway for instances with no
+	// public IP. network is GCP only. An error means the check could not be
+	// made, not that there is no NAT.
+	HasPrivateEgress(ctx context.Context, network, subnet string) (bool, error)
+}
+
+// ConsoleReader is implemented by providers that can return an instance's
+// serial console output. `up` reads it while waiting for the agent, to report
+// a boot script that failed instead of waiting on a machine that will never
+// connect.
+type ConsoleReader interface {
+	ConsoleOutput(ctx context.Context, id InstanceID) (string, error)
 }

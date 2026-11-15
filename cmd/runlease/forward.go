@@ -16,9 +16,8 @@ import (
 	"github.com/spf13/cobra"
 	cryptossh "golang.org/x/crypto/ssh"
 
-	"github.com/runlease/runlease/pkg/credential"
-	"github.com/runlease/runlease/pkg/manifest"
-	"github.com/runlease/runlease/pkg/registry"
+	"github.com/marshal-org/runlease/pkg/credential"
+	"github.com/marshal-org/runlease/pkg/registry"
 )
 
 var (
@@ -99,9 +98,9 @@ func runForward(cmd *cobra.Command, args []string) error {
 	var conn net.Conn
 	var addr string
 	if entry.RelayAddr != "" {
-		conn, err = dialRelay(entry.RelayAddr, entry.RelayToken)
+		conn, err = openRelay(cmd.Context(), cmd.ErrOrStderr(), entry)
 		if err != nil {
-			return fmt.Errorf("relay: %w", err)
+			return err
 		}
 		addr = entry.RelayAddr
 	} else if entry.Handle.PublicIP != "" {
@@ -354,9 +353,10 @@ func (s forwardSpec) targetAddr() string {
 // parseForwardSpecs parses ssh-style "-L"/"-R" specifications.
 //
 // Accepted forms:
-//   port:host:port                  bind default (127.0.0.1)
-//   bind:port:host:port             explicit bind
-//   port:port                       shorthand → port:localhost:port
+//
+//	port:host:port                  bind default (127.0.0.1)
+//	bind:port:host:port             explicit bind
+//	port:port                       shorthand → port:localhost:port
 //
 // Invalid entries trigger a fatal error via os.Exit so each forward command
 // fails loudly before any listeners are opened.
@@ -371,12 +371,6 @@ func parseForwardSpecs(raw []string, dir forwardDirection) []forwardSpec {
 		out = append(out, s)
 	}
 	return out
-}
-
-// manifestForwardSpec converts a declarative manifest.ForwardSpec into the
-// internal forwardSpec used by the listener machinery.
-func manifestForwardSpec(f manifest.ForwardSpec) forwardSpec {
-	return forwardSpecFromShared(f.Direction, f.Bind, f.Local, f.Remote, f.Host)
 }
 
 // registryForwardsToSpecs is the registry-side equivalent — used by

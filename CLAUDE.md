@@ -22,6 +22,9 @@ pkg/config/           ~/.runlease/config.yaml — user defaults
 pkg/provider/         Cloud provider interface + aws/, gcp/, azure/ implementations
 pkg/instanceclass/    compute.small → e2-standard-2 etc. catalog resolver
 pkg/lifecycle/        Reclaim daemon (TTL expiry sweeper)
+pkg/signin/           `runlease login`: Google device sign-in flow + saved session (~/.runlease/auth.json)
+deploy/relay/         Terraform module for a relay VM (gcp/) + tiers.example.yaml
+site/                 Project website, published by .github/workflows/pages.yml
 docs/                 Reference + integration docs (Mermaid only — no ASCII diagrams)
                       - manifest.md            full schema reference (CLI: `runlease manifest schema`)
                       - private-ar-k3s.md      kubelet CredentialProvider pattern for private GCP AR pulls
@@ -29,7 +32,7 @@ docs/                 Reference + integration docs (Mermaid only — no ASCII di
 examples/manifests/   Sample manifest YAMLs
 ```
 
-Single Go module: `github.com/runlease/runlease` (Go 1.26+).
+Single Go module: `github.com/marshal-org/runlease` (Go 1.26+).
 
 ---
 
@@ -51,7 +54,8 @@ Single Go module: `github.com/runlease/runlease` (Go 1.26+).
 
 **Relay (`cmd/runlease-relay`)**:
 - `--addr :7777` and `--agent-binary <path>` are flags, not env vars.
-- `--allowed-emails` (comma-separated) gates `register` handshakes; missing means open.
+- `--audience` plus `--allowed-emails` / `--allowed-domains` gate `register` handshakes. The relay refuses to start without auth unless `--insecure-no-auth` is passed.
+- `--max-slots` caps live slots (default 5000).
 
 **Agent (`cmd/runlease-agent`)**:
 - `RUNLEASE_RELAY_ADDR` — `ws://host:port` or `wss://host` or bare `host:port`.
@@ -114,7 +118,21 @@ flowchart LR
 3. The agent connects to the relay with `role: instance, token: …` and gets `status: registered`.
 4. The relay wraps the agent WS in `yamux.Client` and the slot is ready (`/ready` returns 200).
 5. Each CLI subcommand opens a fresh WebSocket with `role: client, token: …` — relay does `session.OpenStream()` and bridges the stream to the CLI WebSocket.
-6. Token TTL = 24h (`tokenTTL`); past that the slot is removed and reconnects are rejected.
+6. A slot lives for its tier's `slotTTL` (24h when no tiers file sets one) and is dropped earlier after `idleTTL` with no agent or client. Past that, reconnects are rejected until the CLI registers the token again (`runlease connect` does). `down`, `sync`, the daemon and a failed `up` release the slot at once.
+
+### Instance lifecycle
+
+The registry is the only local record of a machine, so these rules keep it from losing one:
+
+1. `up` refuses a name that is in the registry and whose machine still exists (`freeName`). If the machine is gone, the stale entry is cleared first.
+2. The entry is written (`State: pending`) as soon as the create request is accepted, before the wait for running. A create error that comes with a handle still gets recorded. A machine that cannot be recorded is deleted (`abandonLaunch`).
+3. Every registry write goes through `Registry.mutate`: file lock, re-read, one change, atomic rename. Never write back a map loaded earlier. Remove by instance ID (`RemoveID`), not by name.
+4. Gone means the cloud says not found (or AWS `terminated`). Powered off (`StatusStopped`, including GCP `TERMINATED`) still exists and is billed: `sync` and the daemon delete it before dropping the entry.
+5. The lease is a deadline on the VM's disk (`/var/lib/runlease/lease-deadline`), re-armed at each boot by `runlease-lease.service`. The boot script runs once (`/var/lib/runlease/booted`). `selfTermination` defaults to true.
+7. Waiting for the agent is bounded and explains itself (`waitForAgent`): the slot is gone (relay 404), the boot script failed (it writes `RUNLEASE_BOOT_FAILED stage=… exit=…` to the serial console, read through `provider.ConsoleReader`), or the time is up. A setup step that fails ends the log with `__RUNLEASE_SETUP_FAILED__`.
+8. Commands reach a machine through `openRelay`, which registers the slot again when the relay answers "unauthorized". Don't call `dialRelay` directly from a command.
+9. `up` compares the relay's agent with the digest the VM will check (`checkRelayAgent`) before it reserves a slot or creates anything.
+6. The daemon rescans the registry every poll, retries a failed terminate, and reads the registry again before acting on a deadline.
 
 ### What lives where
 
@@ -129,11 +147,13 @@ flowchart LR
 
 These must hold regardless of feature work:
 
-1. **The relay is credential-less.** It never sees SSH keys, ID tokens, or plaintext bytes from the SSH session. Even on the agent side, the relay holds yamux frames — the SSH protocol on top is end-to-end between CLI and sshd. Don't add anything that requires the relay to inspect application bytes.
+1. **The relay holds nothing that can open a session.** It never sees SSH keys or plaintext bytes from the SSH session. It does see two things: the Google ID token a CLI presents to register a slot or call `/me`, which it verifies and does not store, and the OAuth client ID and secret of the sign-in client, which it publishes to CLIs (an installed-application client; Google does not treat that secret as confidential). Don't give the relay any secret that grants access to a VM or a cloud account. Even on the agent side, the relay holds yamux frames — the SSH protocol on top is end-to-end between CLI and sshd. Don't add anything that requires the relay to inspect application bytes.
 2. **Host keys are pre-issued, not TOFU.** `runlease up` generates the instance's ed25519 host keypair locally; the public key is embedded in the userdata for sshd and the private key is base64'd into the userdata. The CLI side uses `cryptossh.FixedHostKey` against the known public key. Don't introduce `InsecureIgnoreHostKey` or trust-on-first-use anywhere.
 3. **sshd is hardened by the bootstrap.** `PasswordAuthentication no`, `AllowUsers runlease-agent`, `PermitRootLogin no`, only ed25519 host key offered. Don't relax this without explicit user request.
 4. **Sudo is locked by default.** Only `/usr/local/bin/runlease-terminate` and `/usr/local/bin/runlease-snooze` are NOPASSWD (the latter re-arms the named `runlease-selfterminate` timer for `runlease snooze`). `manifest.sudo: passwordless` is the opt-in. Don't add fields that quietly grant elevated privileges, and gate any new NOPASSWD entry to a single specific script.
-5. **Connection ownership.** `newSSHClient` and `execOverConn` close `conn` on every error path; callers don't double-close. SFTP/forward clients are bound to one SSH client they own end-to-end.
+5. **The agent is verified and unprivileged.** The boot script checks the relay-served agent against a SHA-256 before running it, and the agent's systemd unit runs as `runlease-agent` with no capabilities. Don't add a path that executes an unverified download or runs the agent as root.
+6. **The relay fails closed.** It validates slot tokens (32 to 128 chars of `[A-Za-z0-9_-]`), caps slots, and won't start open by accident. Never slice or log a token without going through `shortTok`.
+7. **Connection ownership.** `newSSHClient` and `execOverConn` close `conn` on every error path; callers don't double-close. SFTP/forward clients are bound to one SSH client they own end-to-end.
 
 ---
 
@@ -150,28 +170,11 @@ These must hold regardless of feature work:
 
 ## Deployment Story
 
-The relay is a singleton: one VM at `runlease-relay` in `marshal-dev-495114/us-central1-a`, exposed via `wss://relay.runlease.online` (Cloudflare in front). The agent binary served from `/agent` is what every new VM downloads at boot, so **relay version == agent version** by construction.
+The relay serves the agent binary at `/agent`, and every new VM downloads it at boot, so **relay version == agent version** by construction. Release builds of the CLI carry the SHA-256 of the matching agent and VMs refuse anything else, so a relay must run the **release** binaries (or manifests must pin `relay.agentSha256`).
 
-To deploy:
-```bash
-# 1. Cross-compile for linux/amd64 (the relay VM is x86_64 Debian/Ubuntu)
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o /tmp/runlease-relay-linux ./cmd/runlease-relay
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o /tmp/runlease-agent-linux ./cmd/runlease-agent
+How to deploy, authenticate and upgrade a relay: [`docs/self-hosting-relay.md`](docs/self-hosting-relay.md).
 
-# 2. SCP via gcloud (no public SSH port on the relay either)
-gcloud compute scp --zone us-central1-a --project marshal-dev-495114 \
-  /tmp/runlease-relay-linux /tmp/runlease-agent-linux runlease-relay:/tmp/
-
-# 3. Install atomically + restart systemd unit
-gcloud compute ssh --zone us-central1-a --project marshal-dev-495114 runlease-relay --command "
-  sudo chmod +x /tmp/runlease-relay-linux /tmp/runlease-agent-linux &&
-  sudo mv /tmp/runlease-relay-linux /usr/local/bin/runlease-relay &&
-  sudo mv /tmp/runlease-agent-linux /usr/local/bin/runlease-agent &&
-  sudo systemctl restart runlease-relay &&
-  curl -sS http://localhost:7777/health"
-```
-
-Existing VMs that booted with the previous agent are not auto-upgraded — they keep running their old agent until the spot instance dies. For a clean cutover, tear them down (`runlease down <name>`) and re-launch.
+Existing VMs that booted with the previous agent are not auto-upgraded. They keep running their old agent until the spot instance dies.
 
 ---
 
@@ -187,6 +190,5 @@ Existing VMs that booted with the previous agent are not auto-upgraded — they 
 ## Common Pitfalls
 
 - **Backticks in `pkg/userdata/userdata.go`**: the template is a Go raw string literal, so any backtick inside it is a Go syntax error. Use single-quotes in inline comments.
-- **`gh issue`/`gh pr` against the wrong remote**: this repo is `ofirmakmal/runlease`. The marshal monorepo work uses `marshal-org/marshal`. `gh` infers from cwd remotes, but if you're outside the repo, pass `--repo`.
 - **`runlease ssh` requires a TTY**: that's intentional. For non-interactive use, `runlease exec`.
 - **Concurrent CLI calls work only against the deployed yamux relay.** If the relay binary on `runlease-relay` is older than `0.0.6`, a second CLI process gets `i/o timeout` on the relay handshake while the first is active. Verify the deployed version before assuming a relay bug.

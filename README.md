@@ -196,6 +196,17 @@ have to trust with your sessions.
 The [threat model](docs/security.md) says exactly what each party can and cannot do, and lists
 the limits we know about. To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
+## For Claude Code
+
+A plugin gives Claude Code the skills to use Runlease on its own, slash commands, typed tools, and
+a live view of what is running:
+
+```
+/plugin install runlease --marketplace marshal-org/runlease
+```
+
+What it adds and what it holds Claude to: [the Claude Code plugin](docs/claude-plugin.md).
+
 ## The relay
 
 A relay is one small Go binary. You have three choices:

@@ -1,0 +1,11 @@
+{
+  "name": "runlease",
+  "owner": { "name": "Marshal Security", "url": "https://marshal.codes" },
+  "plugins": [
+    {
+      "name": "runlease",
+      "source": "./plugin",
+      "description": "Leased spot machines for coding agents, in your own cloud: skills, slash commands, typed tools and a live view of what is running."
+    }
+  ]
+}

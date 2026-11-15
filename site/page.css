@@ -142,9 +142,14 @@ figure { margin: 0; }
 .gets .y h4 { color: var(--no); }
 .gets .n h4 { color: var(--ok); }
 .gets ul { list-style: none; margin: 0; padding: 0; font-size: .94rem; }
-.gets li { display: grid; grid-template-columns: 20px 1fr; margin-bottom: 8px; }
+/* A block with a hanging marker, not a grid: in a grid every inline <code>
+   becomes its own cell and the sentence breaks into columns. */
+.gets li { position: relative; padding-left: 20px; margin-bottom: 8px; overflow-wrap: anywhere; }
+.gets li::before { position: absolute; left: 0; top: 0; }
 .gets .y li::before { content: "\2212"; color: var(--no); font-weight: 700; font-family: var(--mono); }
 .gets .n li::before { content: "\00d7"; color: var(--ok); font-weight: 700; font-family: var(--mono); }
+.tabset .threat-tabs button[aria-selected="true"] { border-bottom-color: var(--signal); }
+.tabset .threat-panel pre { margin: 0; }
 .threat-panel .do { margin: 14px 0 0; font-size: .93rem; }
 .threat-panel .do b { font-family: var(--mono); font-size: .74rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-right: 6px; }
 

@@ -1,0 +1,11 @@
+name: gcp-relay-test
+provider: gcp
+region: us-central1-a
+instanceClass: compute.small
+baseImage: projects/debian-cloud/global/images/debian-12-bookworm-v20260428
+reclaim:
+  ttl: 1h
+relay:
+  addr: wss://relay.example.com
+tags:
+  env: test

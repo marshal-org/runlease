@@ -1,0 +1,416 @@
+package gcp
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
+	"time"
+	"unicode"
+
+	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
+	"google.golang.org/api/option"
+
+	"github.com/marshal-org/runlease/pkg/provider"
+)
+
+// DefaultImageFamily is the GCP image resolved at instance creation when no
+// baseImage is specified in the manifest. GCP resolves the family to the latest
+// image at insert time, so no pre-launch API call is needed.
+const DefaultImageFamily = "projects/debian-cloud/global/images/family/debian-12"
+
+// Provider implements CloudProvider for GCP Compute Engine spot VMs.
+//
+// Authentication uses Application Default Credentials (ADC):
+//
+//	gcloud auth application-default login     (developer workstation)
+//	GOOGLE_APPLICATION_CREDENTIALS=key.json  (service account key file)
+//	Attached service account                  (if running on GCP)
+//
+// The manifest `region` field is treated as a GCP zone (e.g. "us-central1-a").
+type Provider struct {
+	svc           *compute.Service
+	projectID     string
+	zone          string
+	pollInterval  time.Duration
+	deleteTimeout time.Duration // how long Terminate waits for the instance to disappear
+}
+
+// New returns a provider for zone in project. Pass the project recorded in the
+// instance's registry handle; an empty project is resolved from the
+// environment / gcloud config (used by `up`, and by registry entries written
+// before the project was recorded).
+func New(ctx context.Context, zone, project string) (*Provider, error) {
+	if project == "" {
+		var err error
+		if project, err = resolveProjectID(ctx); err != nil {
+			return nil, err
+		}
+	}
+	svc, err := compute.NewService(ctx, option.WithScopes(compute.ComputeScope))
+	if err != nil {
+		return nil, fmt.Errorf("creating compute service: %w", err)
+	}
+	return &Provider{
+		svc:           svc,
+		projectID:     project,
+		zone:          zone,
+		pollInterval:  5 * time.Second,
+		deleteTimeout: 3 * time.Minute,
+	}, nil
+}
+
+// ProjectID is the GCP project this provider operates in.
+func (p *Provider) ProjectID() string { return p.projectID }
+
+func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) (*provider.InstanceHandle, error) {
+	name := generateInstanceName(spec.ManifestName)
+
+	inst := &compute.Instance{
+		Name:        name,
+		MachineType: fmt.Sprintf("zones/%s/machineTypes/%s", p.zone, spec.InstanceType),
+		Scheduling: &compute.Scheduling{
+			ProvisioningModel: "SPOT",
+			AutomaticRestart:  googleapi.Bool(false),
+			OnHostMaintenance: "TERMINATE",
+			// DELETE (not the Spot default STOP) on preemption, so a preempted
+			// instance is removed along with its AutoDelete boot disk instead of
+			// lingering in a stopped state and accruing disk cost.
+			InstanceTerminationAction: "DELETE",
+		},
+		Disks: []*compute.AttachedDisk{
+			{
+				Boot:       true,
+				AutoDelete: true,
+				InitializeParams: &compute.AttachedDiskInitializeParams{
+					SourceImage: spec.ImageID,
+					DiskSizeGb:  int64(spec.DiskSizeGb), // 0 → GCP uses the image's default size
+				},
+			},
+		},
+		NetworkInterfaces: []*compute.NetworkInterface{
+			gcpNetworkInterface(spec.NetworkID, spec.SubnetID, p.zone, spec.PublicIP),
+		},
+		Metadata: &compute.Metadata{
+			Items: []*compute.MetadataItems{
+				{Key: "startup-script", Value: &spec.UserData},
+			},
+		},
+	}
+
+	if len(spec.NetworkTags) > 0 {
+		inst.Tags = &compute.Tags{Items: spec.NetworkTags}
+	}
+	if spec.ServiceAccountEmail != "" {
+		inst.ServiceAccounts = []*compute.ServiceAccount{{
+			Email:  spec.ServiceAccountEmail,
+			Scopes: []string{"https://www.googleapis.com/auth/cloud-platform"},
+		}}
+	} else if spec.SelfTermination {
+		// Attach the default SA with compute scope so the terminate script can
+		// call the instances.delete API. Without this the metadata token has only
+		// logging/monitoring scopes and the delete call returns 403.
+		inst.ServiceAccounts = []*compute.ServiceAccount{{
+			Email:  "default",
+			Scopes: []string{"https://www.googleapis.com/auth/compute"},
+		}}
+	}
+	if len(spec.Tags) > 0 {
+		inst.Labels = gcpLabels(spec.Tags)
+	}
+
+	op, err := p.svc.Instances.Insert(p.projectID, p.zone, inst).Context(ctx).Do()
+	if err != nil {
+		return nil, fmt.Errorf("insert instance: %w", err)
+	}
+	handle := &provider.InstanceHandle{
+		ID:           provider.InstanceID(name),
+		Provider:     provider.ProviderGCP,
+		InstanceType: spec.InstanceType,
+		Region:       p.zone,
+		Project:      p.projectID,
+		State:        provider.StatusPending,
+		ManifestName: spec.ManifestName,
+		CreatedAt:    time.Now().UTC(),
+		Tags:         spec.Tags,
+	}
+	if err := p.waitForZoneOp(ctx, op.Name); err != nil {
+		// The insert was accepted. Whether we timed out, were interrupted, or
+		// it failed, the caller gets the handle so it can record the instance
+		// and clean it up: returning nil here would orphan a VM that the
+		// operation goes on to create.
+		return handle, fmt.Errorf("instance creation: %w", err)
+	}
+	return handle, nil
+}
+
+// Terminate deletes the instance and returns nil only once a Get in the same
+// project and zone returns 404. A 404 on the Delete itself is reported as a
+// wrapped provider.ErrNotFound, never as success: it is also what a wrong
+// project or zone looks like.
+func (p *Provider) Terminate(ctx context.Context, id provider.InstanceID) error {
+	op, err := p.svc.Instances.Delete(p.projectID, p.zone, string(id)).Context(ctx).Do()
+	if err != nil {
+		if isNotFound(err) {
+			return fmt.Errorf("instance %s not found in project %s, zone %s: %w",
+				id, p.projectID, p.zone, provider.ErrNotFound)
+		}
+		return fmt.Errorf("delete instance: %w", err)
+	}
+	if err := p.waitForZoneOp(ctx, op.Name); err != nil {
+		return fmt.Errorf("delete instance: %w", err)
+	}
+	return p.waitUntilGone(ctx, id)
+}
+
+// waitUntilGone polls Get until the instance returns 404 or deleteTimeout
+// passes. Other Get errors (network, rate limit) are retried until the deadline.
+func (p *Provider) waitUntilGone(ctx context.Context, id provider.InstanceID) error {
+	deadline := time.Now().Add(p.deleteTimeout)
+	for {
+		inst, err := p.svc.Instances.Get(p.projectID, p.zone, string(id)).Context(ctx).Do()
+		if err != nil && isNotFound(err) {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			if err != nil {
+				return fmt.Errorf("confirming deletion of %s in project %s, zone %s: %w", id, p.projectID, p.zone, err)
+			}
+			return fmt.Errorf("instance %s still exists in project %s, zone %s (status %s) %s after the delete completed",
+				id, p.projectID, p.zone, inst.Status, p.deleteTimeout)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(p.pollInterval):
+		}
+	}
+}
+
+func (p *Provider) Status(ctx context.Context, id provider.InstanceID) (provider.InstanceStatus, error) {
+	inst, err := p.svc.Instances.Get(p.projectID, p.zone, string(id)).Context(ctx).Do()
+	if err != nil {
+		if isNotFound(err) {
+			return provider.StatusTerminated, nil
+		}
+		return provider.StatusUnknown, fmt.Errorf("get instance: %w", err)
+	}
+	return gcpStatus(inst.Status), nil
+}
+
+func (p *Provider) WaitUntilRunning(ctx context.Context, id provider.InstanceID) (*provider.InstanceHandle, error) {
+	ticker := time.NewTicker(p.pollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+			inst, err := p.svc.Instances.Get(p.projectID, p.zone, string(id)).Context(ctx).Do()
+			if err != nil {
+				return nil, fmt.Errorf("describe instance: %w", err)
+			}
+			switch gcpStatus(inst.Status) {
+			case provider.StatusRunning:
+				return gcpHandle(inst, p.zone), nil
+			case provider.StatusTerminated, provider.StatusStopped:
+				return nil, fmt.Errorf("instance %s entered state %s", id, inst.Status)
+			}
+		}
+	}
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+func gcpHandle(inst *compute.Instance, zone string) *provider.InstanceHandle {
+	h := &provider.InstanceHandle{
+		ID:           provider.InstanceID(inst.Name),
+		Provider:     provider.ProviderGCP,
+		InstanceType: machineTypeName(inst.MachineType),
+		Region:       zone,
+		State:        gcpStatus(inst.Status),
+	}
+	if len(inst.NetworkInterfaces) > 0 {
+		h.PrivateIP = inst.NetworkInterfaces[0].NetworkIP
+		if len(inst.NetworkInterfaces[0].AccessConfigs) > 0 {
+			h.PublicIP = inst.NetworkInterfaces[0].AccessConfigs[0].NatIP
+		}
+	}
+	return h
+}
+
+// machineTypeName extracts the bare machine-type name from the full URL the
+// Compute API returns (e.g. ".../zones/us-central1-a/machineTypes/e2-standard-2"
+// → "e2-standard-2"). Returns the input unchanged if it has no path.
+func machineTypeName(url string) string {
+	if i := strings.LastIndex(url, "/"); i >= 0 {
+		return url[i+1:]
+	}
+	return url
+}
+
+func gcpStatus(s string) provider.InstanceStatus {
+	switch s {
+	case "PROVISIONING", "STAGING":
+		return provider.StatusPending
+	case "RUNNING":
+		return provider.StatusRunning
+	case "STOPPING", "STOPPED", "SUSPENDED", "SUSPENDING", "TERMINATED":
+		// GCP's TERMINATED means powered off. The instance and its disk still
+		// exist and are still billed; only a 404 means it is gone (see Status).
+		return provider.StatusStopped
+	default:
+		return provider.StatusUnknown
+	}
+}
+
+func (p *Provider) waitForZoneOp(ctx context.Context, opName string) error {
+	for {
+		op, err := p.svc.ZoneOperations.Get(p.projectID, p.zone, opName).Context(ctx).Do()
+		if err != nil {
+			return fmt.Errorf("get operation: %w", err)
+		}
+		if op.Status == "DONE" {
+			if op.Error != nil && len(op.Error.Errors) > 0 {
+				return fmt.Errorf("operation failed: %s", op.Error.Errors[0].Message)
+			}
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(p.pollInterval):
+		}
+	}
+}
+
+// generateInstanceName produces a GCP-valid name: lowercase alphanumeric +
+// hyphens, max 63 chars, must start with a letter. Format: rl-<name>-<hex6>.
+func generateInstanceName(manifestName string) string {
+	sanitized := strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return unicode.ToLower(r)
+		}
+		return '-'
+	}, manifestName)
+	sanitized = strings.Trim(sanitized, "-")
+	sanitized = strings.TrimPrefix(sanitized, "rl-")
+	if len(sanitized) > 40 {
+		sanitized = sanitized[:40]
+	}
+	b := make([]byte, 3)
+	rand.Read(b) //nolint:errcheck
+	return fmt.Sprintf("rl-%s-%s", sanitized, hex.EncodeToString(b))
+}
+
+// gcpNetworkInterface builds the single NIC attached to the instance. An empty
+// network and subnetwork leaves GCP to pick the auto-mode "default" network;
+// custom-mode VPCs (no "default") require at least the subnetwork to be set —
+// GCP infers the network from it, so passing network alone is optional.
+//
+// Bare names are expanded to the partial resource paths the Compute API
+// requires: a subnetwork is regional (the region is inferred from the instance
+// zone) and a network is global. A value already containing "/" (a full or
+// partial self-link) is passed through untouched.
+func gcpNetworkInterface(network, subnetwork, zone string, publicIP bool) *compute.NetworkInterface {
+	ni := &compute.NetworkInterface{}
+	if network != "" {
+		ni.Network = qualifyNetwork(network)
+	}
+	if subnetwork != "" {
+		ni.Subnetwork = qualifySubnetwork(subnetwork, zone)
+	}
+	if publicIP {
+		ni.AccessConfigs = []*compute.AccessConfig{
+			{Type: "ONE_TO_ONE_NAT", Name: "External NAT"},
+		}
+	}
+	return ni
+}
+
+// qualifyNetwork expands a bare VPC network name to the global partial resource
+// path the Compute API expects. Values already containing "/" pass through.
+func qualifyNetwork(network string) string {
+	if strings.Contains(network, "/") {
+		return network
+	}
+	return "global/networks/" + network
+}
+
+// qualifySubnetwork expands a bare subnetwork name to a regional partial
+// resource path, inferring the region from the instance zone (e.g.
+// europe-west1-b → europe-west1). Values already containing "/", or names with
+// no zone to derive a region from, pass through unchanged.
+func qualifySubnetwork(subnetwork, zone string) string {
+	if strings.Contains(subnetwork, "/") || zone == "" {
+		return subnetwork
+	}
+	region := zone
+	if idx := strings.LastIndex(zone, "-"); idx >= 0 {
+		region = zone[:idx]
+	}
+	return fmt.Sprintf("regions/%s/subnetworks/%s", region, subnetwork)
+}
+
+func resolveProjectID(ctx context.Context) (string, error) {
+	if p := os.Getenv("GOOGLE_CLOUD_PROJECT"); p != "" {
+		return p, nil
+	}
+	if p := os.Getenv("GCLOUD_PROJECT"); p != "" {
+		return p, nil
+	}
+	if _, err := exec.LookPath("gcloud"); err != nil {
+		return "", fmt.Errorf("GCP project ID not set: export GOOGLE_CLOUD_PROJECT=<project-id>")
+	}
+	out, err := exec.CommandContext(ctx, "gcloud", "config", "get-value", "project").Output()
+	if err == nil {
+		if p := strings.TrimSpace(string(out)); p != "" && p != "(unset)" {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("GCP project not configured: run 'gcloud config set project <project-id>' or export GOOGLE_CLOUD_PROJECT=<project-id>")
+}
+
+// gcpLabels converts a generic tag map to GCP label format.
+// GCP label keys/values must match [a-z0-9_-]* and be ≤63 chars.
+func gcpLabels(tags map[string]string) map[string]string {
+	out := make(map[string]string, len(tags))
+	for k, v := range tags {
+		out[gcpSanitize(k)] = gcpSanitize(v)
+	}
+	return out
+}
+
+func gcpSanitize(s string) string {
+	s = strings.ToLower(s)
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('-')
+		}
+	}
+	v := strings.Trim(b.String(), "-")
+	if len(v) > 63 {
+		v = v[:63]
+	}
+	if v == "" {
+		return "unknown"
+	}
+	return v
+}
+
+func isNotFound(err error) bool {
+	var e *googleapi.Error
+	if ok := errors.As(err, &e); ok {
+		return e.Code == 404
+	}
+	return false
+}

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/marshal-org/runlease/security/advisories/new
+    about: Please do not open a public issue for a vulnerability. Report it privately here.
+  - name: Ask a question
+    url: https://github.com/marshal-org/runlease/discussions
+    about: Usage questions, ideas, and show-and-tell.

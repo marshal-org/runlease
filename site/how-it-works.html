@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- PRE-LAUNCH: remove this line when the repository goes public. -->
+<meta name="robots" content="noindex">
+<meta name="description" content="How Runlease launches a machine, connects to it through a relay that holds no keys, and makes sure it deletes itself.">
+<title>How Runlease works</title>
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<link rel="stylesheet" href="page.css">
+</head>
+<body>
+<div class="wrap wide">
+<header>
+  <a class="mark" href="./"><img src="logo.svg" alt="" width="26" height="26">runlease</a>
+  <nav aria-label="Main">
+    <a href="how-it-works.html" aria-current="page">How it works</a>
+    <a href="security.html">Security</a>
+    <a href="install.html">Install</a>
+    <a href="relay.html">Relay</a>
+    <a href="https://github.com/marshal-org/runlease">GitHub</a>
+  </nav>
+</header>
+<main>
+<p class="eyebrow">How it works</p>
+<h1>Three small programs. One of them is deliberately kept in the dark.</h1>
+<p class="lede">The CLI holds the keys and opens every session. The agent sits on the VM and dials out. The relay introduces them and then only copies bytes.</p>
+
+<nav class="toc" aria-label="On this page">
+  <a href="#parts">The parts</a>
+  <a href="#launch">A launch, step by step</a>
+  <a href="#sessions">Sessions</a>
+  <a href="#signin">Signing in</a>
+  <a href="#vm">Inside the VM</a>
+  <a href="#leases">Leases</a>
+  <a href="#local">On your machine</a>
+  <a href="#protocol">The relay protocol</a>
+</nav>
+
+<h2 id="parts">The parts</h2>
+<div class="scroll"><table>
+  <tr><th>Program</th><th>Runs on</th><th>Does</th></tr>
+  <tr><td><code>runlease</code></td><td>Your machine, an agent's sandbox, or CI</td><td>Launches VMs through the cloud API, holds the keys, and opens every session</td></tr>
+  <tr><td><code>runlease-agent</code></td><td>Each VM</td><td>Dials out to the relay and hands incoming streams to <code>sshd</code> on localhost</td></tr>
+  <tr><td><code>runlease-relay</code></td><td>One small server with a public TLS endpoint</td><td>Matches CLI connections to the right agent and copies bytes between them</td></tr>
+</table></div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 900 250" role="img" aria-label="Diagram. On the left, the runlease CLI on your machine. In the middle, the relay. On the right, inside your cloud account, a spot VM running runlease-agent and sshd. The CLI connects out to the relay. The agent connects out to the relay. The CLI also calls the cloud API directly to create and delete the VM.">
+    <rect class="g-zone" x="14" y="20" width="226" height="210"></rect>
+    <text class="g-l" x="26" y="40">YOUR MACHINE</text>
+    <rect class="g-box" x="34" y="80" width="186" height="90"></rect>
+    <text class="g-t" x="48" y="108">runlease CLI</text>
+    <text class="g-s" x="48" y="128">holds the keys</text>
+    <text class="g-s" x="48" y="146">opens every session</text>
+
+    <rect class="g-box" x="370" y="80" width="160" height="90"></rect>
+    <text class="g-t" x="450" y="108" text-anchor="middle">relay</text>
+    <text class="g-s" x="450" y="128" text-anchor="middle">matches the two sides</text>
+    <text class="g-s" x="450" y="146" text-anchor="middle">copies bytes</text>
+
+    <rect class="g-zone" x="660" y="20" width="226" height="210"></rect>
+    <text class="g-l" x="672" y="40">YOUR CLOUD ACCOUNT</text>
+    <rect class="g-box" x="680" y="80" width="186" height="90"></rect>
+    <text class="g-t" x="694" y="108">spot VM</text>
+    <text class="g-s" x="694" y="128">runlease-agent  &#8594;  sshd</text>
+    <text class="g-s" x="694" y="146">lease timer</text>
+
+    <path class="g-line" d="M220 125 H362"></path><path class="g-arrow" d="M370 125 l-10 -5 v10 z"></path>
+    <path class="g-line" d="M680 125 H538"></path><path class="g-arrow" d="M530 125 l10 -5 v10 z"></path>
+    <text class="g-sig" x="295" y="114" text-anchor="middle">dials out</text>
+    <text class="g-sig" x="605" y="114" text-anchor="middle">dials out</text>
+
+    <path class="g-line" d="M127 170 V208 H773 V178" stroke-dasharray="4 4"></path><path class="g-arrow" d="M773 170 l-5 10 h10 z"></path>
+    <text class="g-s" x="450" y="201" text-anchor="middle">cloud API: create the VM, attach the boot script, delete it</text>
+  </svg>
+  <figcaption>Both arrows into the relay point inward. Neither your machine nor the VM has to accept a connection.</figcaption>
+</figure>
+
+<h2 id="launch">A launch, step by step</h2>
+<p class="measure">What <code>runlease up</code> does, in order, and who does each part.</p>
+<ol class="seq">
+  <li><span class="who cli">CLI</span><p><b>Makes the keys.</b> Two ed25519 key pairs for this VM. One logs you in. The other is the VM's SSH host key, chosen by you before the VM exists.</p></li>
+  <li><span class="who cli">CLI</span><p><b>Makes a slot token</b>, 256 random bits.</p></li>
+  <li><span class="who relay">CLI → relay</span><p><b>Registers the slot</b>, proving who you are with your sign-in. The relay only ever accepts connections for tokens registered this way. If your tier is full, it says so here, before any VM is created.</p></li>
+  <li><span class="who">CLI → cloud</span><p><b>Requests a spot VM</b> with a boot script attached. The script holds your public login key, the host key pair, the relay address and the slot token.</p></li>
+  <li><span class="who cli">CLI</span><p><b>Saves the keys</b>, encrypted, under <code>~/.runlease</code>.</p></li>
+  <li><span class="who vm">VM</span><p><b>Boots.</b> Arms the lease timer first. Installs the host key, hardens <code>sshd</code>, downloads the agent, checks its SHA-256, and starts it as an unprivileged service.</p></li>
+  <li><span class="who relay">VM → relay</span><p><b>The agent dials out</b> and claims the slot.</p></li>
+  <li><span class="who relay">CLI → relay</span><p><b>The CLI connects</b> for the same slot. The relay joins the two connections.</p></li>
+  <li><span class="who cli">CLI ↔ VM</span><p><b>SSH runs across the joined connection.</b> The CLI accepts exactly one host key: the one from the first step.</p></li>
+</ol>
+
+<h2 id="sessions">Sessions</h2>
+<p class="measure">The agent keeps one connection to the relay and multiplexes any number of sessions over it. Each command you run opens its own connection to the relay, which becomes a new stream to the agent, which becomes a new TCP connection to <code>sshd</code> on the VM.</p>
+<p class="measure">That is why you can hold a port forward open in one terminal and run <code>exec</code>, <code>push</code> and <code>pull</code> from others at the same time.</p>
+<pre><span class="p">$</span> runlease forward agent-box -L 8080:localhost:8080   <span class="c"># terminal one, stays open</span>
+<span class="p">$</span> runlease exec agent-box -- make test                 <span class="c"># terminal two</span>
+<span class="p">$</span> runlease pull agent-box /var/log/app.log ./app.log   <span class="c"># terminal three</span></pre>
+<p class="measure">A slot lives for at most 24 hours, or less if the relay's tier says so. If the agent's connection drops, it reconnects and reclaims the same slot. Only one agent can hold a slot at a time.</p>
+
+<h2 id="signin">Signing in</h2>
+<p class="measure">A relay decides who may open a slot from a Google ID token.</p>
+<ul class="measure">
+  <li><code>runlease login</code> shows a short code. You approve it in a browser on any device, and the CLI saves the session in <code>~/.runlease/auth.json</code>. Nothing has to open on the machine you are working on, so it works over SSH, in a container, and for an agent whose human is at another screen.</li>
+  <li>Without a saved session the CLI falls back to an identity token from a service account or from <code>gcloud</code>, which is what a private relay usually expects.</li>
+</ul>
+<p class="measure">The relay verifies Google's signature on the token and that the email is verified, then looks up the limits for that identity. Agents and later connections do not sign in. They present the slot token, which only works for a slot that a signed-in identity opened.</p>
+
+<h2 id="vm">Inside the VM</h2>
+<p class="measure">The boot script does this, in order:</p>
+<ol class="measure">
+  <li>Installs <code>runlease-terminate</code> and <code>runlease-snooze</code>, the only two commands the login user may run as root.</li>
+  <li>Arms a systemd timer that runs <code>runlease-terminate</code> at the end of the lease.</li>
+  <li>Creates the <code>runlease-agent</code> user and installs your public login key.</li>
+  <li>Installs the pre-issued host key and removes every other host key.</li>
+  <li>Hardens <code>sshd</code>: public-key only, one allowed user, no root login.</li>
+  <li>Grants general <code>sudo</code> only if the manifest says <code>sudo: passwordless</code>.</li>
+  <li>Downloads the agent, verifies its SHA-256, and starts it under a restricted systemd unit.</li>
+  <li>Runs your <code>setup</code> steps as root, logging to <code>/var/log/runlease-setup.log</code>.</li>
+</ol>
+<div class="note"><p>The lease timer is armed in step 2, before anything that can fail. A VM whose setup breaks still deletes itself.</p></div>
+
+<h2 id="leases">Leases</h2>
+<p class="measure">Every machine has an expiry. There are four ways a machine ends, and only one of them needs you.</p>
+<div class="scroll"><table>
+  <tr><th>What ends it</th><th>Who acts</th></tr>
+  <tr><td>The lease timer fires</td><td>The VM deletes itself</td></tr>
+  <tr><td><code>runlease down</code></td><td>You</td></tr>
+  <tr><td>The cloud reclaims the spot capacity</td><td>Your cloud provider</td></tr>
+  <tr><td><code>runlease daemon</code> sees an expired lease</td><td>A watcher on your side</td></tr>
+</table></div>
+<ul class="measure">
+  <li><code>reclaim.ttl</code> in the manifest sets the lease, and the timer inside the VM is armed by default. The deadline is kept on the VM's disk and re-armed at every boot, so a reboot does not lose it.</li>
+  <li><code>runlease snooze NAME 1h</code> moves the timer, over the same secure channel.</li>
+  <li>On GCP the VM deletes itself through the Compute API. On AWS it powers off, and the instance is configured to terminate on shutdown.</li>
+  <li>Every VM is tagged <code>runlease-managed</code>, <code>runlease-created-by</code> and <code>runlease-expires-at</code>.</li>
+</ul>
+
+<h2 id="local">On your machine</h2>
+<p class="measure">Runlease keeps its state under <code>~/.runlease</code>. Set <code>RUNLEASE_HOME</code> to move it.</p>
+<div class="scroll"><table>
+  <tr><th>File</th><th>Holds</th></tr>
+  <tr><td><code>config.yaml</code></td><td>Your defaults</td></tr>
+  <tr><td><code>registry.json</code></td><td>One entry per launched VM: cloud, instance ID, relay address, slot token, forwards</td></tr>
+  <tr><td><code>credentials/&lt;id&gt;.json</code></td><td>That VM's key pairs, encrypted with AES-256-GCM</td></tr>
+  <tr><td><code>master.key</code></td><td>The key that encrypts them, readable only by you</td></tr>
+  <tr><td><code>auth.json</code></td><td>Your relay sign-in, readable only by you</td></tr>
+</table></div>
+
+<h3>Without a relay</h3>
+<p class="measure">Leave <code>relay.addr</code> empty and the CLI connects straight to the VM's public address, still with the pre-issued host key. <code>runlease iap</code> on GCP and <code>runlease ssm</code> on AWS use the cloud's own tunnel instead.</p>
+
+<h2 id="protocol">The relay protocol</h2>
+<p class="measure">Everything is a WebSocket to <code>/relay</code>. The first message is one line of JSON. After it, the connection is a plain byte stream.</p>
+<div class="scroll"><table>
+  <tr><th>Role</th><th>Sent by</th><th>First message</th><th>Then</th></tr>
+  <tr><td><code>register</code></td><td>CLI at <code>up</code></td><td><code>{"role":"register","token":"…"}</code> with your sign-in as a bearer token</td><td>Replies <code>ok</code>, or <code>limit</code> when your tier is full, and closes</td></tr>
+  <tr><td><code>instance</code></td><td>Agent at boot</td><td><code>{"role":"instance","token":"…"}</code></td><td>The agent serves multiplexed streams on this socket</td></tr>
+  <tr><td><code>client</code></td><td>CLI, every command</td><td><code>{"role":"client","token":"…"}</code></td><td>Raw bytes, joined to a new stream on the agent's socket</td></tr>
+  <tr><td><code>release</code></td><td>CLI at <code>down</code></td><td><code>{"role":"release","token":"…"}</code></td><td>The slot is freed at once</td></tr>
+</table></div>
+<div class="scroll"><table>
+  <tr><th>HTTP endpoint</th><th>Purpose</th></tr>
+  <tr><td><code>GET /agent</code></td><td>Serves the agent binary, which the VM then verifies</td></tr>
+  <tr><td><code>GET /ready</code></td><td>Whether a slot's agent is connected</td></tr>
+  <tr><td><code>GET /.well-known/runlease-relay</code></td><td>How to sign in to this relay, and what its default tier allows</td></tr>
+  <tr><td><code>GET /me</code></td><td>Your identity, tier and usage</td></tr>
+  <tr><td><code>GET /health</code></td><td>Liveness</td></tr>
+</table></div>
+<p class="measure">The relay sees the token, the source addresses, and an opaque byte stream that happens to be SSH. It has no key that would let it decrypt that stream, pose as the VM, or log in. The <a href="security.html">threat model</a> goes through each case.</p>
+
+<div class="next">
+  <a class="btn" href="security.html">Security and threat model</a>
+  <a class="btn" href="install.html">Install</a>
+</div>
+</main>
+<footer>
+  <span>Built by the team behind <a href="https://marshal.codes">Marshal</a>. Apache-2.0.</span>
+  <a href="how-it-works.html">How it works</a>
+  <a href="security.html">Security</a>
+  <a href="install.html">Install</a>
+  <a href="relay.html">Relay</a>
+  <a href="privacy.html">Privacy</a>
+  <a href="terms.html">Terms</a>
+</footer>
+</div>
+<script defer src="analytics.js"></script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+package gcp
+
+import (
+	"testing"
+
+	"github.com/marshal-org/runlease/pkg/provider"
+)
+
+func TestGCPNetworkInterface(t *testing.T) {
+	tests := []struct {
+		name       string
+		network    string
+		subnetwork string
+		zone       string
+		publicIP   bool
+		wantNet    string
+		wantSubnet string
+		wantNAT    bool
+	}{
+		{
+			name: "defaults to auto-mode network (both empty)",
+		},
+		{
+			name:       "full self-link subnetwork passes through",
+			subnetwork: "projects/p/regions/europe-west1/subnetworks/my-subnet",
+			zone:       "europe-west1-b",
+			wantSubnet: "projects/p/regions/europe-west1/subnetworks/my-subnet",
+		},
+		{
+			name:       "bare subnetwork name qualified with region from zone",
+			subnetwork: "my-subnet",
+			zone:       "europe-west1-b",
+			wantSubnet: "regions/europe-west1/subnetworks/my-subnet",
+		},
+		{
+			name:       "bare subnetwork with no zone passes through unqualified",
+			subnetwork: "my-subnet",
+			wantSubnet: "my-subnet",
+		},
+		{
+			name:       "bare network name qualified to global path",
+			network:    "my-vpc",
+			subnetwork: "my-subnet",
+			zone:       "us-central1-a",
+			wantNet:    "global/networks/my-vpc",
+			wantSubnet: "regions/us-central1/subnetworks/my-subnet",
+		},
+		{
+			name:    "full self-link network passes through",
+			network: "projects/p/global/networks/my-vpc",
+			wantNet: "projects/p/global/networks/my-vpc",
+		},
+		{
+			name:     "public IP adds a one-to-one NAT access config",
+			publicIP: true,
+			wantNAT:  true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ni := gcpNetworkInterface(tc.network, tc.subnetwork, tc.zone, tc.publicIP)
+			if ni.Network != tc.wantNet {
+				t.Errorf("Network = %q, want %q", ni.Network, tc.wantNet)
+			}
+			if ni.Subnetwork != tc.wantSubnet {
+				t.Errorf("Subnetwork = %q, want %q", ni.Subnetwork, tc.wantSubnet)
+			}
+			gotNAT := len(ni.AccessConfigs) > 0
+			if gotNAT != tc.wantNAT {
+				t.Errorf("has AccessConfigs = %v, want %v", gotNAT, tc.wantNAT)
+			}
+		})
+	}
+}
+
+// GCP's TERMINATED means powered off: the instance and its disk still exist.
+// Reading it as gone made `sync` forget machines that were still billed.
+func TestGCPStatus_poweredOffIsNotGone(t *testing.T) {
+	for _, s := range []string{"TERMINATED", "STOPPED", "STOPPING", "SUSPENDED"} {
+		if got := gcpStatus(s); got != provider.StatusStopped {
+			t.Errorf("gcpStatus(%q) = %q, want stopped", s, got)
+		}
+	}
+}

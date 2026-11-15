@@ -1,0 +1,40 @@
+# Binaries (root-level only, so cmd/ source dirs are not excluded)
+/runlease
+/runlease-agent
+/runlease-relay
+*.exe
+
+# Build output
+/dist/
+/bin/
+
+# Go test cache and coverage
+*.test
+*.out
+coverage.html
+
+# Environment / secrets
+.env
+.env.local
+*.pem
+*.key
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Runlease local state
+~/.runlease/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.example.tfvars

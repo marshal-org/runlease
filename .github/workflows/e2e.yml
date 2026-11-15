@@ -1,0 +1,58 @@
+name: End-to-end
+
+# Launches a real spot VM, talks to it through the relay, tears it down and
+# confirms it is gone. This is the only workflow that holds cloud credentials.
+#
+# Trust model (see docs/ci.md):
+#   - Never triggered by a pull request. It runs nightly on main, or when a
+#     maintainer starts it by hand for a commit they have read.
+#   - Cloud access is short-lived, through OIDC workload identity federation.
+#     There is no long-lived key in the repository's secrets.
+#   - The `e2e` environment can require a reviewer before the job starts.
+#   - Off until the repository variable E2E_ENABLED is set to "true".
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit SHA to test. Read the diff first: this job holds cloud credentials."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e
+  cancel-in-progress: false
+
+jobs:
+  gcp:
+    if: vars.E2E_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: e2e
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Authenticate to Google Cloud (OIDC, no stored key)
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: ${{ vars.E2E_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.E2E_GCP_SERVICE_ACCOUNT }}
+      - name: Run
+        env:
+          E2E_GCP_PROJECT: ${{ vars.E2E_GCP_PROJECT }}
+          E2E_GCP_ZONE: ${{ vars.E2E_GCP_ZONE }}
+          E2E_RELAY_ADDR: ${{ vars.E2E_RELAY_ADDR }}
+        run: scripts/e2e.sh

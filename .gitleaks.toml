@@ -1,0 +1,15 @@
+# Secret-scan configuration. Extends the default rule set.
+[extend]
+useDefault = true
+
+# Two things that look like secrets and are not:
+#
+#   - The placeholder key in a unit test: the literal word "fake" between PEM
+#     markers.
+#   - A PostHog project key (phc_...). It is public and write-only by design:
+#     every site that uses PostHog ships its key in client-side code. The site
+#     sends page views with it from site/analytics.js.
+[allowlist]
+description = "A placeholder key in a unit test, and public PostHog project keys."
+paths = ['''pkg/userdata/userdata_test\.go''']
+regexes = ['''phc_[A-Za-z0-9]{30,}''']

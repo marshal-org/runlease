@@ -82,16 +82,15 @@
   </div>
 </div>
 
-<p class="measure">Then choose a relay. The quickest start is the free public one:</p>
-<pre><span class="p">$</span> runlease config set relay.addr wss://connect.runlease.online
-<span class="p">$</span> runlease login                 <span class="c"># approve a short code in any browser</span>
+<p class="measure">Then sign in to the free public relay and launch:</p>
+<pre><span class="p">$</span> runlease login                 <span class="c"># the free public relay: approve a short code in any browser</span>
+<span class="p">$</span> runlease up -p gcp -n box -d    <span class="c"># or -p aws: a small machine, gone in two hours</span>
+<span class="p">$</span> runlease exec box -- uname -a  <span class="c"># run something on it</span>
+<span class="p">$</span> runlease connect box           <span class="c"># or open a shell</span>
+<span class="p">$</span> runlease down box --yes        <span class="c"># or let the lease delete it</span></pre>
+<p class="measure">Those four lines are copy-paste complete. To stop typing the cloud, region and size each time, run <code>runlease configure</code> once; after that a bare <code>runlease up</code> is enough. If a command fails because a cloud sign-in has expired, the error says which command renews it.</p>
 
-<span class="p">$</span> runlease configure             <span class="c"># provider, region, default size and lease</span>
-<span class="p">$</span> runlease up                    <span class="c"># launch with your defaults</span>
-<span class="p">$</span> runlease exec NAME -- uname -a <span class="c"># run something on it</span>
-<span class="p">$</span> runlease down NAME --yes       <span class="c"># or let the lease delete it</span></pre>
-
-<div class="note warn"><p><b>Your subnet needs a way out.</b> A machine launched through a relay gets no public address, so it reaches the relay through your subnet's NAT gateway. <code>runlease up</code> checks for one and tells you before it creates anything. If you have none, add <code>--public-ip</code>: the address carries outbound traffic only, and SSH still listens on localhost.</p></div>
+<div class="note warn"><p><b>No NAT gateway? It still works.</b> A machine launched through a relay gets no public address when your subnet has a NAT gateway. <code>runlease up</code> checks, and if there is none it gives the machine a public address for outbound traffic only, and says so. SSH still listens on localhost, so nothing on that address accepts connections.</p></div>
 
 <div class="note"><p><b>The machine is yours.</b> It runs in your cloud account, on your bill. The relay only connects you to it. <a href="relay.html">What the public relay allows, and how to run your own</a>.</p></div>
 

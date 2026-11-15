@@ -172,10 +172,12 @@ func TestCheckPrivateEgress(t *testing.T) {
 		wantErr    bool
 		wantCalled bool
 		wantNote   bool
+		wantPublic bool
 	}{
 		{name: "no relay: nothing to check"},
 		{name: "relay, default, NAT present", relay: relayAddr, has: true, wantCalled: true},
-		{name: "relay, default, no NAT: refuse", relay: relayAddr, wantCalled: true, wantErr: true},
+		{name: "relay, default, no NAT: public IP for outbound, and say so", relay: relayAddr, wantCalled: true, wantNote: true, wantPublic: true},
+		{name: "relay, default, sign-in expired: stop", relay: relayAddr, checkErr: errors.New(`auth: "invalid_grant"`), wantCalled: true, wantErr: true},
 		{name: "relay, default, check failed: warn and go on", relay: relayAddr, checkErr: errors.New("403"), wantCalled: true, wantNote: true},
 		{name: "relay, publicIp true: has a way out", relay: relayAddr, publicIP: &yes},
 		{name: "relay, publicIp false set on purpose: warn, do not check", relay: relayAddr, publicIP: &no, wantNote: true},
@@ -188,6 +190,9 @@ func TestCheckPrivateEgress(t *testing.T) {
 			err := checkPrivateEgress(context.Background(), &errOut, p, m)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
+			}
+			if got := m.PublicIP != nil && *m.PublicIP && tc.publicIP == nil; got != tc.wantPublic {
+				t.Errorf("switched to a public IP = %v, want %v", got, tc.wantPublic)
 			}
 			if p.called != tc.wantCalled {
 				t.Errorf("NAT check called = %v, want %v", p.called, tc.wantCalled)

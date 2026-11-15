@@ -11,6 +11,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+
+	"golang.org/x/term"
 	"os/exec"
 	"os/signal"
 	"os/user"
@@ -126,8 +128,15 @@ func runUp(cmd *cobra.Command, _ []string) error {
 				if err != nil {
 					return err
 				}
+			} else if prov, why := detectProvider(cmd.Context()); prov != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "☁  Using %s (%s). Choose with --provider, or save a default with: runlease configure\n", prov, why)
+				quickProvider = prov
+				m, err = buildQuickManifest()
+				if err != nil {
+					return err
+				}
 			} else {
-				return fmt.Errorf("provide --manifest/-m <file>, --provider/-p <aws|gcp>, or set a default with: runlease configure")
+				return fmt.Errorf("which cloud? %s\n  runlease up --provider gcp\n  runlease up --provider aws\nOr save a default with: runlease configure", why)
 			}
 		}
 	}
@@ -500,6 +509,12 @@ func pollAndConnectViaRelay(cmd *cobra.Command, relayAddr, token, name string, c
 	if err != nil {
 		return err
 	}
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		// A script or an agent launched this: there is no terminal to give a
+		// shell to, and the machine is ready. That is success, not an error.
+		fmt.Fprintf(out, "✅ Agent connected. No terminal here, so no shell was opened. Run commands with: runlease exec %s -- COMMAND\n", name)
+		return nil
+	}
 	fmt.Fprintf(out, "🔗 Agent connected — opening SSH session...\n")
 	conn, err := dialRelay(relayAddr, token)
 	if err != nil {
@@ -546,7 +561,12 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 	}
 
 	region := quickRegion
-	if region == "" {
+	if region != "" && !regionFits(quickProvider, region) {
+		return nil, fmt.Errorf("%q does not fit %s: %s", region, quickProvider, regionExample(quickProvider))
+	}
+	// The saved default region belongs to the saved default provider. Launching
+	// on the other cloud with it would send an AWS call to a Google zone.
+	if region == "" && regionFits(quickProvider, cfg.Defaults.Region) {
 		region = cfg.Defaults.Region
 	}
 	if region == "" {
@@ -554,7 +574,11 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 		case "gcp":
 			region = "us-central1-a"
 		case "aws":
-			region = "us-east-1"
+			// The region the user's own AWS setup names, before a guess.
+			region = awsConfiguredRegion()
+			if region == "" {
+				region = "us-east-1"
+			}
 		default:
 			return nil, fmt.Errorf("unknown provider %q — supported: aws, gcp", quickProvider)
 		}
@@ -917,9 +941,10 @@ func resolveAgentSHA256(fromManifest, fromBuild string) (string, error) {
 	return v, nil
 }
 
-// checkPrivateEgress stops a relay-mode launch that takes the default of no
-// public IP on a network with no NAT: the agent could not reach the relay, so
-// the machine would be unreachable and still billed until its lease ran out.
+// checkPrivateEgress looks after a relay-mode launch that takes the default of
+// no public IP. On a network with no NAT the agent could not reach the relay,
+// and the machine would be unreachable and still billed until its lease ran
+// out, so the launch gets an outbound-only public IP instead and says so.
 //
 // It only blocks when it is sure. A check that cannot be made (no permission to
 // list routers, a provider that has no check) prints a note and lets the launch
@@ -937,17 +962,25 @@ func checkPrivateEgress(ctx context.Context, errOut io.Writer, p provider.CloudP
 	checkCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	has, err := checker.HasPrivateEgress(checkCtx, m.GCP.Network, subnetForProvider(m))
+	if isSignInError(err) {
+		// Nothing after this can work either, so stop before a relay slot is
+		// taken and a launch is attempted.
+		return fmt.Errorf("checking the network: %w", err)
+	}
 	if err != nil {
 		fmt.Fprint(errOut, note)
 		fmt.Fprintf(errOut, "   (could not check for a NAT gateway: %v)\n", err)
 		return nil
 	}
 	if !has {
-		return fmt.Errorf("no NAT gateway found for this subnet in %s, and by default a relay-mode machine gets no public IP, so it could not reach the relay.\n"+
-			"Do one of:\n"+
-			"  - add a NAT gateway to the subnet (the machine then has no public address at all)\n"+
-			"  - set 'publicIp: true' in the manifest, or pass --public-ip (outbound only: SSH listens on localhost)\n"+
-			"  - set 'publicIp: false' if the network gets out some other way", m.Region)
+		// Refusing here made the first launch fail on most accounts, which have
+		// no NAT gateway. An outbound-only address is the working, safe choice:
+		// sshd still listens on localhost, so nothing on the address answers.
+		yes := true
+		m.PublicIP = &yes
+		fmt.Fprintf(errOut, "ℹ  No NAT gateway on this subnet in %s, so the machine gets a public IP for outbound traffic only.\n"+
+			"   SSH still listens on localhost: nothing on that address accepts connections.\n"+
+			"   For no public address at all, add a NAT gateway. To silence this, set 'publicIp: true'.\n", m.Region)
 	}
 	return nil
 }
@@ -1032,4 +1065,12 @@ func abandonLaunch(cmd *cobra.Command, p provider.CloudProvider, h *provider.Ins
 // nothing about the user or the machine.
 func userAgent() string {
 	return fmt.Sprintf("runlease/%s (%s/%s)", version, runtime.GOOS, runtime.GOARCH)
+}
+
+// regionExample says how prov writes a region, for an error message.
+func regionExample(prov string) string {
+	if prov == "aws" {
+		return "AWS regions look like us-east-1"
+	}
+	return "Google Cloud zones look like us-central1-a"
 }

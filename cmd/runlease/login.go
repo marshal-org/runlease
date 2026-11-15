@@ -78,7 +78,7 @@ func relayFromFlagOrConfig() (string, error) {
 		return "", err
 	}
 	if cfg.Relay.Addr == "" {
-		return "", errors.New("no relay given: pass --relay wss://..., or run 'runlease config set relay.addr wss://...'")
+		return "", fmt.Errorf("no relay set. For the free public relay, run:\n  runlease login --relay %s\nFor your own: runlease config set relay.addr wss://...", publicRelay)
 	}
 	return cfg.Relay.Addr, nil
 }
@@ -137,13 +137,28 @@ func fetchDiscovery(ctx context.Context, relayAddr string) (*relayDiscovery, err
 	return &d, nil
 }
 
+// publicRelay is the free relay run by the project. It is only ever a
+// suggestion, and the one default: 'runlease login' with no relay chosen.
+const publicRelay = "wss://connect.runlease.online"
+
 func runLogin(cmd *cobra.Command, _ []string) error {
-	relayAddr, err := relayFromFlagOrConfig()
-	if err != nil {
-		return err
-	}
 	ctx := cmd.Context()
 	out := cmd.OutOrStdout()
+	relayAddr, err := relayFromFlagOrConfig()
+	if err != nil {
+		// First run: nothing chosen yet. Signing in with no relay named can
+		// only mean the public one, so use it and remember it.
+		cfg, loadErr := config.Load(defaultConfigPath())
+		if loadErr != nil || loginRelay != "" || cfg.Relay.Addr != "" {
+			return err
+		}
+		cfg.Relay.Addr = publicRelay
+		if saveErr := config.Save(defaultConfigPath(), cfg); saveErr != nil {
+			return saveErr
+		}
+		relayAddr = publicRelay
+		fmt.Fprintf(out, "No relay chosen yet: using the free public relay %s (saved; change it with 'runlease config set relay.addr').\n", publicRelay)
+	}
 
 	d, err := fetchDiscovery(ctx, relayAddr)
 	if err != nil {

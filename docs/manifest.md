@@ -54,7 +54,7 @@ Launch with `runlease up -m my-runner-manifest.yaml`.
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `reclaim.ttl` | duration | — | `2h`, `90m`, `1d`. Auto-terminate after this much elapsed time. |
-| `reclaim.selfTermination` | bool | `false` | Install `/usr/local/bin/runlease-terminate` + a `systemd-run` timer. Required for TTL to actually fire from inside the VM. |
+| `reclaim.selfTermination` | bool | `true` | Arm the lease timer inside the VM, so it deletes itself at the end of `ttl`. The deadline is stored on the VM's disk and re-armed at every boot, so a reboot neither loses nor restarts the lease. Set `false` only if something else stops the VM: then nothing on the VM enforces the lease, and `runlease up` says so. On GCP this attaches the default service account with the Compute scope unless `gcp.serviceAccount` is set. |
 | `tags` | map[string]string | — | AWS tags / GCP labels. User keys override the auto-injected `runlease-managed`, `runlease-created-by`, `runlease-expires-at`. |
 
 ### Sudo

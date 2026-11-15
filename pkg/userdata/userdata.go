@@ -11,6 +11,17 @@ import (
 const script = `#!/bin/bash
 set -euo pipefail
 
+# ── once only ────────────────────────────────────────────────────────────────
+# GCP runs this script at every boot, AWS only at the first. Everything below
+# is first-boot setup. On a later boot the lease is re-armed by
+# runlease-lease.service from the deadline on disk, not from here: running this
+# again would start the lease over.
+mkdir -p /var/lib/runlease
+if [ -e /var/lib/runlease/booted ]; then
+  exit 0
+fi
+touch /var/lib/runlease/booted
+
 # ── terminate script ─────────────────────────────────────────────────────────
 # Always installed — it's a small convenience tool, not a policy. The
 # reclaim.selfTermination field only controls whether the systemd-run timer
@@ -44,18 +55,54 @@ TERM_EOF
 {{- end }}
 chmod +x /usr/local/bin/runlease-terminate
 
+# ── lease timer ──────────────────────────────────────────────────────────────
+# The lease is a deadline stored on disk (epoch seconds). runlease-lease-arm
+# turns it into a systemd timer, and runlease-lease.service runs that at every
+# boot. A transient timer alone would vanish on reboot and the machine would
+# then run, and bill, with no end.
+cat > /usr/local/bin/runlease-lease-arm << 'ARM_EOF'
+#!/bin/bash
+[ "$EUID" -ne 0 ] && exec sudo "$0" "$@"
+DEADLINE=$(cat /var/lib/runlease/lease-deadline 2>/dev/null || true)
+case "$DEADLINE" in ''|*[!0-9]*) exit 0 ;; esac
+LEFT=$(( DEADLINE - $(date +%s) ))
+[ "$LEFT" -lt 1 ] && LEFT=1
+systemctl stop runlease-selfterminate.timer 2>/dev/null || true
+systemctl reset-failed runlease-selfterminate.timer runlease-selfterminate.service 2>/dev/null || true
+systemd-run --unit=runlease-selfterminate --on-active="$LEFT" /usr/local/bin/runlease-terminate
+ARM_EOF
+chmod +x /usr/local/bin/runlease-lease-arm
+
+cat > /etc/systemd/system/runlease-lease.service << 'LEASE_EOF'
+[Unit]
+Description=Runlease lease timer (re-armed from the stored deadline at boot)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/runlease-lease-arm
+
+[Install]
+WantedBy=multi-user.target
+LEASE_EOF
+systemctl daemon-reload
+systemctl enable runlease-lease.service
+
 # ── snooze script ────────────────────────────────────────────────────────────
-# Reschedules the self-termination timer to fire its argument (seconds) from
-# now. Used by 'runlease snooze' over the relay. The timer is a named transient
-# unit (runlease-selfterminate) so it can be cancelled and re-armed.
+# Moves the deadline to its argument (seconds) from now and re-arms the timer.
+# Used by 'runlease snooze' over the relay.
 cat > /usr/local/bin/runlease-snooze << 'SNOOZE_EOF'
 #!/bin/bash
 [ "$EUID" -ne 0 ] && exec sudo "$0" "$@"
 SECS="$1"
 case "$SECS" in ''|*[!0-9]*) echo "usage: runlease-snooze <seconds-from-now>" >&2; exit 1 ;; esac
-systemctl stop runlease-selfterminate.timer 2>/dev/null || true
-systemctl reset-failed runlease-selfterminate.timer runlease-selfterminate.service 2>/dev/null || true
-systemd-run --unit=runlease-selfterminate --on-active="$SECS" /usr/local/bin/runlease-terminate
+# Written to a temp file, flushed and renamed, so a crash or hard reset right
+# after a snooze cannot leave an empty deadline (which would mean no lease).
+echo $(( $(date +%s) + SECS )) > /var/lib/runlease/lease-deadline.new
+sync /var/lib/runlease/lease-deadline.new 2>/dev/null || sync
+mv -f /var/lib/runlease/lease-deadline.new /var/lib/runlease/lease-deadline
+exec /usr/local/bin/runlease-lease-arm
 SNOOZE_EOF
 chmod +x /usr/local/bin/runlease-snooze
 
@@ -65,7 +112,10 @@ runlease-agent ALL=(ALL) NOPASSWD: /usr/local/bin/runlease-snooze
 SUDO_EOF
 chmod 440 /etc/sudoers.d/runlease-terminate
 {{- if and .SelfTermination .TTLSeconds }}
-systemd-run --unit=runlease-selfterminate --on-active={{ .TTLSeconds }} /usr/local/bin/runlease-terminate
+# Armed here, before anything below that can fail.
+echo $(( $(date +%s) + {{ .TTLSeconds }} )) > /var/lib/runlease/lease-deadline
+sync /var/lib/runlease/lease-deadline 2>/dev/null || sync
+/usr/local/bin/runlease-lease-arm
 {{- end }}
 
 # ── runlease-agent user ──────────────────────────────────────────────────────

@@ -155,7 +155,7 @@ func TestBuild_gcpTTLBlock(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	for _, want := range []string{
-		"systemd-run --unit=runlease-selfterminate --on-active=7200",
+		"echo $(( $(date +%s) + 7200 )) > /var/lib/runlease/lease-deadline",
 		"/usr/local/bin/runlease-terminate",
 		"metadata.google.internal",
 		"compute.googleapis.com",
@@ -181,7 +181,7 @@ func TestBuild_awsTTLBlock(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	for _, want := range []string{
-		"systemd-run --unit=runlease-selfterminate --on-active=3600",
+		"echo $(( $(date +%s) + 3600 )) > /var/lib/runlease/lease-deadline",
 		"/usr/local/bin/runlease-terminate",
 		"systemctl --force --force poweroff",
 	} {
@@ -335,9 +335,9 @@ func TestBuild_autoFireTimerGated(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Build: %v", err)
 			}
-			// Key on the numeric offset + terminate path: only the gated boot
-			// timer emits it. The always-present snooze helper uses "$SECS".
-			marker := "--on-active=" + strconv.Itoa(tc.ttlSeconds) + " /usr/local/bin/runlease-terminate"
+			// Key on the numeric offset written as the deadline: only the gated
+			// boot block emits it. The always-present snooze helper uses "SECS".
+			marker := "+ " + strconv.Itoa(tc.ttlSeconds) + " )) > /var/lib/runlease/lease-deadline"
 			has := strings.Contains(out, marker)
 			if has != tc.wantTimer {
 				t.Errorf("auto-fire timer presence = %v, want %v", has, tc.wantTimer)
@@ -496,5 +496,39 @@ func TestBuild_scriptParsesWithAndWithoutRelay(t *testing.T) {
 		if msg, err := cmd.CombinedOutput(); err != nil {
 			t.Errorf("relay=%q: script does not parse: %v\n%s", relay, err, msg)
 		}
+	}
+}
+
+// The lease has to outlive a reboot: the deadline is on disk, a unit enabled at
+// boot re-arms the timer from it, and the script itself does nothing on a
+// second run (GCP runs it at every boot, which would otherwise restart the lease).
+func TestBuild_leaseSurvivesReboot(t *testing.T) {
+	p := fullParams()
+	p.Provider = "gcp"
+	p.SelfTermination = true
+	p.TTLSeconds = 3600
+	out, err := Build(p)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, want := range []string{
+		"systemctl enable runlease-lease.service",
+		"ExecStart=/usr/local/bin/runlease-lease-arm",
+		"/var/lib/runlease/lease-deadline",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	guard := strings.Index(out, "if [ -e /var/lib/runlease/booted ]; then")
+	first := strings.Index(out, "cat > /usr/local/bin/runlease-terminate")
+	if guard < 0 || guard > first {
+		t.Error("the run-once guard must come before any setup step")
+	}
+	// Snooze must move the stored deadline, not only the timer in memory.
+	snooze := out[strings.Index(out, "runlease-snooze << 'SNOOZE_EOF'"):]
+	snooze = snooze[:strings.Index(snooze, "SNOOZE_EOF\n")]
+	if !strings.Contains(snooze, "/var/lib/runlease/lease-deadline.new /var/lib/runlease/lease-deadline") {
+		t.Error("snooze does not update the stored deadline, so a reboot would undo it")
 	}
 }

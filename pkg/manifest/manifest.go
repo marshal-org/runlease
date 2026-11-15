@@ -114,8 +114,16 @@ type RelayConfig struct {
 }
 
 type ReclaimPolicy struct {
-	TTL             string `yaml:"ttl"`
-	SelfTermination bool   `yaml:"selfTermination"`
+	TTL string `yaml:"ttl"`
+	// SelfTermination arms a timer on the VM that deletes it at the end of
+	// the TTL. Unset means true: a lease that nothing enforces is not a lease.
+	// Set false only if something else (the reclaim daemon) will stop the VM.
+	SelfTermination *bool `yaml:"selfTermination"`
+}
+
+// SelfTerminates reports whether the VM deletes itself at the end of its TTL.
+func (r *ReclaimPolicy) SelfTerminates() bool {
+	return r.SelfTermination == nil || *r.SelfTermination
 }
 
 func (r *ReclaimPolicy) TTLDuration() (time.Duration, error) {
@@ -193,8 +201,12 @@ func (m *Manifest) Validate() error {
 		return fmt.Errorf("manifest.diskSizeGb must be >= 0 (0 = image default), got %d", m.DiskSizeGb)
 	}
 	if m.Reclaim.TTL != "" {
-		if _, err := m.Reclaim.TTLDuration(); err != nil {
+		d, err := m.Reclaim.TTLDuration()
+		if err != nil {
 			return fmt.Errorf("manifest.reclaim.ttl invalid: %w", err)
+		}
+		if d < time.Second {
+			return fmt.Errorf("manifest.reclaim.ttl must be at least 1s, got %q", m.Reclaim.TTL)
 		}
 	}
 	switch m.Sudo {

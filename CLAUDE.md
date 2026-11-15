@@ -120,6 +120,17 @@ flowchart LR
 5. Each CLI subcommand opens a fresh WebSocket with `role: client, token: …` — relay does `session.OpenStream()` and bridges the stream to the CLI WebSocket.
 6. A slot lives for its tier's `slotTTL` (24h when no tiers file sets one) and is dropped earlier after `idleTTL` with no agent or client. Past that, reconnects are rejected until the CLI registers the token again (`runlease connect` does). `down`, `sync`, the daemon and a failed `up` release the slot at once.
 
+### Instance lifecycle
+
+The registry is the only local record of a machine, so these rules keep it from losing one:
+
+1. `up` refuses a name that is in the registry and whose machine still exists (`freeName`). If the machine is gone, the stale entry is cleared first.
+2. The entry is written (`State: pending`) as soon as the create request is accepted, before the wait for running. A create error that comes with a handle still gets recorded. A machine that cannot be recorded is deleted (`abandonLaunch`).
+3. Every registry write goes through `Registry.mutate`: file lock, re-read, one change, atomic rename. Never write back a map loaded earlier. Remove by instance ID (`RemoveID`), not by name.
+4. Gone means the cloud says not found (or AWS `terminated`). Powered off (`StatusStopped`, including GCP `TERMINATED`) still exists and is billed: `sync` and the daemon delete it before dropping the entry.
+5. The lease is a deadline on the VM's disk (`/var/lib/runlease/lease-deadline`), re-armed at each boot by `runlease-lease.service`. The boot script runs once (`/var/lib/runlease/booted`). `selfTermination` defaults to true.
+6. The daemon rescans the registry every poll, retries a failed terminate, and reads the registry again before acting on a deadline.
+
 ### What lives where
 
 - **Manifest schema** — `pkg/manifest/manifest.go`. New fields go here. The wizard (`cmd/runlease/manifest.go`) emits commented hints — keep it in sync when adding fields.

@@ -86,8 +86,9 @@ relay:
 # ── Lifecycle ───────────────────────────────────────────────────────────────
 reclaim:
   ttl: 2h                      # Auto-terminate after this duration (e.g. 90m, 2h, 1d).
-  selfTermination: true        # Schedule the systemd-run timer that fires
-                               # /usr/local/bin/runlease-terminate at TTL.
+  selfTermination: true        # Default. The VM deletes itself at TTL, and the
+                               # deadline survives a reboot. false = nothing on
+                               # the VM enforces the lease.
                                # The terminate script itself is ALWAYS installed
                                # (manual escape: "sudo runlease-terminate").
 

@@ -173,6 +173,12 @@ func checkRelayAgent(ctx context.Context, errOut io.Writer, relayAddr, want stri
 		fmt.Fprintf(errOut, "note: could not check the relay's agent binary before launch (%v)\n", err)
 		return nil
 	}
+	return relayAgentMismatch(relayAddr, want, got)
+}
+
+// relayAgentMismatch returns the error for a relay that serves an agent other
+// than the one this CLI expects, or nil when the two digests are the same.
+func relayAgentMismatch(relayAddr, want, got string) error {
 	if got != want {
 		return fmt.Errorf("the relay at %s serves an agent this CLI does not expect, so a machine launched now would refuse to run it and never connect.\n"+
 			"  expected SHA-256: %s\n  relay serves:     %s\n"+

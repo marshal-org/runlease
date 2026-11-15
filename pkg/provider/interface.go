@@ -139,3 +139,25 @@ type ManagedInstance struct {
 type ManagedLister interface {
 	ListManaged(ctx context.Context) ([]ManagedInstance, error)
 }
+
+// ErrNoNetwork is returned (wrapped) by Preflighter.CheckNetwork when the
+// network or subnet a launch would use is not there, as opposed to the check
+// itself failing.
+var ErrNoNetwork = errors.New("no network to launch on")
+
+// Preflighter is implemented by providers that can check, without creating
+// anything, the things a launch depends on. `runlease doctor` runs them. Every
+// method makes read-only calls only.
+type Preflighter interface {
+	// CheckAccess makes one cheap call that proves the credentials work for
+	// the project or account this provider acts in.
+	CheckAccess(ctx context.Context) error
+	// CheckRegion reports whether the provider's region or zone exists and
+	// may be used with these credentials.
+	CheckRegion(ctx context.Context) error
+	// CheckNetwork reports whether the network a launch would land on exists,
+	// and names it. With neither argument it is the one the provider picks by
+	// default. network is GCP only. A missing network is an error wrapping
+	// ErrNoNetwork.
+	CheckNetwork(ctx context.Context, network, subnet string) (string, error)
+}

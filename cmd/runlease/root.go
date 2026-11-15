@@ -63,6 +63,7 @@ var rootCmd = &cobra.Command{
 
 Get started:
   runlease configure           set your defaults (provider, region, relay, etc.)
+  runlease doctor              check your sign-ins, project and network; prints the fix
   runlease up                  launch an instance using your defaults
   runlease up -m manifest.yaml launch from a manifest file
   runlease up --provider gcp   quick launch without a manifest

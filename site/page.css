@@ -64,9 +64,6 @@ th { background: var(--sheet); color: var(--ink); font-weight: 600; }
 td:first-child { color: var(--ink); }
 .scroll { overflow-x: auto; }
 
-/* draft banner on pages that are not final */
-.draft { background: var(--lease-wash); border: 1px solid var(--lease); color: var(--ink); padding: 12px 16px; font-size: .95rem; margin: 0 0 30px; }
-.draft b { font-family: var(--mono); font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; color: var(--lease); margin-right: 8px; }
 
 /* on-page contents */
 .toc { border-block: 1px solid var(--rule); padding: 14px 0; margin: 34px 0 0; display: flex; gap: 6px 22px; flex-wrap: wrap; font-size: .9rem; }

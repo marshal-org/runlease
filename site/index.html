@@ -107,6 +107,10 @@
       radial-gradient(60% 55% at 78% 8%, rgba(47, 99, 230, .22), transparent 70%),
       radial-gradient(45% 40% at 8% 0%, rgba(217, 127, 0, .16), transparent 70%); pointer-events: none; }
   .hero .wrap { position: relative; }
+  .hero-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
+  .madeby { font-family: var(--mono); font-size: .74rem; letter-spacing: .08em; color: var(--ink-2); text-decoration: none; border: 1px solid var(--rule-2); padding: 6px 12px; white-space: nowrap; transition: border-color .15s, color .15s; }
+  .madeby b { color: var(--ink); font-weight: 600; }
+  .madeby:hover { border-color: var(--signal); color: var(--ink); }
   .hero h1 { font-family: var(--display); font-weight: 800; font-size: clamp(3.1rem, 9.4vw, 8.2rem); line-height: .9; letter-spacing: -.035em; margin-top: 22px; text-wrap: balance; }
   .hero h1 time { color: var(--lease); font-variant-numeric: tabular-nums; white-space: nowrap; display: inline-block; }
   .hero h1 .ch { display: inline-block; }
@@ -338,7 +342,10 @@
 
 <section class="hero" data-part="hero">
   <div class="wrap">
-    <p class="eyebrow"><b>Lease № <span id="lease-no">0001</span></b> · issued on arrival · admits one website</p>
+    <div class="hero-top">
+      <p class="eyebrow"><b>Lease № <span id="lease-no">0001</span></b> · issued on arrival · admits one website</p>
+      <a class="madeby" href="https://marshal.codes" target="_blank" rel="noopener">Built by the <b>Marshal</b> team <span aria-hidden="true">↗</span></a>
+    </div>
     <h1 id="h1">This website deletes itself in <time id="hero-time" datetime="PT3M">3:00</time>.</h1>
     <p class="lede">It was launched when you arrived, and it will be gone when its lease ends unless you snooze it. <b>That is how every Runlease machine works:</b> a cheap spot VM in your own cloud account, for you or your coding agent, that cleans up after itself.</p>
     <div class="acts">

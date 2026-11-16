@@ -5,1005 +5,543 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <!-- PRE-LAUNCH: remove this line when the repository goes public. -->
 <meta name="robots" content="noindex">
-<meta name="description" content="Disposable cloud machines for coding agents. Spot VMs in your own cloud account: your keys never leave your machine, the relay cannot read your traffic, and every machine deletes itself.">
+<meta name="description" content="This website is on a lease: it deletes itself unless you snooze it. So does every Runlease machine. Cheap spot VMs for coding agents, in your own cloud account, that clean up after themselves.">
 <title>Runlease</title>
-<meta property="og:title" content="Runlease">
-<meta property="og:description" content="Disposable cloud machines for coding agents. Secure, cheap spot VMs in your own cloud account.">
+<meta property="og:title" content="This website deletes itself.">
+<meta property="og:description" content="It is on a lease, like every Runlease machine: a cheap spot VM in your own cloud, for you or your coding agent, gone when its time is up.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://runlease.online/">
+<meta property="og:image" content="https://runlease.online/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#050B14">
 <link rel="icon" type="image/svg+xml" href="logo.svg">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-  /* Layout concept: a lease ticket. Each machine is issued, punched and voided.
-     Wide editorial column, data set in mono with tabular figures, one amber
-     "time" colour reserved for anything about the lease running out. */
+  /* One idea, carried all the way: the page is a leased machine. It has a
+     deadline, a running cost and an off switch, and it uses them. Amber is
+     reserved for time running out, blue for the encrypted channel. The page
+     commits to one dark world on purpose: it is a terminal that grew a body. */
   :root {
-    --paper: #F2F5F9;
-    --sheet: #FFFFFF;
-    --sheet-2: #E7ECF3;
-    --ink: #0C1A2B;
-    --ink-2: #3C4D63;
-    --ink-3: #6B7C92;
-    --rule: #CDD6E2;
-    --signal: #1B4FD6;       /* the secure channel */
-    --signal-wash: #E3EBFD;
-    --lease: #B86A00;        /* time running out */
-    --lease-wash: #FBEFD9;
-    --term-bg: #0C1A2B;
-    --term-ink: #DCE5F1;
-    --term-dim: #8296B0;
-    --ok: #18794E;
-    --no: #B42318;
+    color-scheme: dark;
+    --void: #03070D;
+    --night: #050B14;
+    --deck: #0A1524;
+    --deck-2: #0F1D31;
+    --rule: #1D3049;
+    --rule-2: #2B4466;
+    --ink: #E9F0F9;
+    --ink-2: #B4C3D6;
+    --ink-3: #7F93AD;
+    --lease: #FFB547;
+    --lease-deep: #D97F00;
+    --lease-wash: rgba(255, 181, 71, .12);
+    --signal: #7BA2FF;
+    --signal-deep: #2F63E6;
+    --signal-wash: rgba(123, 162, 255, .12);
+    --ok: #4CC38A;
+    --no: #FF7A6B;
     --display: "Bricolage Grotesque", "Arial Narrow", system-ui, sans-serif;
     --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --gutter-l: max(20px, env(safe-area-inset-left, 0px));
+    --gutter-r: max(20px, env(safe-area-inset-right, 0px));
+    --bar-h: 52px;
   }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --paper: #08111D; --sheet: #0F1B2B; --sheet-2: #16253A;
-      --ink: #E6EDF6; --ink-2: #B3C1D3; --ink-3: #8193AB; --rule: #24364F;
-      --signal: #7BA2FF; --signal-wash: #14254A;
-      --lease: #FFB547; --lease-wash: #33240A;
-      --term-bg: #050B14; --term-ink: #DCE5F1; --term-dim: #7C90AB;
-      --ok: #4CC38A; --no: #FF8A7A;
-      color-scheme: dark;
-    }
-  }
-  :root[data-theme="dark"] {
-    --paper: #08111D; --sheet: #0F1B2B; --sheet-2: #16253A;
-    --ink: #E6EDF6; --ink-2: #B3C1D3; --ink-3: #8193AB; --rule: #24364F;
-    --signal: #7BA2FF; --signal-wash: #14254A;
-    --lease: #FFB547; --lease-wash: #33240A;
-    --term-bg: #050B14; --term-ink: #DCE5F1; --term-dim: #7C90AB;
-    --ok: #4CC38A; --no: #FF8A7A;
-    color-scheme: dark;
-  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: calc(var(--bar-h) + 16px); }
+  body { margin: 0; background: var(--night); color: var(--ink); font-family: var(--body); font-size: 17px; line-height: 1.6; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  h1, h2, h3, p, ul, ol, pre { margin: 0; }
+  a { color: var(--signal); text-underline-offset: 3px; }
+  a:hover { color: var(--ink); }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--lease); outline-offset: 3px; }
+  [hidden] { display: none !important; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-left: var(--gutter-l); padding-right: var(--gutter-r); }
+  .mono { font-family: var(--mono); }
+  .eyebrow { font-family: var(--mono); font-size: .74rem; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-3); }
+  .eyebrow b { color: var(--lease); font-weight: 600; }
+  h2 { font-family: var(--display); font-weight: 800; font-size: clamp(2rem, 4.6vw, 3.5rem); line-height: 1.02; letter-spacing: -.02em; text-wrap: balance; margin-top: 14px; }
+  .lede { color: var(--ink-2); font-size: 1.12rem; max-width: 40em; margin-top: 18px; }
+  section { position: relative; padding-block: clamp(64px, 10vw, 128px); }
 
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-  body {
-    margin: 0; background: var(--paper); color: var(--ink);
-    font-family: var(--body); font-size: 17px; line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-  }
-  a { color: var(--signal); text-decoration: none; }
-  a:hover { text-decoration: underline; text-underline-offset: 3px; }
-  :focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 2px; }
-  code, .mono { font-family: var(--mono); font-size: .9em; }
-  h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -.02em; }
-  p { margin: 0; }
+  /* The perforation between sections: a ticket's tear line. */
+  .perf { height: 22px; background:
+      radial-gradient(circle at 11px 11px, var(--void) 5px, transparent 5.5px) 0 0 / 22px 22px repeat-x; opacity: .9; border-top: 1px dashed var(--rule); margin-top: -1px; }
 
-  .band { padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
-  .wrap { max-width: 1120px; margin: 0 auto; }
-  .eyebrow { font-family: var(--mono); font-size: .74rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); font-weight: 500; }
+  /* ---------- the lease bar: this page's own status line ---------- */
+  .leasebar { position: fixed; inset: 0 0 auto 0; z-index: 50; height: calc(var(--bar-h) + env(safe-area-inset-top, 0px)); padding-top: env(safe-area-inset-top, 0px); background: rgba(5, 11, 20, .82); backdrop-filter: blur(14px) saturate(1.3); -webkit-backdrop-filter: blur(14px) saturate(1.3); border-bottom: 1px solid var(--rule); }
+  .leasebar .wrap { height: var(--bar-h); display: flex; align-items: center; gap: 14px; max-width: none; }
+  .brand { display: flex; align-items: center; gap: 9px; font-family: var(--display); font-weight: 800; font-size: 1.12rem; letter-spacing: -.02em; color: var(--ink); text-decoration: none; flex: none; }
+  .brand img { width: 24px; height: 24px; display: block; }
+  .status { display: flex; align-items: center; gap: 12px; font-family: var(--mono); font-size: .78rem; color: var(--ink-2); min-width: 0; margin-left: 6px; white-space: nowrap; }
+  .status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 rgba(76, 195, 138, .7); animation: pulse 2s infinite; flex: none; }
+  .status .sep { color: var(--rule-2); }
+  .status .t { color: var(--lease); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .status .c { font-variant-numeric: tabular-nums; }
+  .leasebar nav { margin-left: auto; display: flex; align-items: center; gap: 18px; font-family: var(--mono); font-size: .78rem; }
+  .leasebar nav a { color: var(--ink-2); text-decoration: none; }
+  .leasebar nav a:hover { color: var(--ink); }
+  .chipbtn { font-family: var(--mono); font-size: .76rem; font-weight: 600; background: transparent; border: 1px solid var(--lease); color: var(--lease); padding: 7px 12px; white-space: nowrap; transition: background .15s, color .15s, transform .08s; }
+  .chipbtn:hover { background: var(--lease); color: var(--night); }
+  .chipbtn:active { transform: translateY(1px); }
+  .chipbtn.quiet { border-color: var(--rule-2); color: var(--ink-2); }
+  .chipbtn.quiet:hover { background: var(--ink); color: var(--night); border-color: var(--ink); }
+  .leasebar .meter { position: absolute; left: 0; bottom: -1px; height: 2px; width: 100%; background: var(--lease); transform-origin: left; transform: scaleX(1); transition: transform 1s linear, background .4s; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(76, 195, 138, .6); } 70% { box-shadow: 0 0 0 8px rgba(76, 195, 138, 0); } 100% { box-shadow: 0 0 0 0 rgba(76, 195, 138, 0); } }
 
-  /* nav */
-  .nav { padding-block: 18px; border-bottom: 1px solid var(--rule); }
-  .nav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-  .mark { font-family: var(--display); font-weight: 800; font-size: 1.3rem; color: var(--ink); letter-spacing: -.03em; display: flex; align-items: center; gap: 9px; }
-  .mark:hover { text-decoration: none; }
-  .mark img { width: 28px; height: 28px; display: block; }
-  .nav ul { list-style: none; display: flex; gap: 22px; margin: 0; padding: 0; flex-wrap: wrap; font-size: .92rem; }
-  .nav ul a { color: var(--ink-2); }
+  /* Under 30 seconds the whole page knows. */
+  body.expiring .leasebar { border-bottom-color: var(--lease); }
+  body.expiring .status .dot { background: var(--lease); animation-duration: .7s; }
+  body.expiring .hero h1 time { animation: throb .7s ease-in-out infinite; }
+  @keyframes throb { 50% { text-shadow: 0 0 34px rgba(255, 181, 71, .85); } }
 
-  /* hero */
-  .hero { padding-block: 64px 72px; }
-  .hero .wrap { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 56px; align-items: center; }
-  .hero h1 { font-size: clamp(2.3rem, 5.2vw, 3.9rem); line-height: 1; font-weight: 800; margin-top: 18px; }
-  .hero h1 em { font-style: normal; color: var(--signal); }
-  .lede { font-size: 1.22rem; color: var(--ink-2); margin-top: 24px; max-width: 34em; line-height: 1.5; }
-  .lede b { color: var(--ink); font-weight: 600; }
-  .cta { display: flex; gap: 12px; margin-top: 32px; flex-wrap: wrap; align-items: stretch; }
-  .install { display: flex; align-items: center; gap: 10px; background: var(--term-bg); color: var(--term-ink); font-family: var(--mono); font-size: .86rem; padding: 12px 12px 12px 16px; min-width: 0; max-width: 100%; }
-  .install span { overflow-x: auto; white-space: nowrap; min-width: 0; }
-  .install .p { color: var(--term-dim); user-select: none; }
-  .btn { font: inherit; font-family: var(--mono); font-size: .8rem; font-weight: 600; border: 1px solid var(--ink); background: transparent; color: var(--ink); padding: 12px 18px; cursor: pointer; display: inline-flex; align-items: center; }
-  .btn:hover { background: var(--ink); color: var(--paper); text-decoration: none; }
-  .install .btn { border-color: var(--term-dim); color: var(--term-ink); padding: 6px 10px; flex: none; }
-  .install .btn:hover { background: var(--term-ink); color: var(--term-bg); }
-  .facts { display: flex; gap: 8px 26px; flex-wrap: wrap; margin-top: 26px; font-family: var(--mono); font-size: .8rem; color: var(--ink-3); }
-  .facts span::before { content: "\2713\00a0"; color: var(--ok); }
+  .warn { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 140%); z-index: 60; display: flex; align-items: center; gap: 14px; background: var(--lease); color: #1B1100; padding: 10px 12px 10px 18px; font-family: var(--mono); font-size: .86rem; font-weight: 600; box-shadow: 0 18px 50px rgba(0, 0, 0, .55); transition: transform .45s cubic-bezier(.2, .9, .3, 1.2); max-width: calc(100vw - 32px); }
+  .warn.on { transform: translate(-50%, 0); }
+  .warn button { background: #1B1100; color: var(--lease); border: 0; padding: 8px 12px; font-family: var(--mono); font-weight: 600; font-size: .8rem; white-space: nowrap; }
+  .warn button:hover { background: #000; }
 
-  /* the lease ticket */
-  .ticket { background: var(--sheet); border: 1px solid var(--rule); position: relative; font-family: var(--mono); font-size: .84rem; font-variant-numeric: tabular-nums; box-shadow: 0 18px 40px -24px rgba(12, 26, 43, .45); transition: opacity .5s, filter .5s; }
-  .ticket-hd { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px dashed var(--rule); gap: 10px; }
-  .ticket-hd b { font-family: var(--display); font-size: 1.05rem; letter-spacing: -.01em; }
-  .state { font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; padding: 3px 8px; border: 1px solid currentColor; font-weight: 600; white-space: nowrap; }
-  .state[data-s="launching"] { color: var(--ink-3); }
-  .state[data-s="running"] { color: var(--ok); }
-  .state[data-s="expiring"] { color: var(--lease); }
-  .state[data-s="deleted"] { color: var(--no); }
-  .ticket dl { margin: 0; padding: 14px 18px; display: grid; grid-template-columns: max-content 1fr; gap: 7px 18px; }
-  .ticket dt { color: var(--ink-3); }
-  .ticket dd { margin: 0; text-align: right; min-width: 0; overflow-wrap: anywhere; }
-  .ticket dd.no { color: var(--ink-3); }
-  .lease-row { padding: 14px 18px 18px; border-top: 1px dashed var(--rule); }
-  .lease-row .lbl { display: flex; justify-content: space-between; color: var(--ink-3); margin-bottom: 8px; }
-  .lease-row .lbl b { color: var(--lease); font-size: 1.25rem; font-weight: 600; }
-  .bar { height: 8px; background: var(--lease-wash); }
-  .bar i { display: block; height: 100%; width: 62%; background: var(--lease); transition: width .25s linear; }
-  .ticket::before, .ticket::after { content: ""; position: absolute; width: 18px; height: 18px; border-radius: 50%; background: var(--paper); border: 1px solid var(--rule); top: 46px; }
-  .ticket::before { left: -10px; clip-path: inset(0 0 0 50%); }
-  .ticket::after { right: -10px; clip-path: inset(0 50% 0 0); }
-  .ticket[data-s="deleted"] { opacity: .45; filter: grayscale(1); }
-  .ticket-cap { font-family: var(--mono); font-size: .72rem; color: var(--ink-3); margin-top: 10px; text-align: right; }
-  .ticket dd.cost { color: var(--lease); font-weight: 600; }
-  .ticket .plus { font-style: normal; color: var(--ok); font-weight: 600; opacity: 0; transition: opacity .3s; margin-left: 6px; }
-  .ticket .plus.on { opacity: 1; }
-  .ticket-cmd { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--term-bg); color: var(--term-ink); padding: 10px 10px 10px 16px; }
-  .ticket-cmd code { font-size: .8rem; min-width: 0; overflow-x: auto; white-space: nowrap; }
-  .ticket-cmd .p { color: var(--lease); user-select: none; }
-  .ticket-cmd .btn { border-color: var(--term-dim); color: var(--term-ink); padding: 6px 10px; flex: none; font-size: .74rem; }
-  .ticket-cmd .btn:hover { background: var(--term-ink); color: var(--term-bg); }
-  .ticket-cmd .btn:disabled { opacity: .4; cursor: default; background: transparent; color: var(--term-ink); }
+  /* ---------- hero ---------- */
+  .hero { padding-top: calc(var(--bar-h) + clamp(48px, 9vw, 120px)); padding-bottom: clamp(40px, 6vw, 80px); overflow: hidden; }
+  .hero::before { content: ""; position: absolute; inset: 0; background:
+      radial-gradient(60% 55% at 78% 8%, rgba(47, 99, 230, .22), transparent 70%),
+      radial-gradient(45% 40% at 8% 0%, rgba(217, 127, 0, .16), transparent 70%); pointer-events: none; }
+  .hero .wrap { position: relative; }
+  .hero h1 { font-family: var(--display); font-weight: 800; font-size: clamp(3.1rem, 9.4vw, 8.2rem); line-height: .9; letter-spacing: -.035em; margin-top: 22px; text-wrap: balance; }
+  .hero h1 time { color: var(--lease); font-variant-numeric: tabular-nums; white-space: nowrap; display: inline-block; }
+  .hero h1 .ch { display: inline-block; will-change: transform, opacity; }
+  .hero .lede { font-size: clamp(1.08rem, 1.6vw, 1.3rem); max-width: 37em; margin-top: 28px; }
+  .hero .lede b { color: var(--ink); font-weight: 600; }
+  .acts { display: flex; flex-wrap: wrap; align-items: stretch; gap: 12px; margin-top: 34px; }
+  .install { display: flex; align-items: center; gap: 14px; background: var(--void); border: 1px solid var(--rule-2); padding: 0 6px 0 18px; min-height: 54px; min-width: 0; font-family: var(--mono); font-size: .92rem; overflow: hidden; }
+  .install .p { color: var(--lease); user-select: none; }
+  .install code { font-family: inherit; white-space: nowrap; overflow-x: auto; scrollbar-width: none; min-width: 0; }
+  .install code::-webkit-scrollbar { display: none; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 54px; padding: 0 22px; font-family: var(--mono); font-size: .88rem; font-weight: 600; border: 1px solid var(--rule-2); background: transparent; color: var(--ink); text-decoration: none; white-space: nowrap; transition: background .15s, color .15s, border-color .15s; }
+  .btn:hover { background: var(--ink); color: var(--night); border-color: var(--ink); }
+  .btn.hot { border-color: var(--lease); color: var(--lease); }
+  .btn.hot:hover { background: var(--lease); color: var(--night); }
+  .btn.small { min-height: 40px; padding: 0 14px; font-size: .78rem; }
+  .ticks { display: flex; flex-wrap: wrap; gap: 8px 26px; margin-top: 30px; padding: 0; list-style: none; font-family: var(--mono); font-size: .8rem; color: var(--ink-3); }
+  .ticks li::before { content: "✓ "; color: var(--ok); }
 
-  /* sections */
-  section { padding-block: 72px; }
-  .alt { background: var(--sheet); border-block: 1px solid var(--rule); }
-  .sec-hd { max-width: 44em; margin-bottom: 40px; }
-  .sec-hd h2 { font-size: clamp(1.9rem, 3.6vw, 2.8rem); line-height: 1.05; font-weight: 700; margin-top: 12px; }
-  .sec-hd p { color: var(--ink-2); margin-top: 16px; font-size: 1.08rem; }
+  /* ---------- the playground: terminal + live architecture ---------- */
+  .play { padding-top: clamp(24px, 4vw, 56px); }
+  .stage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 0; margin-top: 36px; border: 1px solid var(--rule-2); background: var(--void); box-shadow: 0 40px 120px rgba(0, 0, 0, .6), 0 0 0 1px rgba(123, 162, 255, .05); }
+  .term { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--rule); height: 560px; }
+  .term-top, .scene-top { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 14px; border-bottom: 1px solid var(--rule); font-family: var(--mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); flex: none; }
+  .term-top i { width: 10px; height: 10px; border-radius: 50%; background: var(--rule-2); display: block; }
+  .term-top span, .scene-top span { margin-left: 6px; }
+  .scene-top { justify-content: space-between; }
+  .scene-top .right { display: flex; gap: 8px; align-items: center; }
+  .term-out { flex: 1; overflow-y: auto; padding: 16px 16px 6px; font-family: var(--mono); font-size: .82rem; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; scrollbar-width: thin; scrollbar-color: var(--rule-2) transparent; cursor: text; }
+  .term-out .l { min-height: 1.65em; }
+  .term-out .p { color: var(--lease); user-select: none; }
+  .term-out .d { color: var(--ink-3); }
+  .term-out .ok { color: var(--ok); }
+  .term-out .er { color: var(--no); }
+  .term-out .am { color: var(--lease); }
+  .term-out .bl { color: var(--signal); }
+  .term-in { display: flex; align-items: center; gap: 9px; padding: 8px 16px 14px; font-family: var(--mono); font-size: .82rem; flex: none; }
+  .term-in .p { color: var(--lease); }
+  .term-in input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: var(--ink); font: inherit; caret-color: var(--lease); padding: 4px 0; }
+  .term-in input::placeholder { color: var(--ink-3); opacity: .7; }
+  .chips { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--rule); overflow-x: auto; scrollbar-width: none; flex: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chips button { flex: none; font-family: var(--mono); font-size: .74rem; background: var(--deck); border: 1px solid var(--rule); color: var(--ink-2); padding: 7px 11px; white-space: nowrap; transition: border-color .15s, color .15s; }
+  .chips button:hover { border-color: var(--lease); color: var(--lease); }
+  .scene { position: relative; min-width: 0; height: 560px; display: flex; flex-direction: column; }
+  .scene canvas { display: block; width: 100%; flex: 1; min-height: 0; cursor: crosshair; touch-action: manipulation; }
+  .scene-note { position: absolute; left: 14px; right: 14px; bottom: 10px; font-family: var(--mono); font-size: .7rem; color: var(--ink-3); pointer-events: none; display: flex; justify-content: space-between; gap: 12px; }
 
-  /* four claims */
-  .claims { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border-top: 2px solid var(--ink); }
-  .claim { padding: 22px 22px 6px 0; border-right: 1px solid var(--rule); margin-right: 22px; }
-  .claim:last-child { border-right: 0; margin-right: 0; }
-  .claim .k { font-family: var(--mono); font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; color: var(--lease); font-weight: 600; }
-  .claim h3 { font-size: 1.35rem; margin: 8px 0 8px; font-weight: 700; }
-  .claim p { color: var(--ink-2); font-size: .96rem; }
+  /* ---------- the blind relay ---------- */
+  .blind { background: linear-gradient(180deg, var(--night), var(--deck) 40%, var(--night)); }
+  .wire { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 40px; border: 1px solid var(--rule-2); }
+  .wire > div { padding: 22px; min-width: 0; min-height: 230px; display: flex; flex-direction: column; }
+  .wire > div + div { border-left: 1px solid var(--rule); }
+  .wire .who { font-family: var(--mono); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+  .wire .who b { color: var(--signal); font-weight: 600; }
+  .wire .mid .who b { color: var(--no); }
+  .wire h3 { font-family: var(--display); font-size: 1.3rem; font-weight: 700; margin: 6px 0 14px; }
+  .wire textarea { flex: 1; width: 100%; min-height: 96px; resize: none; background: var(--void); border: 1px solid var(--rule-2); color: var(--ink); font-family: var(--mono); font-size: .9rem; line-height: 1.6; padding: 12px; outline-offset: 2px; }
+  .wire .hex { flex: 1; font-family: var(--mono); font-size: .78rem; line-height: 1.7; color: var(--no); overflow: hidden; overflow-wrap: anywhere; background: var(--void); border: 1px solid var(--rule); padding: 12px; opacity: .92; }
+  .wire .plain { flex: 1; font-family: var(--mono); font-size: .9rem; line-height: 1.6; color: var(--ok); background: var(--void); border: 1px solid var(--rule); padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .wire small { display: block; margin-top: 10px; font-size: .8rem; color: var(--ink-3); }
+  .fine { font-size: .86rem; color: var(--ink-3); margin-top: 16px; max-width: 60em; }
 
-  /* how it works */
-  .how { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 44px; align-items: start; }
-  .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-  .steps button { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 34px 1fr; gap: 4px 12px; width: 100%; padding: 16px 14px; cursor: pointer; border-left: 3px solid var(--rule); }
-  .steps button:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }
-  .steps .n { font-family: var(--mono); font-size: .8rem; color: var(--ink-3); padding-top: 3px; }
-  .steps b { font-family: var(--display); font-size: 1.12rem; font-weight: 700; }
-  .steps span.d { grid-column: 2; color: var(--ink-2); font-size: .94rem; display: none; }
-  .steps button[aria-selected="true"] { border-left-color: var(--signal); background: var(--signal-wash); }
-  .steps button[aria-selected="true"] .n { color: var(--signal); }
-  .steps button[aria-selected="true"] span.d { display: block; }
-  .diagram { overflow-x: auto; border: 1px solid var(--rule); background: var(--paper); }
-  .diagram svg { display: block; width: 100%; min-width: 560px; height: auto; font-family: var(--mono); }
-  .alt .diagram { background: var(--paper); }
-  .d-box { fill: var(--sheet); stroke: var(--ink-3); stroke-width: 1.2; transition: stroke .3s, stroke-width .3s, opacity .4s; }
-  .d-zone { fill: none; stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 5 5; }
-  .d-t { fill: var(--ink); font-size: 13px; font-weight: 600; }
-  .d-s { fill: var(--ink-3); font-size: 10.5px; }
-  .d-line { fill: none; stroke: var(--rule); stroke-width: 2; transition: stroke .3s, opacity .3s; }
-  .d-tun { fill: none; stroke: var(--signal); stroke-width: 3; opacity: .12; transition: opacity .3s; }
-  .d-key { fill: var(--lease); opacity: .2; transition: opacity .3s; }
-  .d-hot { opacity: 0; transition: opacity .3s; fill: var(--signal); font-size: 10.5px; font-weight: 600; }
-  [data-step="1"] #b-cli { stroke: var(--signal); stroke-width: 2.4; }
-  [data-step="1"] .d-key { opacity: 1; }
-  [data-step="1"] #h1, [data-step="2"] #h2, [data-step="3"] #h3, [data-step="4"] #h4, [data-step="5"] #h5 { opacity: 1; }
-  [data-step="2"] #l-cli { stroke: var(--signal); }
-  [data-step="2"] #b-relay { stroke: var(--signal); stroke-width: 2.4; }
-  [data-step="3"] #l-vm { stroke: var(--signal); }
-  [data-step="3"] #b-vm { stroke: var(--signal); stroke-width: 2.4; }
-  [data-step="4"] .d-tun { opacity: 1; }
-  [data-step="4"] .d-key { opacity: 1; }
-  [data-step="5"] #b-vm, [data-step="5"] #g-vm { opacity: .25; }
-  [data-step="5"] #b-vm { stroke: var(--lease); stroke-dasharray: 4 4; }
-  [data-step="5"] #h5 { fill: var(--lease); }
+  /* ---------- four facts ---------- */
+  .facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 44px; border-top: 2px solid var(--ink); border-left: 1px solid var(--rule); }
+  .fact { padding: 26px 22px 30px; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); min-width: 0; transition: background .25s; }
+  .fact:hover { background: var(--deck); }
+  .fact .k { font-family: var(--mono); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--lease); font-weight: 600; }
+  .fact h3 { font-family: var(--display); font-size: 1.45rem; font-weight: 700; line-height: 1.1; margin: 10px 0 10px; }
+  .fact p { color: var(--ink-2); font-size: .96rem; }
 
-  /* built by Marshal: a strip under the hero, and a fuller section near the end */
-  section.by-strip { background: var(--ink); color: var(--paper); padding-block: 0; }
-  .by-strip .wrap { display: flex; align-items: center; justify-content: space-between; gap: 10px 28px; flex-wrap: wrap; padding-block: 16px; }
-  .by-strip p { font-size: .98rem; min-width: 0; }
-  .by-strip b { font-family: var(--display); font-size: 1.08rem; letter-spacing: -.01em; }
-  .by-strip a { color: inherit; font-family: var(--mono); font-size: .8rem; font-weight: 600; border: 1px solid currentColor; padding: 8px 14px; text-decoration: none; white-space: nowrap; }
-  .by-strip a:hover, .by-strip a:focus-visible { background: var(--paper); color: var(--ink); }
-  .by { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 44px; align-items: start; }
-  .by h2 { font-size: clamp(1.9rem, 3.6vw, 2.8rem); line-height: 1.05; font-weight: 700; margin-top: 12px; }
-  .by p { color: var(--ink-2); margin-top: 16px; font-size: 1.05rem; max-width: 34em; }
-  .by ul { list-style: none; margin: 0; padding: 0; border-top: 2px solid var(--ink); }
-  .by li { padding: 16px 0; border-bottom: 1px solid var(--rule); color: var(--ink-2); font-size: .97rem; }
-  .by li b { display: block; color: var(--ink); font-weight: 600; margin-bottom: 2px; }
-
-  /* the thirty-second clip */
-  .clip-frame { border: 1px solid var(--rule); background: var(--sheet); overflow-x: auto; }
-  .clip-frame img { display: block; width: 100%; min-width: 760px; height: auto; }
-
-  pre, .clip-frame { scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
-
-  /* use cases */
-  .uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 2px solid var(--ink); border-left: 1px solid var(--rule); }
-  .usecase { display: flex; flex-direction: column; min-width: 0; padding: 22px 18px 0; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); background: var(--sheet); }
-  .usecase .k { font-family: var(--mono); font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; color: var(--lease); font-weight: 600; }
-  .usecase h3 { font-size: 1.2rem; font-weight: 700; margin: 8px 0 8px; text-wrap: balance; }
-  .usecase p { color: var(--ink-2); font-size: .95rem; margin-bottom: 18px; }
-  .usecase pre { margin: auto -18px 0; padding: 14px 18px; background: var(--term-bg); color: var(--term-ink); font-family: var(--mono); font-size: .76rem; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: visible; }
-  .usecase pre .c { color: var(--term-dim); }
-  .usecase pre .p { color: var(--lease); user-select: none; }
-  #security { border-top: 1px solid var(--rule); }
-
-  /* can / cannot */
-  .cc { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; border: 1px solid var(--rule); background: var(--sheet); }
-  .cc > div { padding: 26px 28px; min-width: 0; }
+  /* ---------- break the relay ---------- */
+  .breach { transition: background .5s; }
+  .breach-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 24px; }
+  .switch { display: inline-flex; align-items: center; gap: 14px; font-family: var(--mono); font-size: .86rem; font-weight: 600; background: transparent; border: 1px solid var(--no); color: var(--no); padding: 14px 18px; transition: background .2s, color .2s; }
+  .switch::before { content: ""; width: 34px; height: 18px; border-radius: 9px; background: currentColor; opacity: .35; box-shadow: inset 16px 0 0 -2px var(--night); transition: box-shadow .2s, opacity .2s; }
+  .switch[aria-pressed="true"] { background: var(--no); color: var(--night); }
+  .switch[aria-pressed="true"]::before { opacity: 1; box-shadow: inset -16px 0 0 -2px var(--no); background: var(--night); }
+  .cc { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin-top: 40px; border: 1px solid var(--rule-2); }
+  .cc > div { padding: 26px; min-width: 0; }
   .cc > div + div { border-left: 1px solid var(--rule); }
-  .cc h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 14px; }
-  .cc ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 11px; font-size: .97rem; color: var(--ink-2); }
-  .cc li { position: relative; padding-left: 22px; }
-  .cc li::before { position: absolute; left: 0; top: 0; }
-  .cc .y li::before { content: "\2212"; color: var(--no); font-weight: 700; font-family: var(--mono); }
-  .cc .n li::before { content: "\00d7"; color: var(--ok); font-weight: 700; font-family: var(--mono); }
-  .cc-note { margin-top: 18px; color: var(--ink-3); font-size: .93rem; max-width: 60em; }
-  .sec-sub { max-width: 44em; margin: 52px 0 18px; }
-  .sec-sub h3 { font-size: 1.5rem; font-weight: 700; }
-  .sec-sub p { color: var(--ink-2); margin-top: 8px; }
+  .cc h3 { font-family: var(--mono); font-size: .76rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; margin-bottom: 14px; }
+  .cc ul { list-style: none; padding: 0; margin: 0; }
+  .cc li { padding: 12px 0 12px 30px; border-top: 1px solid var(--rule); position: relative; color: var(--ink-2); font-size: .98rem; }
+  .cc li::before { position: absolute; left: 0; top: 12px; font-family: var(--mono); font-weight: 600; }
+  .cc .can li::before { content: "~"; color: var(--lease); }
+  .cc .cannot li::before { content: "×"; color: var(--ok); }
+  body.breached .breach { background: linear-gradient(180deg, var(--night), rgba(255, 122, 107, .07) 30%, var(--night)); }
+  body.breached .cc .can li { color: var(--ink); }
+  body.breached .cc .cannot li { color: var(--ink); }
+  body.breached .cc .cannot li::before { content: "✓"; }
+  body.breached .cc { border-color: var(--no); }
+  .verdict { margin-top: 18px; font-family: var(--mono); font-size: .86rem; color: var(--ink-3); min-height: 1.6em; }
+  body.breached .verdict { color: var(--ok); }
 
-  /* the tunnel figure and the custody matrix (same markup as security.html) */
-  figure { margin: 0; }
-  .fig { background: var(--sheet); }
-  .fig svg { min-width: 640px; }
-  .fig figcaption { font-family: var(--body); font-size: .9rem; color: var(--ink-3); padding: 12px 16px; border-top: 1px solid var(--rule); }
-  .g-zone { fill: none; stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 5 5; }
-  .g-box { fill: var(--paper); stroke: var(--ink-3); stroke-width: 1.2; }
-  .g-t { fill: var(--ink); font-size: 13px; font-weight: 600; }
-  .g-s { fill: var(--ink-3); font-size: 10.5px; }
-  .g-l { fill: var(--ink-3); font-size: 10px; letter-spacing: .08em; }
-  .g-tls { fill: var(--sheet-2); stroke: var(--ink-3); stroke-width: 1; }
-  .g-ssh { fill: var(--signal); }
-  .g-ssh-t { fill: var(--sheet); font-size: 11px; font-weight: 600; }
-  .g-key { fill: var(--lease); }
-  .g-sig { fill: var(--signal); font-size: 10.5px; font-weight: 600; }
-  .scroll { overflow-x: auto; }
-  .custody { width: 100%; border-collapse: collapse; border: 1px solid var(--rule); background: var(--sheet); font-size: .93rem; }
-  .custody th, .custody td { border-bottom: 1px solid var(--rule); padding: 12px 14px; vertical-align: middle; text-align: left; }
-  .custody tr:last-child td, .custody tr:last-child th { border-bottom: 0; }
-  .custody thead th { font-family: var(--mono); font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); text-align: center; border-bottom: 2px solid var(--ink); font-weight: 500; }
-  .custody thead th:first-child { text-align: left; }
-  .custody thead th.relay { color: var(--signal); font-weight: 600; }
-  .custody tbody th { font-weight: 600; min-width: 12em; }
-  .custody tbody th small { display: block; font-weight: 400; color: var(--ink-3); font-size: .84rem; margin-top: 2px; }
-  .custody td { text-align: center; font-family: var(--mono); font-size: .8rem; color: var(--ink-3); min-width: 6.5em; }
-  .custody td.relay { background: var(--signal-wash); }
-  .custody .has, .legend .has { display: inline-block; width: 14px; height: 14px; background: var(--lease); clip-path: polygon(0 0, 100% 0, 100% 62%, 62% 100%, 0 100%); vertical-align: -2px; }
-  .custody .pub, .legend .pub { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--ink-3); border-radius: 50%; vertical-align: -1px; }
-  .custody .none { color: var(--ink-3); font-size: 1.1rem; }
-  .legend { display: flex; gap: 8px 22px; flex-wrap: wrap; font-size: .86rem; color: var(--ink-3); margin-top: 12px; align-items: center; }
-  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  /* ---------- nothing to manage ---------- */
+  .none { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: start; margin-top: 44px; }
+  .none ul { list-style: none; padding: 0; margin: 0; border-top: 2px solid var(--ink); }
+  .none li { padding: 16px 0; border-bottom: 1px solid var(--rule); color: var(--ink-2); }
+  .none li b { display: block; color: var(--ink); font-weight: 600; }
+  .none .strike li { text-decoration: line-through; text-decoration-color: var(--no); text-decoration-thickness: 2px; color: var(--ink-3); }
+  .none h3 { font-family: var(--mono); font-size: .76rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; margin-bottom: 14px; }
 
-  /* nothing to manage */
-  .unm { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 0; border: 1px solid var(--rule); background: var(--paper); }
-  .unm > div { padding: 26px 28px; min-width: 0; }
-  .unm .k { font-family: var(--mono); font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: var(--ink-3); }
-  .unm-vm { border-left: 1px solid var(--rule); background: var(--lease-wash); }
-  .unm-vm .k { color: var(--lease); }
-  .unm ul, .unm ol { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
-  .unm-not li { color: var(--ink-3); font-size: 1.02rem; }
-  .unm-not s { text-decoration-color: var(--no); text-decoration-thickness: 2px; }
-  .unm-vm li { display: grid; gap: 2px; }
-  .unm-vm b { font-family: var(--display); font-size: 1.12rem; }
-  .unm-vm span { color: var(--ink-2); font-size: .95rem; }
+  /* ---------- use cases ---------- */
+  .uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 44px; border-top: 2px solid var(--ink); border-left: 1px solid var(--rule); }
+  .use { display: flex; flex-direction: column; padding: 24px 22px; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); min-width: 0; }
+  .use .k { font-family: var(--mono); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--lease); font-weight: 600; }
+  .use h3 { font-family: var(--display); font-size: 1.25rem; font-weight: 700; line-height: 1.15; margin: 8px 0; text-wrap: balance; }
+  .use p { color: var(--ink-2); font-size: .95rem; margin-bottom: 18px; }
+  .use button { margin-top: auto; align-self: flex-start; }
 
-  .posture { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 36px; margin-top: 44px; }
-  .posture h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 6px; }
-  .posture p { color: var(--ink-2); font-size: .94rem; }
-  .posture .ref { font-family: var(--mono); font-size: .74rem; color: var(--ink-3); margin-top: 8px; display: block; overflow-wrap: anywhere; }
+  /* ---------- get it ---------- */
+  .get { background: var(--deck); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .get-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 48px; margin-top: 40px; align-items: start; }
+  .get pre { background: var(--void); border: 1px solid var(--rule-2); padding: 20px; font-family: var(--mono); font-size: .84rem; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .get pre .p { color: var(--lease); user-select: none; }
+  .get pre .c { color: var(--ink-3); }
+  .links { list-style: none; padding: 0; margin: 0; border-top: 2px solid var(--ink); }
+  .links li { border-bottom: 1px solid var(--rule); }
+  .links a { display: flex; justify-content: space-between; gap: 16px; padding: 16px 2px; color: var(--ink); text-decoration: none; font-weight: 500; }
+  .links a span { color: var(--ink-3); font-family: var(--mono); font-size: .8rem; text-align: right; }
+  .links a:hover { color: var(--lease); }
 
-  /* terminal */
-  .term { background: var(--term-bg); color: var(--term-ink); font-family: var(--mono); font-size: .86rem; }
-  .tabs { display: flex; border-bottom: 1px solid rgba(130, 150, 176, .3); overflow-x: auto; }
-  .tabs button { all: unset; padding: 12px 18px; cursor: pointer; color: var(--term-dim); white-space: nowrap; font-size: .8rem; border-bottom: 2px solid transparent; }
-  .tabs button[aria-selected="true"] { color: var(--term-ink); border-bottom-color: var(--lease); }
-  .tabs button:focus-visible { outline: 2px solid var(--term-ink); outline-offset: -3px; }
-  .term pre { margin: 0; padding: 22px; overflow-x: auto; line-height: 1.75; }
-  .term .c { color: var(--term-dim); }
-  .term .p { color: var(--lease); user-select: none; }
-  .term .k { color: #8FB4FF; }
-  .use { display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr); gap: 44px; align-items: start; }
-  .use ul { margin: 22px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 14px; color: var(--ink-2); font-size: .98rem; }
-  .use li b { color: var(--ink); font-weight: 600; display: block; }
+  .by { background: var(--ink); color: var(--night); padding-block: 22px; }
+  .by .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 28px; }
+  .by p { font-size: 1rem; }
+  .by b { font-family: var(--display); font-size: 1.1rem; }
+  .by a { color: inherit; font-family: var(--mono); font-size: .8rem; font-weight: 600; border: 1px solid currentColor; padding: 9px 14px; text-decoration: none; white-space: nowrap; }
+  .by a:hover { background: var(--night); color: var(--ink); }
+  footer { padding-block: 34px 48px; color: var(--ink-3); font-size: .86rem; }
+  footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px 28px; }
+  footer nav { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+  footer a { color: var(--ink-2); text-decoration: none; }
+  footer a:hover { color: var(--ink); }
 
-  /* relay plans */
-  .plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border: 1px solid var(--rule); background: var(--sheet); }
-  .plan { padding: 26px 26px 28px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
-  .plan + .plan { border-left: 1px dashed var(--rule); }
-  .plan .k { font-family: var(--mono); font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
-  .plan.on .k { color: var(--lease); }
-  .plan h3 { font-size: 1.5rem; font-weight: 700; }
-  .plan p { color: var(--ink-2); font-size: .95rem; }
-  .plan dl { margin: 0; display: grid; grid-template-columns: 1fr max-content; gap: 8px 14px; font-family: var(--mono); font-size: .82rem; font-variant-numeric: tabular-nums; border-top: 1px solid var(--rule); padding-top: 14px; }
-  .plan dt { color: var(--ink-3); }
-  .plan dd { margin: 0; text-align: right; }
-  .plan pre { margin: 0; background: var(--term-bg); color: var(--term-ink); font-family: var(--mono); font-size: .78rem; padding: 12px 14px; overflow-x: auto; line-height: 1.7; }
-  .plan pre .p { color: var(--lease); user-select: none; }
-  .plan .foot { margin-top: auto; font-size: .86rem; color: var(--ink-3); }
-  .plans-note { margin-top: 18px; color: var(--ink-3); font-size: .93rem; max-width: 62em; }
+  /* ---------- the ending ---------- */
+  #ash { position: fixed; inset: 0; z-index: 70; pointer-events: none; width: 100vw; height: 100vh; }
+  .going { animation: going .9s cubic-bezier(.5, 0, .8, .4) forwards; pointer-events: none; }
+  @keyframes going { 0% { opacity: 1; filter: none; transform: none; } 30% { filter: blur(0) saturate(.3) brightness(1.5); } 100% { opacity: 0; filter: blur(7px) saturate(0); transform: translateY(-14px) scale(.985); } }
+  .gone { visibility: hidden; }
+  body.ending { cursor: progress; }
+  body.ending .leasebar .meter { background: var(--no); }
+  .coming { animation: coming .7s cubic-bezier(.2, .8, .2, 1) both; }
+  @keyframes coming { from { opacity: 0; filter: blur(8px); transform: translateY(14px); } to { opacity: 1; filter: none; transform: none; } }
+  body.dead { overflow: hidden; }
+  .after { position: fixed; inset: 0; z-index: 80; background: var(--void); display: none; align-items: center; justify-content: center; padding: 28px var(--gutter-r) 28px var(--gutter-l); overflow-y: auto; }
+  body.dead .after { display: flex; }
+  .after-in { width: min(720px, 100%); font-family: var(--mono); font-size: clamp(.84rem, 1.6vw, 1rem); line-height: 1.8; }
+  .after-in .p { color: var(--lease); }
+  .after-in .d { color: var(--ink-3); }
+  .after-in .ok { color: var(--ok); }
+  .after-in .big { font-family: var(--display); font-weight: 800; font-size: clamp(2rem, 6.4vw, 4.4rem); line-height: .98; letter-spacing: -.03em; margin: 26px 0 18px; color: var(--ink); text-wrap: balance; }
+  .after-in .big em { font-style: normal; color: var(--lease); }
+  .after-in .say { font-family: var(--body); color: var(--ink-2); font-size: 1.08rem; line-height: 1.6; max-width: 34em; }
+  .after-acts { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+  .cur { display: inline-block; width: .6em; height: 1.1em; background: var(--lease); vertical-align: text-bottom; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
 
-  /* open source */
-  .oss { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 44px; align-items: start; }
-  .oss p + p { margin-top: 14px; }
-  .oss p { color: var(--ink-2); }
-  .links { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+  .rise { opacity: 0; transform: translateY(26px); transition: opacity .8s ease, transform .8s cubic-bezier(.2, .8, .2, 1); }
+  .rise.in { opacity: 1; transform: none; }
 
-  footer { padding-block: 34px; border-top: 1px solid var(--rule); font-size: .88rem; color: var(--ink-3); }
-  footer .wrap { display: flex; justify-content: space-between; gap: 16px 30px; flex-wrap: wrap; }
-  footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
-
-  @media (max-width: 900px) {
-    .hero .wrap, .how, .use, .oss { grid-template-columns: minmax(0, 1fr); gap: 36px; }
-    .unm { grid-template-columns: minmax(0, 1fr); }
-    .unm-vm { border-left: 0; border-top: 1px solid var(--rule); }
-    .claims { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (max-width: 980px) {
+    .stage { grid-template-columns: minmax(0, 1fr); }
+    .term { border-right: 0; border-bottom: 1px solid var(--rule); height: 440px; }
+    .scene { height: 520px; order: -1; border-bottom: 1px solid var(--rule); }
+    .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .claim:nth-child(2) { border-right: 0; margin-right: 0; }
-    .claim:nth-child(n+3) { border-top: 1px solid var(--rule); }
-    .posture { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .plans { grid-template-columns: minmax(0, 1fr); }
-    .plan + .plan { border-left: 0; border-top: 1px dashed var(--rule); }
-    section { padding-block: 54px; }
-    .hero { padding-block: 44px 54px; }
+    .get-grid, .none { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+    .leasebar nav a.opt { display: none; }
   }
-  @media (max-width: 560px) {
+  @media (max-width: 680px) {
     body { font-size: 16px; }
-    .claims, .cc, .posture, .uses { grid-template-columns: minmax(0, 1fr); }
-    .by { grid-template-columns: minmax(0, 1fr); gap: 28px; }
-    .plan + .plan { border-left: 0; border-top: 1px dashed var(--rule); }
-    .claim { border-right: 0; margin-right: 0; border-top: 1px solid var(--rule); }
-    .claim:first-child { border-top: 0; }
+    .wire { grid-template-columns: minmax(0, 1fr); }
+    .wire > div + div { border-left: 0; border-top: 1px solid var(--rule); }
+    .wire > div { min-height: 0; }
+    .cc { grid-template-columns: minmax(0, 1fr); }
     .cc > div + div { border-left: 0; border-top: 1px solid var(--rule); }
-    .nav ul { gap: 14px; }
+    .facts, .uses { grid-template-columns: minmax(0, 1fr); }
+    .status .name, .status .cost, .status .sep.b, .leasebar nav a { display: none; }
+    .leasebar nav { gap: 8px; }
+    .install { width: 100%; }
+    .acts .btn { flex: 1; }
+    .scene { height: 480px; }
+    .scene-note span:last-child { display: none; }
   }
   @media (prefers-reduced-motion: reduce) {
-    * { transition: none !important; scroll-behavior: auto !important; }
+    html { scroll-behavior: auto; }
+    .rise { opacity: 1; transform: none; transition: none; }
+    .going { animation-duration: .01s; }
+    .coming { animation: none; }
+    .status .dot, body.expiring .hero h1 time, .cur { animation: none; }
   }
 </style>
 </head>
 <body>
 
-<header class="nav band">
+<header class="leasebar" id="bar">
   <div class="wrap">
-    <a class="mark" href="#top"><img src="logo.svg" alt="" width="28" height="28">runlease</a>
+    <a class="brand" href="./" aria-label="Runlease home"><img src="logo.svg" alt="" width="24" height="24">runlease</a>
+    <div class="status" aria-label="This page is on a lease: it deletes itself when the countdown ends">
+      <span class="dot" aria-hidden="true"></span>
+      <span class="name">this-website</span>
+      <span class="sep b" aria-hidden="true">·</span>
+      <span>lease <span class="t" id="bar-time">3:00</span></span>
+      <span class="sep b" aria-hidden="true">·</span>
+      <span class="cost">cost <span class="c" id="bar-cost">$0.00000</span></span>
+    </div>
     <nav aria-label="Main">
-      <ul>
-        <li><a href="#clip">Demo</a></li>
-        <li><a href="#uses">Use cases</a></li>
-        <li><a href="security.html">Security</a></li>
-        <li><a href="how-it-works.html">How it works</a></li>
-        <li><a href="relay.html">Relay</a></li>
-        <li><a href="install.html">Install</a></li>
-        <li><a href="https://github.com/marshal-org/runlease">GitHub</a></li>
-      </ul>
+      <a class="opt" href="how-it-works.html">How it works</a>
+      <a class="opt" href="security.html">Security</a>
+      <a href="install.html">Install</a>
+      <a class="opt" href="https://github.com/marshal-org/runlease">GitHub</a>
+      <button class="chipbtn" type="button" data-act="snooze">Snooze 3m</button>
     </nav>
+    <div class="meter" id="bar-meter" aria-hidden="true"></div>
   </div>
 </header>
 
-<main id="top">
+<main id="main">
 
-<div class="hero band">
+<section class="hero" data-part="hero">
   <div class="wrap">
-    <div>
-      <p class="eyebrow">Open source · Apache-2.0 · runs in your GCP or AWS account</p>
-      <h1>Spot machines for coding agents. <em>Cheap, safe, and in your own cloud.</em></h1>
-      <p class="lede">Runlease launches <b>spot VMs</b>, the capacity clouds sell at 60 to 90% below the normal price, <b>inside your own account</b>. Your keys never leave your machine, the relay in the middle cannot read a byte, and every machine <b>deletes itself</b> when its lease ends.</p>
-      <div class="cta">
-        <div class="install">
-          <span><span class="p">$ </span><span id="install-cmd">curl -fsSL https://runlease.online/install.sh | sh</span></span>
-          <button class="btn" id="copy" type="button">Copy</button>
+    <p class="eyebrow"><b>Lease № <span id="lease-no">0001</span></b> · issued on arrival · admits one website</p>
+    <h1 id="h1">This website deletes itself in <time id="hero-time" datetime="PT3M">3:00</time>.</h1>
+    <p class="lede">It was launched when you arrived, and it will be gone when its lease ends unless you snooze it. <b>That is how every Runlease machine works:</b> a cheap spot VM in your own cloud account, for you or your coding agent, that cleans up after itself.</p>
+    <div class="acts">
+      <div class="install"><span class="p" aria-hidden="true">$</span><code id="install-cmd">curl -fsSL https://runlease.online/install.sh | sh</code><button class="btn small" type="button" data-copy="install-cmd">Copy</button></div>
+      <a class="btn hot" href="#play">Launch a machine ↓</a>
+      <button class="btn" type="button" data-act="down">Delete this page now</button>
+    </div>
+    <ul class="ticks">
+      <li>Spot prices, no markup</li>
+      <li>Your cloud, your bill</li>
+      <li>Keys stay on your machine</li>
+      <li>Nothing to manage</li>
+    </ul>
+  </div>
+</section>
+
+<section class="play" id="play" data-part="playground">
+  <div class="wrap">
+    <p class="eyebrow rise"><b>Try it</b> · no install, nothing billed</p>
+    <h2 class="rise">Go on. Launch something.</h2>
+    <p class="lede rise">The terminal behaves like the real CLI, with time running sixty times faster: a two-hour lease lasts two minutes. Everything you launch appears on the right, in the place it would really run, and everything deletes itself.</p>
+    <div class="stage rise">
+      <div class="term" id="term">
+        <div class="term-top"><i></i><i></i><i></i><span>your machine</span></div>
+        <div class="term-out" id="term-out" role="log" aria-label="Terminal output"></div>
+        <label class="term-in"><span class="p" aria-hidden="true">$</span><input id="term-input" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="runlease up" aria-label="Type a runlease command"></label>
+        <div class="chips" id="chips" aria-label="Commands to try">
+          <button type="button" data-run="runlease up -n agent-box --ttl 2h -d">up</button>
+          <button type="button" data-run="runlease exec agent-box -- make test">exec</button>
+          <button type="button" data-run="runlease list">list</button>
+          <button type="button" data-run="runlease snooze agent-box 1h">snooze</button>
+          <button type="button" data-script="fanout">fan out ×4</button>
+          <button type="button" data-run="runlease doctor">doctor</button>
+          <button type="button" data-run="runlease down agent-box --yes">down</button>
+          <button type="button" data-run="help">help</button>
         </div>
-        <a class="btn" href="#security">See how it is secured</a>
       </div>
-      <div class="facts">
-        <span>Spot prices, no markup</span>
-        <span>Your cloud, your bill</span>
-        <span>Keys stay on your machine</span>
-        <span>Nothing to manage</span>
-      </div>
-    </div>
-
-    <div>
-      <div class="ticket" id="ticket" data-s="running" aria-label="An example machine lease">
-        <div class="ticket-hd"><b>agent-box</b><span class="state" id="t-state" data-s="running">running</span></div>
-        <dl>
-          <dt>account</dt><dd>yours</dd>
-          <dt>class</dt><dd>compute.small · spot</dd>
-          <dt>keys held by the relay</dt><dd class="no">none</dd>
-          <dt>managed by</dt><dd>itself</dd>
-          <dt>rate</dt><dd>~$0.026 / h</dd>
-          <dt>cost so far</dt><dd class="cost" id="t-cost">$0.020</dd>
-        </dl>
-        <div class="lease-row">
-          <div class="lbl"><span>lease remaining <i class="plus" id="t-plus" aria-hidden="true">+1 h</i></span><b id="t-left">1:14:20</b></div>
-          <div class="bar" role="presentation"><i id="t-bar"></i></div>
+      <div class="scene" id="scene">
+        <div class="scene-top"><span>what that builds</span>
+          <div class="right">
+            <button class="chipbtn quiet" type="button" id="lid" aria-pressed="false">Close the laptop</button>
+          </div>
         </div>
-        <div class="ticket-cmd">
-          <code id="t-cmd"><span class="p">$</span> runlease up --ttl 2h</code>
-          <button class="btn" id="t-snooze" type="button">Snooze +1 h</button>
-        </div>
-      </div>
-      <p class="ticket-cap" id="t-cap">Example lease, shown as a time-lapse. Press snooze to buy it an hour.</p>
-    </div>
-  </div>
-</div>
-
-<section class="by-strip band" aria-label="Built by Marshal">
-  <div class="wrap">
-    <p>Built by <b>Marshal</b>: AI coding agents at full speed, with full receipts.</p>
-    <a href="https://marshal.codes">marshal.codes &rarr;</a>
-  </div>
-</section>
-
-<section class="band" id="clip" aria-labelledby="clip-h">
-  <div class="wrap">
-    <div class="sec-hd">
-      <p class="eyebrow">Thirty seconds</p>
-      <h2 id="clip-h">Watch a machine get leased, used and gone.</h2>
-      <p>The terminal is on the left. On the right is what each command builds: where the keys are made, what the relay holds, where the machine runs, and what is left when the lease ends.</p>
-    </div>
-    <div class="clip-frame"><img src="demo.svg" width="1200" height="600" alt="A terminal runs runlease up, exec, snooze and list. Beside it a diagram builds step by step: keys are made on your computer, a slot is reserved at the relay, a spot machine starts in your cloud account and dials out, SSH runs end to end through the relay, the lease is extended, and the machine deletes itself."></div>
-  </div>
-</section>
-
-<section class="alt band" aria-labelledby="why-h">
-  <div class="wrap">
-    <div class="sec-hd">
-      <p class="eyebrow">Why it exists</p>
-      <h2 id="why-h">An agent needs a real machine. It should be cheap, it should be yours, and it should not live forever.</h2>
-    </div>
-    <div class="claims">
-      <div class="claim"><span class="k">Cheap</span><h3>Spot prices, on your bill</h3><p>Spot capacity costs 60 to 90% less than on-demand. You pay your cloud directly, at your own rates, with nothing added. The hourly price and the cost of the whole lease are shown before launch.</p></div>
-      <div class="claim"><span class="k">Safe</span><h3>Keys never leave you</h3><p>SSH keys are made on your machine and stay there. The VM has no public address and its SSH server listens on localhost only: it dials out. The relay in the middle holds no key and sees only ciphertext.</p></div>
-      <div class="claim"><span class="k">Yours</span><h3>In your own cloud</h3><p>Machines run in your GCP or AWS account, in your network, under your IAM and your audit logs. No machine of yours ever lives in an account of ours.</p></div>
-      <div class="claim"><span class="k">Self-managing</span><h3>Nothing to run</h3><p>No control plane and no scheduler. The lease logic is written into each machine at boot, and the machine deletes itself on time.</p></div>
-    </div>
-  </div>
-</section>
-
-<section class="band" id="uses" aria-labelledby="uses-h">
-  <div class="wrap">
-    <div class="sec-hd">
-      <p class="eyebrow">What it is for</p>
-      <h2 id="uses-h">Give your agents cheap, safe machines to do their work.</h2>
-      <p>Anything an agent, a CI job or you would do on a real Linux box. Each one runs on a spot machine in your own cloud account, is reached over SSH end to end, and deletes itself when its lease ends.</p>
-    </div>
-    <div class="uses">
-      <div class="usecase"><span class="k">Coding agents</span><h3>A machine for every agent</h3><p>Each agent gets its own box to build, test and break things on. Your laptop, your keys and your other agents are not in the room.</p>
-<pre><span class="p">$</span> runlease up -n agent-7 --ttl 2h -d
-<span class="p">$</span> runlease exec agent-7 -- make test</pre></div>
-      <div class="usecase"><span class="k">Untrusted code</span><h3>Run what you would not run on your laptop</h3><p>Generated code, an unfamiliar repository, an install script from the internet. It runs on a machine that holds none of your SSH keys and is gone within the hour.</p>
-<pre><span class="p">$</span> runlease up -n sandbox --ttl 1h -d
-<span class="p">$</span> runlease push sandbox ./run.sh /tmp/run.sh
-<span class="p">$</span> runlease exec sandbox -- bash /tmp/run.sh</pre></div>
-      <div class="usecase"><span class="k">Heavy jobs</span><h3>Borrow a big machine for one build</h3><p>A full test suite, a large compile, a data crunch. Rent sixteen cores at spot prices for the twenty minutes you need them, and pay for nothing after.</p>
-<pre><span class="p">$</span> runlease up -n build -s compute.2xlarge -d
-<span class="p">$</span> runlease exec build -- make -j16 test</pre></div>
-      <div class="usecase"><span class="k">Many at once</span><h3>Fan out, then let them all end</h3><p>One machine per test shard or per task. There is no cleanup step to write, because every machine carries its own deadline. The free relay allows two at a time; on your own relay you set the limit.</p>
-<pre><span class="p">$</span> for i in 1 2; do
-    runlease up -n shard-$i --ttl 1h -d
-  done
-<span class="p">$</span> runlease list</pre></div>
-      <div class="usecase"><span class="k">GPU</span><h3>A GPU for an afternoon</h3><p>One spot GPU for an evaluation or a fine-tune, on a lease, so it cannot be left running overnight by mistake.</p>
-<pre><span class="p">$</span> runlease up -p gcp -s compute.gpu --ttl 3h
-<span class="p">$</span> runlease snooze 1h   <span class="c"># need longer</span></pre></div>
-      <div class="usecase"><span class="k">Previews</span><h3>Show a branch running</h3><p>Run the app on the machine and open it on your own localhost. It is reached through the tunnel, not through an open port.</p>
-<pre><span class="p">$</span> runlease forward demo -L 3000:localhost:3000
-<span class="c"># now open http://localhost:3000</span></pre></div>
-    </div>
-    <p class="cc-note">Starter files for these: <a href="install.html#manifests">example manifests</a>.</p>
-  </div>
-</section>
-
-<section class="band" id="security" aria-labelledby="sec-h">
-  <div class="wrap">
-    <div class="sec-hd">
-      <p class="eyebrow">Security</p>
-      <h2 id="sec-h">Your keys stay on your machine. The relay only ever touches the outside of the tunnel.</h2>
-      <p>You are about to give an agent a shell on a cloud machine. This is exactly who can see and do what.</p>
-    </div>
-
-    <figure class="diagram fig">
-  <svg viewBox="0 0 900 318" role="img" aria-label="Diagram. An SSH tunnel runs unbroken from the runlease CLI on your machine, through the relay, to the SSH server on your VM. Around it, TLS covers each hop separately and ends at the relay. The relay box is marked: sees ciphertext only, holds no keys.">
-    <!-- your machine -->
-    <rect class="g-zone" x="14" y="26" width="226" height="266"></rect>
-    <text class="g-l" x="26" y="46">YOUR MACHINE</text>
-    <rect class="g-box" x="34" y="92" width="186" height="150"></rect>
-    <text class="g-t" x="48" y="118">runlease CLI</text>
-    <rect class="g-key" x="48" y="198" width="10" height="10"></rect>
-    <text class="g-s" x="64" y="207">login key (private)</text>
-    <rect class="g-key" x="48" y="218" width="10" height="10"></rect>
-    <text class="g-s" x="64" y="227">VM host key, pinned</text>
-
-    <!-- relay -->
-    <rect class="g-box" x="360" y="62" width="180" height="210"></rect>
-    <text class="g-t" x="450" y="88" text-anchor="middle">relay</text>
-    <text class="g-sig" x="450" y="228" text-anchor="middle">sees ciphertext only</text>
-    <text class="g-sig" x="450" y="246" text-anchor="middle">holds no keys</text>
-
-    <!-- cloud -->
-    <rect class="g-zone" x="660" y="26" width="226" height="266"></rect>
-    <text class="g-l" x="672" y="46">YOUR CLOUD ACCOUNT</text>
-    <rect class="g-box" x="680" y="92" width="186" height="150"></rect>
-    <text class="g-t" x="694" y="118">spot VM · sshd</text>
-    <rect class="g-key" x="694" y="198" width="10" height="10"></rect>
-    <text class="g-s" x="710" y="207">VM host key</text>
-    <circle cx="699" cy="223" r="5" fill="none" stroke="var(--ink-3)" stroke-width="2"></circle>
-    <text class="g-s" x="710" y="227">login key (public half)</text>
-
-    <!-- outer TLS, one per hop -->
-    <rect class="g-tls" x="220" y="132" width="140" height="56"></rect>
-    <rect class="g-tls" x="540" y="132" width="140" height="56"></rect>
-    <text class="g-s" x="290" y="124" text-anchor="middle">TLS, hop 1</text>
-    <text class="g-s" x="610" y="124" text-anchor="middle">TLS, hop 2</text>
-    <text class="g-s" x="290" y="206" text-anchor="middle">you dial out</text>
-    <text class="g-s" x="610" y="206" text-anchor="middle">VM dials out</text>
-
-    <!-- inner SSH, end to end -->
-    <rect class="g-ssh" x="120" y="148" width="660" height="24"></rect>
-    <text class="g-ssh-t" x="450" y="164" text-anchor="middle">SSH · encrypted and authenticated end to end</text>
-    <circle class="g-ssh" cx="120" cy="160" r="9"></circle>
-    <circle class="g-ssh" cx="780" cy="160" r="9"></circle>
-  </svg>
-  <figcaption>The blue band is your SSH session. It starts and ends at the two machines you control. The relay only ever handles it from the outside.</figcaption>
-</figure>
-
-    <div class="sec-sub">
-      <h3>Who holds what</h3>
-      <p>Read down the highlighted column. The relay is the only shared, internet-facing part, and it ends up holding almost nothing.</p>
-    </div>
-    <div class="scroll">
-<table class="custody">
-  <thead>
-    <tr><th scope="col">Secret</th><th scope="col">Your machine</th><th scope="col" class="relay">The relay</th><th scope="col">Your VM</th><th scope="col">The network</th></tr>
-  </thead>
-  <tbody>
-    <tr>
-      <th scope="row">Login private key<small>Proves you to the VM</small></th>
-      <td><span class="has" role="img" aria-label="Holds it"></span></td>
-      <td class="relay"><span class="none" aria-label="Never sees it">–</span></td>
-      <td><span class="pub" role="img" aria-label="Public half only"></span></td>
-      <td><span class="none" aria-label="Never sees it">–</span></td>
-    </tr>
-    <tr>
-      <th scope="row">VM host private key<small>Proves the VM to you</small></th>
-      <td><span class="has" role="img" aria-label="Holds it"></span></td>
-      <td class="relay"><span class="none" aria-label="Never sees it">–</span></td>
-      <td><span class="has" role="img" aria-label="Holds it"></span></td>
-      <td><span class="none" aria-label="Never sees it">–</span></td>
-    </tr>
-    <tr>
-      <th scope="row">Session contents<small>Commands, files, forwarded traffic</small></th>
-      <td><span class="has" role="img" aria-label="Sees it"></span></td>
-      <td class="relay">ciphertext</td>
-      <td><span class="has" role="img" aria-label="Sees it"></span></td>
-      <td>ciphertext</td>
-    </tr>
-    <tr>
-      <th scope="row">Cloud credentials<small>What launches and deletes VMs</small></th>
-      <td><span class="has" role="img" aria-label="Holds it"></span></td>
-      <td class="relay"><span class="none" aria-label="Never sees it">–</span></td>
-      <td>only what you attach</td>
-      <td><span class="none" aria-label="Never sees it">–</span></td>
-    </tr>
-    <tr>
-      <th scope="row">Slot token<small>Matches your connections to your VM</small></th>
-      <td><span class="has" role="img" aria-label="Holds it"></span></td>
-      <td class="relay"><span class="has" role="img" aria-label="Holds it"></span></td>
-      <td><span class="has" role="img" aria-label="Holds it"></span></td>
-      <td>hidden by TLS</td>
-    </tr>
-    <tr>
-      <th scope="row">Who you are<small>The email you signed in with</small></th>
-      <td><span class="has" role="img" aria-label="Knows it"></span></td>
-      <td class="relay"><span class="has" role="img" aria-label="Knows it"></span></td>
-      <td><span class="none" aria-label="Does not know it">–</span></td>
-      <td>hidden by TLS</td>
-    </tr>
-  </tbody>
-</table>
-</div>
-<p class="legend"><span><i class="has"></i> holds it</span><span><i class="pub"></i> public half only</span><span>– never sees it</span></p>
-
-    <div class="sec-sub">
-      <h3>Now assume the relay is compromised</h3>
-      <p>It is designed to be worth as little as possible to whoever breaks into it. Here is what they get.</p>
-    </div>
-    <div class="cc">
-      <div class="y">
-        <h3>It can</h3>
-        <ul>
-          <li>Refuse or drop your connections</li>
-          <li>See connection metadata: who, from where, when, how much</li>
-          <li>Open a TCP connection to your VM's sshd, and fail to log in</li>
-          <li>Serve a different agent binary, which the VM then rejects</li>
-        </ul>
-      </div>
-      <div class="n">
-        <h3>It cannot</h3>
-        <ul>
-          <li>Read or change your commands, files or forwarded traffic</li>
-          <li>Pretend to be your VM. The host key was fixed before boot</li>
-          <li>Log in. It never holds a key, and passwords are off</li>
-          <li>Run code on the VM, or reach anything in your cloud account</li>
-        </ul>
-      </div>
-    </div>
-    <p class="cc-note">The relay is one attacker. The <a href="security.html#attackers">threat model</a> goes through four more: a stolen token, the network, read access to your cloud project, and hostile code on the VM itself. It also lists the <a href="security.html#limits">limits we know about</a>.</p>
-
-    <div class="posture">
-      <div><h3>No trust on first use</h3><p>The CLI issues the VM's host key before the VM exists and pins it on every connection.</p><span class="ref">cmd/runlease/exec.go · FixedHostKey</span></div>
-      <div><h3>Verified agent</h3><p>The boot script checks the agent's SHA-256 against the one compiled into the CLI, then runs it.</p><span class="ref">pkg/userdata/userdata.go</span></div>
-      <div><h3>Unprivileged by default</h3><p>The agent runs with no capabilities. sudo on the VM is locked unless the manifest opts in.</p><span class="ref">pkg/userdata/userdata.go</span></div>
-      <div><h3>Relay fails closed</h3><p>It will not start without authentication, validates every token and caps its slots.</p><span class="ref">pkg/relay/server.go</span></div>
-      <div><h3>Hardened sshd</h3><p>Bound to localhost. Public key only, one allowed user, no root login. The boot script checks what sshd enforces and stops if it differs.</p><span class="ref">pkg/userdata/userdata.go</span></div>
-      <div><h3>Signed releases</h3><p>Checksums signed with Sigstore, build provenance for every binary, actions pinned by commit.</p><span class="ref">.github/workflows/release-please.yml</span></div>
-    </div>
-    <div class="links"><a class="btn" href="security.html">Read the full threat model</a></div>
-  </div>
-</section>
-
-<section class="alt band" id="unmanaged" aria-labelledby="un-h">
-  <div class="wrap">
-    <div class="sec-hd">
-      <p class="eyebrow">Nothing to manage</p>
-      <h2 id="un-h">There is no control plane. Each machine carries its own ending.</h2>
-      <p>Most ways of running throwaway machines need something that stays up to track them and clean them up. Runlease has no such thing. The whole lifecycle is written into the machine when it boots.</p>
-    </div>
-    <div class="unm">
-      <div class="unm-not">
-        <span class="k">What you do not run</span>
-        <ul>
-          <li><s>A server that tracks your machines</s></li>
-          <li><s>A scheduler or cron job that reaps them</s></li>
-          <li><s>A database of what is running</s></li>
-          <li><s>A laptop that has to stay online</s></li>
-        </ul>
-      </div>
-      <div class="unm-vm">
-        <span class="k">What each machine carries</span>
-        <ol>
-          <li><b>Its own timer</b><span>Armed first at boot, before anything that can fail.</span></li>
-          <li><b>Its own off switch</b><span>A script on the machine deletes it through your cloud's own API. Nothing outside has to ask.</span></li>
-          <li><b>Its own extension</b><span><code>runlease snooze</code> moves the timer from your side. That is all the management there is.</span></li>
-        </ol>
-      </div>
-    </div>
-    <p class="cc-note">Close the laptop, lose the network, or let the agent that asked for the machine crash. The machine still ends on time. <a href="how-it-works.html#leases">How leases work</a>.</p>
-  </div>
-</section>
-
-<section class="band" id="how" aria-labelledby="how-h">
-  <div class="wrap">
-    <div class="sec-hd">
-      <p class="eyebrow">How it works</p>
-      <h2 id="how-h">Three small programs, and one of them is deliberately kept in the dark.</h2>
-      <p>Step through a launch. Watch where the keys are, and where they are not. <a href="how-it-works.html">The full walkthrough</a> covers the protocol and what happens inside the VM.</p>
-    </div>
-    <div class="how">
-      <ol class="steps" role="tablist" aria-label="Launch steps" id="steps">
-        <li><button role="tab" aria-selected="true" data-step="1" id="s1"><span class="n">01</span><b>Keys are made on your machine</b><span class="d">The CLI generates a login key and the VM's SSH host key before the VM exists. The private login key never leaves.</span></button></li>
-        <li><button role="tab" aria-selected="false" data-step="2" id="s2"><span class="n">02</span><b>A slot is reserved at the relay</b><span class="d">A random 256-bit token, registered under your identity. The relay now knows a machine is coming. It knows nothing else.</span></button></li>
-        <li><button role="tab" aria-selected="false" data-step="3" id="s3"><span class="n">03</span><b>The VM boots and dials out</b><span class="d">No public address, and SSH listens on localhost only. The VM verifies the agent binary against a checksum, starts it without privileges, and the agent claims the slot.</span></button></li>
-        <li><button role="tab" aria-selected="false" data-step="4" id="s4"><span class="n">04</span><b>SSH runs end to end</b><span class="d">Your session passes through the relay as ciphertext. The CLI accepts one host key only: the one it made in step one.</span></button></li>
-        <li><button role="tab" aria-selected="false" data-step="5" id="s5"><span class="n">05</span><b>The lease ends</b><span class="d">A timer inside the VM deletes the instance. Nobody has to remember, and nothing is left running.</span></button></li>
-      </ol>
-
-      <div class="diagram" id="diagram" data-step="1">
-        <svg viewBox="0 0 640 330" role="img" aria-label="Diagram: the CLI on your machine and the spot VM in your cloud account both connect outward to the relay. SSH runs end to end between the CLI and the VM.">
-          <rect class="d-zone" x="402" y="34" width="222" height="262"></rect>
-          <text class="d-s" x="414" y="54">YOUR CLOUD ACCOUNT</text>
-
-          <rect class="d-box" id="b-cli" x="16" y="120" width="170" height="92"></rect>
-          <text class="d-t" x="30" y="146">runlease CLI</text>
-          <text class="d-s" x="30" y="164">your machine</text>
-          <rect class="d-key" x="30" y="178" width="10" height="10"></rect>
-          <text class="d-s" x="46" y="187">login key + host key</text>
-
-          <rect class="d-box" id="b-relay" x="238" y="130" width="120" height="72"></rect>
-          <text class="d-t" x="254" y="158">relay</text>
-          <text class="d-s" x="254" y="176">holds no keys</text>
-
-          <g id="g-vm">
-            <rect class="d-box" id="b-vm" x="420" y="100" width="186" height="132"></rect>
-            <text class="d-t" x="434" y="126">spot VM</text>
-            <text class="d-s" x="434" y="144">dials out only</text>
-            <text class="d-s" x="434" y="170">runlease-agent  &#8594;  sshd</text>
-            <rect class="d-key" x="434" y="196" width="10" height="10"></rect>
-            <text class="d-s" x="450" y="205">host key (issued)</text>
-          </g>
-
-          <path class="d-line" id="l-cli" d="M186 166 H238"></path>
-          <path class="d-line" id="l-vm" d="M420 166 H358"></path>
-          <path class="d-tun" d="M186 158 H420 M186 174 H420"></path>
-
-          <text class="d-hot" id="h1" x="16" y="108">keys generated here</text>
-          <text class="d-hot" id="h2" x="196" y="118">register(token)</text>
-          <text class="d-hot" id="h3" x="330" y="258" text-anchor="middle">outbound only: instance(token)</text>
-          <text class="d-hot" id="h4" x="298" y="118" text-anchor="middle">SSH, encrypted end to end</text>
-          <text class="d-hot" id="h5" x="513" y="258" text-anchor="middle">lease over: deleted</text>
-        </svg>
+        <canvas id="scene-canvas" aria-label="A live diagram: your machine on the left, the relay in the middle, and the spot machines you launch in your cloud account on the right. Each machine shows its lease running down and removes itself when it ends."></canvas>
+        <div class="scene-note"><span>click the cloud to launch · click a machine to snooze it</span><span>time ×60</span></div>
       </div>
     </div>
   </div>
 </section>
 
-<section class="alt band" id="use" aria-labelledby="use-h">
+<div class="perf" aria-hidden="true"></div>
+
+<section id="why" data-part="why">
   <div class="wrap">
-    <div class="use">
+    <p class="eyebrow rise"><b>Why it exists</b></p>
+    <h2 class="rise">An agent needs a real machine. It should be cheap, it should be yours, and it should not live forever.</h2>
+    <div class="facts rise">
+      <div class="fact"><p class="k">Cheap</p><h3>Spot prices, on your bill</h3><p>Spot capacity costs 60 to 90% less than on-demand. You pay your cloud directly, at your own rates, with nothing added. The hourly price and the cost of the whole lease are shown before launch.</p></div>
+      <div class="fact"><p class="k">Safe</p><h3>Keys never leave you</h3><p>SSH keys are made on your machine and stay there. The VM's SSH server listens on localhost only: it dials out. The relay in the middle holds no key and sees only ciphertext.</p></div>
+      <div class="fact"><p class="k">Yours</p><h3>In your own cloud</h3><p>Machines run in your GCP or AWS account, in your network, under your IAM and your audit logs. No machine of yours ever lives in an account of ours.</p></div>
+      <div class="fact"><p class="k">Self-managing</p><h3>Nothing to run</h3><p>No control plane and no scheduler. The lease is written into each machine at boot, and the machine deletes itself on time.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="blind" id="blind" data-part="relay demo">
+  <div class="wrap">
+    <p class="eyebrow rise"><b>Type something</b> · watch the middle column</p>
+    <h2 class="rise">The relay in the middle cannot read a byte.</h2>
+    <p class="lede rise">Your session is encrypted on your machine and decrypted on your VM. The relay only passes it along. Type a command below and see all three views at once.</p>
+    <div class="wire rise">
+      <div><p class="who"><b>You</b> · your machine</p><h3>What you type</h3><textarea id="wire-in" spellcheck="false" aria-label="Type a message to send through the relay">make test && ./deploy.sh --token=hunter2</textarea><small>The private key is made here and never leaves.</small></div>
+      <div class="mid"><p class="who"><b>The relay</b> · the only shared part</p><h3>What it sees</h3><div class="hex" id="wire-hex" aria-live="off"></div><small id="wire-meta">ciphertext</small></div>
+      <div><p class="who"><b>Your VM</b> · your cloud account</p><h3>What it reads</h3><div class="plain" id="wire-out"></div><small>Decrypted with a key the relay never held.</small></div>
+    </div>
+    <p class="fine">This panel really encrypts in your browser, with AES-256-GCM and a key made on this page, to show the shape of it. The real thing is an SSH session, encrypted and authenticated end to end between the CLI and the VM. <a href="security.html">Read the threat model.</a></p>
+  </div>
+</section>
+
+<section class="breach" id="break" data-part="threat model">
+  <div class="wrap">
+    <div class="breach-head">
       <div>
-        <p class="eyebrow">Usage</p>
-        <h2 id="use-h" style="font-size:clamp(1.9rem,3.6vw,2.8rem);line-height:1.05;font-weight:700;margin-top:12px">One binary. A handful of verbs.</h2>
-        <ul>
-          <li><b>Built to be driven by an agent</b>JSON output on every command, and exec, push, pull and forward that never prompt.</li>
-          <li><b>Portable sizes</b>compute.small to compute.2xlarge and compute.gpu map to the right type on each cloud.</li>
-          <li><b>Many sessions, one tunnel</b>Hold a port forward open in one terminal and run exec, push and pull from others.</li>
-          <li><b>Bring your own relay</b>One static binary behind TLS. Or use no relay and connect directly, through IAP, or through SSM.</li>
-        </ul>
+        <p class="eyebrow rise"><b>Assume the worst</b></p>
+        <h2 class="rise">Now break into the relay.</h2>
+        <p class="lede rise">It is built to be worth as little as possible to whoever gets in. Flip the switch and watch the diagram above: the sessions keep flowing, and the attacker is holding ciphertext.</p>
       </div>
-      <div class="term">
-        <div class="tabs" role="tablist" aria-label="Examples">
-          <button role="tab" aria-selected="true" data-tab="t-launch" id="tab-launch">launch</button>
-          <button role="tab" aria-selected="false" data-tab="t-work" id="tab-work">work</button>
-          <button role="tab" aria-selected="false" data-tab="t-manifest" id="tab-manifest">manifest</button>
-          <button role="tab" aria-selected="false" data-tab="t-agent" id="tab-agent">for agents</button>
-        </div>
-<pre id="t-launch"><span class="c"># a spot VM in your account, deleted in two hours</span>
-<span class="p">$</span> runlease up --provider gcp --size compute.large --ttl 2h
+      <button class="switch rise" type="button" id="breach" aria-pressed="false">Compromise the relay</button>
+    </div>
+    <div class="cc rise">
+      <div class="can"><h3>An attacker inside the relay can</h3><ul>
+        <li>Refuse or drop your connections</li>
+        <li>See connection metadata: who, from where, when, how much</li>
+        <li>Open a TCP connection to your VM's SSH server, and fail to log in</li>
+        <li>Serve a different agent binary, which the VM then rejects</li>
+      </ul></div>
+      <div class="cannot"><h3>And cannot</h3><ul>
+        <li>Read or change your commands, files or forwarded traffic</li>
+        <li>Pretend to be your VM. The host key was fixed before boot</li>
+        <li>Log in. It never holds a key, and passwords are off</li>
+        <li>Run code on the VM, or reach anything in your cloud account</li>
+      </ul></div>
+    </div>
+    <p class="verdict" id="verdict">The relay is one attacker. <a href="security.html">The threat model</a> goes through four more, and lists the limits we know about.</p>
+  </div>
+</section>
 
-<span class="c"># see what is running</span>
-<span class="p">$</span> runlease list
+<div class="perf" aria-hidden="true"></div>
 
-<span class="c"># need longer? move the timer</span>
-<span class="p">$</span> runlease snooze agent-box 1h
-
-<span class="c"># done early</span>
-<span class="p">$</span> runlease down agent-box --yes</pre>
-<pre id="t-work" hidden><span class="c"># run a command</span>
-<span class="p">$</span> runlease exec agent-box -- make test
-
-<span class="c"># reach a port on the VM from localhost</span>
-<span class="p">$</span> runlease forward agent-box -L 8080:localhost:8080
-
-<span class="c"># move files over the same channel</span>
-<span class="p">$</span> runlease push agent-box ./build.tar /tmp/build.tar
-<span class="p">$</span> runlease pull agent-box /var/log/app.log ./app.log
-
-<span class="c"># or just open a shell</span>
-<span class="p">$</span> runlease connect agent-box</pre>
-<pre id="t-manifest" hidden><span class="c"># agent-box.yaml</span>
-<span class="k">name</span>: agent-box
-<span class="k">provider</span>: gcp
-<span class="k">region</span>: us-central1-a
-<span class="k">instanceClass</span>: compute.large
-<span class="k">reclaim</span>:
-  <span class="k">ttl</span>: 3h
-  <span class="k">selfTermination</span>: true
-<span class="k">relay</span>:
-  <span class="k">addr</span>: wss://relay.example.com
-<span class="k">setup</span>:
-  - <span class="k">name</span>: toolchain
-    <span class="k">run</span>: apt-get update &amp;&amp; apt-get install -y build-essential git
-
-<span class="p">$</span> runlease up -m agent-box.yaml --attach</pre>
-<pre id="t-agent" hidden><span class="c"># machine-readable output</span>
-<span class="p">$</span> runlease up -m agent-box.yaml --detach --output json
-<span class="p">$</span> runlease list --output json
-
-<span class="c"># no TTY, no prompts</span>
-<span class="p">$</span> runlease exec agent-box -- ./run-tests.sh
-<span class="p">$</span> runlease down agent-box --yes
-
-<span class="c"># and if the agent forgets to clean up,</span>
-<span class="c"># the lease does it anyway</span></pre>
-      </div>
+<section id="none" data-part="lifecycle">
+  <div class="wrap">
+    <p class="eyebrow rise"><b>Nothing to manage</b></p>
+    <h2 class="rise">There is no control plane. Each machine carries its own ending.</h2>
+    <p class="lede rise">Close the laptop, lose the network, or let the agent that asked for the machine crash. The machine still ends on time. Try it: press <b>Close the laptop</b> on the diagram, and watch the machines delete themselves anyway.</p>
+    <div class="none rise">
+      <div><h3>What you do not run</h3><ul class="strike">
+        <li>A server that tracks your machines</li>
+        <li>A scheduler or cron job that reaps them</li>
+        <li>A database of what is running</li>
+        <li>A laptop that has to stay online</li>
+      </ul></div>
+      <div><h3>What each machine carries</h3><ul>
+        <li><b>Its own timer</b>Armed first at boot, before anything that can fail.</li>
+        <li><b>Its own off switch</b>A script on the machine deletes it through your cloud's own API. Nothing outside has to ask.</li>
+        <li><b>Its own extension</b><span class="mono">runlease snooze</span> moves the timer from your side. That is all the management there is.</li>
+      </ul></div>
     </div>
   </div>
 </section>
 
-<section class="band" id="relay" aria-labelledby="relay-h">
+<section id="uses" data-part="use cases">
   <div class="wrap">
-    <div class="sec-hd">
-      <p class="eyebrow">The relay</p>
-      <h2 id="relay-h">Start on ours for free. Move to your own whenever you like.</h2>
-      <p>The relay is the one piece that needs a public address. Use the shared one with a Google sign-in, or run the same binary yourself. Either way it never holds your keys.</p>
-    </div>
-    <div class="plans">
-      <div class="plan on">
-        <span class="k">Free</span>
-        <h3>Public relay</h3>
-        <p>Sign in with Google and launch. No card, no setup.</p>
-        <dl>
-          <dt>machines at once</dt><dd>2</dd>
-          <dt>connected for up to</dt><dd>8 h</dd>
-          <dt>sign-in</dt><dd>Google</dd>
-          <dt>price</dt><dd>free</dd>
-        </dl>
-<pre><span class="p">$</span> runlease config set relay.addr \
-    wss://connect.runlease.online
-<span class="p">$</span> runlease login</pre>
-        <p class="foot">No uptime promise. <a href="relay.html#public">What it allows and what it logs</a></p>
-      </div>
-      <div class="plan">
-        <span class="k">Your own</span>
-        <h3>Self-hosted relay</h3>
-        <p>One small binary on one small VM, in your network, admitting only who you say.</p>
-        <dl>
-          <dt>machines at once</dt><dd>yours to set</dd>
-          <dt>who can sign in</dt><dd>your domain</dd>
-          <dt>connection metadata</dt><dd>stays with you</dd>
-          <dt>price</dt><dd>one small VM</dd>
-        </dl>
-        <p class="foot"><a href="relay.html#selfhost">Self-hosting guide</a>, with a Terraform module</p>
-      </div>
-      <div class="plan">
-        <span class="k">Later</span>
-        <h3>Larger tiers</h3>
-        <p>More machines at once on the public relay, for teams that would rather not run one. Not available yet.</p>
-        <dl>
-          <dt>machines at once</dt><dd>more</dd>
-          <dt>status</dt><dd>planned</dd>
-        </dl>
-        <p class="foot">Until then, <a href="relay.html#selfhost">your own relay</a> has no limits but yours.</p>
-      </div>
-    </div>
-    <p class="plans-note">These limits are on the relay only. The machines run in your cloud account, on your bill, and Runlease does not meter them.</p>
-  </div>
-</section>
-
-<section class="alt band" aria-labelledby="oss-h">
-  <div class="wrap">
-    <div class="oss">
-      <div>
-        <p class="eyebrow">Open source</p>
-        <h2 id="oss-h" style="font-size:clamp(1.9rem,3.6vw,2.8rem);line-height:1.05;font-weight:700;margin-top:12px;margin-bottom:20px">Read it. Run it. Add your cloud.</h2>
-        <p>Runlease is Apache-2.0, about ten thousand lines of Go, with no service of ours in the path unless you choose one.</p>
-        <p>A cloud provider is four methods. GCP and AWS are done. Azure, Hetzner and DigitalOcean are open, and a provider is a good first contribution.</p>
-        <div class="links">
-          <a class="btn" href="security.html">Threat model</a>
-          <a class="btn" href="how-it-works.html">How it works</a>
-          <a class="btn" href="https://github.com/marshal-org/runlease">GitHub</a>
-        </div>
-      </div>
-      <div class="term">
-<pre><span class="c">// pkg/provider/interface.go</span>
-<span class="k">type</span> CloudProvider <span class="k">interface</span> {
-    RequestSpot(ctx, spec) (*InstanceHandle, error)
-    Terminate(ctx, id) error
-    Status(ctx, id) (InstanceStatus, error)
-    WaitUntilRunning(ctx, id) (*InstanceHandle, error)
-}</pre>
-      </div>
+    <p class="eyebrow rise"><b>What it is for</b></p>
+    <h2 class="rise">Give your agents cheap, safe machines to do their work.</h2>
+    <div class="uses rise">
+      <div class="use"><p class="k">Coding agents</p><h3>A machine for every agent</h3><p>Each agent gets its own box to build, test and break things on. Your laptop, your keys and your other agents are not in the room.</p><button class="btn small" type="button" data-script="agent">Run it ↑</button></div>
+      <div class="use"><p class="k">Untrusted code</p><h3>Run what you would not run on your laptop</h3><p>Generated code, an unfamiliar repository, an install script from the internet. It runs on a machine that holds none of your SSH keys and is gone within the hour.</p><button class="btn small" type="button" data-script="sandbox">Run it ↑</button></div>
+      <div class="use"><p class="k">Heavy jobs</p><h3>Borrow a big machine for one build</h3><p>A full test suite, a large compile, a data crunch. Rent sixteen cores at spot prices for the twenty minutes you need them, and pay for nothing after.</p><button class="btn small" type="button" data-script="build">Run it ↑</button></div>
+      <div class="use"><p class="k">Many at once</p><h3>Fan out, then let them all end</h3><p>One machine per test shard or per task. There is no cleanup step to write, because every machine carries its own deadline.</p><button class="btn small" type="button" data-script="fanout">Run it ↑</button></div>
+      <div class="use"><p class="k">GPU</p><h3>A GPU for an afternoon</h3><p>One spot GPU for an evaluation or a fine-tune, on a lease, so it cannot be left running overnight by mistake.</p><button class="btn small" type="button" data-script="gpu">Run it ↑</button></div>
+      <div class="use"><p class="k">Previews</p><h3>Show a branch running</h3><p>Run the app on the machine and open it on your own localhost. It is reached through the tunnel, not through an open port.</p><button class="btn small" type="button" data-script="preview">Run it ↑</button></div>
     </div>
   </div>
 </section>
 
-</main>
-
-<section class="band" id="marshal" aria-labelledby="by-h">
+<section class="get" id="get" data-part="install">
   <div class="wrap">
-    <div class="by">
-      <div>
-        <p class="eyebrow">Who makes this</p>
-        <h2 id="by-h">Runlease is built by Marshal.</h2>
-        <p>Marshal runs AI coding agents in isolated pods inside your own VPC, with credential isolation, audited egress and live tool policies. Full speed, with full receipts.</p>
-        <p>Runlease is the tool we built to give agents and tests a real machine for an hour, and we use it ourselves. It is open source and stands alone: you do not need Marshal to use it.</p>
-        <div class="links">
-          <a class="btn" href="https://marshal.codes">See Marshal</a>
-        </div>
+    <p class="eyebrow rise"><b>The real thing</b> · open source, Apache-2.0</p>
+    <h2 class="rise">One binary. A handful of verbs.</h2>
+    <div class="get-grid">
+      <div class="rise">
+<pre><span class="p">$</span> curl -fsSL https://runlease.online/install.sh | sh
+<span class="p">$</span> runlease login                 <span class="c"># free public relay, or run your own</span>
+<span class="p">$</span> runlease doctor                <span class="c"># checks sign-ins, project and network</span>
+<span class="p">$</span> runlease up -p gcp -n box -d    <span class="c"># or -p aws</span>
+<span class="p">$</span> runlease exec box -- make test
+<span class="p">$</span> runlease down box --yes        <span class="c"># or let the lease do it</span></pre>
+        <p class="fine">Using Claude Code? The plugin teaches it to launch, use and return machines on its own: <span class="mono">/plugin install runlease --marketplace marshal-org/runlease</span>. Any other agent can use the typed tools from <span class="mono">runlease mcp</span>.</p>
       </div>
-      <ul>
-        <li><b>Runlease gives an agent a machine.</b>A leased spot VM in your cloud, reached over SSH, gone when the lease ends.</li>
-        <li><b>Marshal runs the agents.</b>Isolated workspaces, the credentials they may use, and a record of everything they did.</li>
-        <li><b>The same idea in both.</b>Your infrastructure, your keys, and nothing left running that you did not ask for.</li>
+      <ul class="links rise">
+        <li><a href="install.html">Install and first launch <span>manifests, uninstall</span></a></li>
+        <li><a href="how-it-works.html">How it works <span>the protocol, step by step</span></a></li>
+        <li><a href="security.html">Security <span>the full threat model</span></a></li>
+        <li><a href="relay.html">The relay <span>the free one, or your own</span></a></li>
+        <li><a href="https://github.com/marshal-org/runlease">Source on GitHub <span>read every line</span></a></li>
       </ul>
     </div>
   </div>
 </section>
 
-<footer class="band">
+<section class="by" aria-label="Built by Marshal" data-part="credits" style="padding-block:22px">
   <div class="wrap">
-    <span>Built by the team behind <a href="https://marshal.codes">Marshal</a>. Apache-2.0.</span>
+    <p>Built by <b>Marshal</b>: AI coding agents at full speed, with full receipts.</p>
+    <a href="https://marshal.codes">marshal.codes →</a>
+  </div>
+</section>
+
+<footer data-part="footer">
+  <div class="wrap">
+    <span>Runlease is open source and stands alone. Apache-2.0.</span>
     <nav aria-label="Footer">
       <a href="how-it-works.html">How it works</a>
       <a href="security.html">Security</a>
       <a href="security.html#report">Report a vulnerability</a>
-      <a href="install.html">Install</a>
       <a href="relay.html">Relay</a>
       <a href="privacy.html">Privacy</a>
       <a href="terms.html">Terms</a>
+      <a href="classic.html">The page that does not delete itself</a>
     </nav>
   </div>
 </footer>
 
-<script>
-(function () {
-  // Copy the install command. Never claim "Copied" unless the write resolved.
-  var copy = document.getElementById('copy');
-  var cmd = document.getElementById('install-cmd');
-  copy.addEventListener('click', function () {
-    var done = function (label) { copy.textContent = label; setTimeout(function () { copy.textContent = 'Copy'; }, 1800); };
-    var manual = function () {
-      var r = document.createRange(); r.selectNodeContents(cmd);
-      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
-      done('Selected');
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(cmd.textContent).then(function () { done('Copied'); }, manual);
-    } else { manual(); }
-  });
+</main>
 
-  // Tab groups (launch steps and terminal examples) share one keyboard model.
-  function tabs(list, onSelect) {
-    var items = Array.prototype.slice.call(list.querySelectorAll('[role="tab"]'));
-    function select(i, focus) {
-      items.forEach(function (b, j) {
-        b.setAttribute('aria-selected', j === i ? 'true' : 'false');
-        b.setAttribute('tabindex', j === i ? '0' : '-1');
-      });
-      if (focus) items[i].focus();
-      onSelect(items[i]);
-    }
-    items.forEach(function (b, i) {
-      b.setAttribute('tabindex', b.getAttribute('aria-selected') === 'true' ? '0' : '-1');
-      b.addEventListener('click', function () { select(i, false); });
-      b.addEventListener('keydown', function (e) {
-        var n = null;
-        if (e.key === 'ArrowDown' || e.key === 'ArrowRight') n = (i + 1) % items.length;
-        if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') n = (i - 1 + items.length) % items.length;
-        if (e.key === 'Enter' || e.key === ' ') n = i;
-        if (n === null) return;
-        e.preventDefault(); select(n, true);
-      });
-    });
-  }
-  var diagram = document.getElementById('diagram');
-  tabs(document.getElementById('steps'), function (b) { diagram.setAttribute('data-step', b.dataset.step); });
-  var panes = ['t-launch', 't-work', 't-manifest', 't-agent'].map(function (id) { return document.getElementById(id); });
-  tabs(document.querySelector('.tabs'), function (b) {
-    panes.forEach(function (p) { p.hidden = p.id !== b.dataset.tab; });
-  });
+<div class="warn" id="warn" role="status" aria-hidden="true"><span>this-website expires in <span aria-hidden="true" id="warn-time">0:30</span><span class="sr">under thirty seconds</span></span><button type="button" data-act="snooze">Snooze 3m</button></div>
 
-  // The lease ticket: a time-lapse of one machine's life, with its running
-  // cost. It snoozes itself once per cycle, and the button does the same thing
-  // on demand. Complete at rest; with reduced motion nothing moves on its own,
-  // but the button still works.
-  var ticket = document.getElementById('ticket'), state = document.getElementById('t-state');
-  var left = document.getElementById('t-left'), bar = document.getElementById('t-bar');
-  var cost = document.getElementById('t-cost'), cmd2 = document.getElementById('t-cmd');
-  var plus = document.getElementById('t-plus'), snooze = document.getElementById('t-snooze');
-  var RATE = 0.026, LEASE = 2 * 3600, HOUR = 3600;
-  var elapsed = 2740, ends = LEASE, auto = false, phase = 'run', hold = 0;
-  function fmt(x) {
-    var h = Math.floor(x / 3600), m = Math.floor((x % 3600) / 60), c = x % 60;
-    return h + ':' + (m < 10 ? '0' : '') + m + ':' + (c < 10 ? '0' : '') + c;
-  }
-  function say(text) { cmd2.innerHTML = '<span class="p">$</span> ' + text; }
-  function draw() {
-    var remaining = Math.max(0, ends - elapsed);
-    var st = phase === 'gone' ? 'deleted' : phase === 'boot' ? 'launching' : remaining < 900 ? 'expiring' : 'running';
-    ticket.setAttribute('data-s', st); state.setAttribute('data-s', st); state.textContent = st;
-    left.textContent = fmt(remaining);
-    bar.style.width = Math.min(100, 100 * remaining / LEASE) + '%';
-    cost.textContent = '$' + (RATE * elapsed / 3600).toFixed(3);
-    snooze.disabled = phase !== 'run';
-  }
-  function doSnooze() {
-    if (phase !== 'run') return;
-    ends += HOUR;
-    say('runlease snooze agent-box 1h');
-    plus.classList.add('on');
-    setTimeout(function () { plus.classList.remove('on'); }, 1600);
-    draw();
-  }
-  snooze.addEventListener('click', doSnooze);
-  draw();
-  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduce) return;
-  setInterval(function () {
-    if (phase === 'boot') { if (--hold <= 0) phase = 'run'; draw(); return; }
-    if (phase === 'gone') {
-      if (--hold <= 0) { phase = 'boot'; hold = 6; elapsed = 0; ends = LEASE; auto = false; say('runlease up --ttl 2h'); }
-      draw(); return;
-    }
-    elapsed += 97;
-    if (!auto && ends - elapsed < 700) { auto = true; doSnooze(); }
-    if (elapsed >= ends) { elapsed = ends; phase = 'gone'; hold = 14; say('lease over: the machine deleted itself'); }
-    draw();
-  }, 250);
-})();
-</script>
+<canvas id="ash" aria-hidden="true"></canvas>
+
+<div class="after" id="after" role="dialog" aria-modal="true" aria-labelledby="after-big">
+  <div class="after-in">
+    <div id="after-log"></div>
+    <p class="big" id="after-big">It deleted itself. <em>That is the product.</em></p>
+    <p class="say" id="after-say"></p>
+    <div class="after-acts">
+      <button class="btn hot" type="button" data-act="up">$ runlease up &nbsp;— bring it back</button>
+      <button class="btn" type="button" id="share">Send someone a website that deletes itself</button>
+      <a class="btn" href="install.html">Install the real thing</a>
+    </div>
+  </div>
+</div>
+
+<noscript><style>.rise{opacity:1;transform:none}.leasebar .status,.leasebar .chipbtn,.stage,.wire,#breach,[data-act],[data-script]{display:none!important}</style></noscript>
+<script defer src="app.js"></script>
 <script defer src="analytics.js"></script>
 </body>
 </html>

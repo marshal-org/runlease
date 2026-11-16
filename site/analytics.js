@@ -77,6 +77,22 @@
   }
 
   send('$pageview');
+
+  // The home page reports a handful of named interactions: that the page was
+  // snoozed, that its lease ended, that a demo command was run. Only names
+  // from this list are sent, with no free text, so nothing a visitor types
+  // can leave the page this way.
+  var NAMES = { site_lease_ended: 1, site_deleted_by_hand: 1, site_snoozed: 1, site_revived: 1, site_shared: 1, site_command: 1, site_relay_broken: 1, site_laptop_closed: 1 };
+  var VERBS = { up: 1, exec: 1, push: 1, pull: 1, snooze: 1, down: 1, list: 1, doctor: 1, whoami: 1, help: 1, other: 1 };
+  var sent = 0;
+  window.addEventListener('runlease:track', function (e) {
+    var d = e && e.detail; if (!d || !NAMES[d.event] || sent >= 40) return;
+    sent += 1;
+    var was = props.verb; delete props.verb;
+    if (d.event === 'site_command') props.verb = VERBS[d.verb] ? d.verb : 'other';
+    send(d.event);
+    delete props.verb; if (was !== undefined) props.verb = was;
+  });
   var left = false;
   window.addEventListener('pagehide', function () {
     if (left) return;

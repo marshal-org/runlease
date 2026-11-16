@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="Give Claude Code a separate Linux machine to build, test and run untrusted code on: a spot VM in your own AWS or Google Cloud account that deletes itself.">
+<title>A sandbox for Claude Code: a disposable VM in your own cloud</title>
+<link rel="canonical" href="https://runlease.online/claude-code-sandbox.html">
+<meta property="og:title" content="A sandbox for Claude Code: a disposable VM in your own cloud">
+<meta property="og:description" content="Give Claude Code a separate Linux machine to build, test and run untrusted code on: a spot VM in your own AWS or Google Cloud account that deletes itself.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://runlease.online/claude-code-sandbox.html">
+<meta property="og:image" content="https://runlease.online/og.png">
+<meta property="og:site_name" content="Runlease">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="page.css">
+<!-- What the page is, for search engines. Data only: nothing here runs. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "A sandbox for Claude Code: a disposable VM in your own cloud",
+  "description": "Give Claude Code a separate Linux machine to build, test and run untrusted code on: a spot VM in your own AWS or Google Cloud account that deletes itself.",
+  "url": "https://runlease.online/claude-code-sandbox.html",
+  "inLanguage": "en",
+  "isPartOf": {
+    "@id": "https://runlease.online/#website"
+  },
+  "about": {
+    "@id": "https://runlease.online/#software"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "Marshal",
+    "url": "https://marshal.codes"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Marshal",
+    "url": "https://marshal.codes"
+  }
+}
+</script>
+</head>
+<body>
+<div class="wrap wide">
+<header>
+  <a class="mark" href="./"><img src="logo.svg" alt="" width="26" height="26">runlease</a>
+  <nav aria-label="Main">
+    <a href="how-it-works.html">How it works</a>
+    <a href="security.html">Security</a>
+    <a href="install.html">Install</a>
+    <a href="relay.html">Relay</a>
+    <a href="guides.html">Guides</a>
+    <a href="https://github.com/marshal-org/runlease" data-out="github" data-place="nav">GitHub</a>
+  </nav>
+</header>
+<main>
+<p class="eyebrow">Guide · Claude Code</p>
+<h1>A sandbox for Claude Code, on a machine that is not yours to lose</h1>
+<p class="lede">Claude Code is most useful when it can run things: install the dependencies, start the stack, run the tests, try again. Runlease gives it a separate Linux machine for that, in your own cloud account, and takes the machine away when the lease ends.</p>
+
+<nav class="toc" aria-label="On this page">
+  <a href="#why">Why a separate machine</a>
+  <a href="#setup">Set it up</a>
+  <a href="#use">What Claude does with it</a>
+  <a href="#rules">What it will not do</a>
+  <a href="#faq">Questions</a>
+</nav>
+
+<h2 id="why">Why a separate machine</h2>
+<p class="measure">An agent that runs commands on your laptop runs them next to your SSH keys, your cloud credentials and every other project you have checked out. A container on the same laptop narrows that, but it still shares your kernel, your network and your battery.</p>
+<p class="measure">A leased machine is a different computer. Generated code, an install script from a repository you have not read, or a test suite that needs sixteen cores runs there. Your keys stay on your machine: Runlease does not copy them to the VM, and the relay between you and the VM <a href="security.html">cannot read the session</a>.</p>
+<div class="cards">
+  <div><p class="n">ISOLATED</p><h3>Not your laptop</h3><p>A real VM in your cloud account, with no public address by default.</p></div>
+  <div><p class="n">CHEAP</p><h3>Spot prices</h3><p>You pay your cloud directly. The price is shown before launch.</p></div>
+  <div><p class="n">TEMPORARY</p><h3>It deletes itself</h3><p>Two hours by default, whether or not the session that asked for it is still alive.</p></div>
+</div>
+
+<h2 id="setup">Set it up</h2>
+<p class="measure">Install the CLI, sign in to the free relay, and prove one launch by hand. Claude uses the same sign-ins you do.</p>
+<pre><span class="p">$</span> curl -fsSL https://runlease.online/install.sh | sh
+<span class="p">$</span> runlease login                 <span class="c"># the free public relay: approve a short code in a browser</span>
+<span class="p">$</span> runlease doctor                <span class="c"># checks sign-ins, project and network, prints the fix</span>
+<span class="p">$</span> runlease up -p gcp -n box -d   <span class="c"># or -p aws</span>
+<span class="p">$</span> runlease down box --yes</pre>
+<p class="measure">Then add the plugin, at the prompt of a Claude Code session:</p>
+<pre>/plugin install runlease --marketplace marshal-org/runlease</pre>
+<p class="measure">If you only want the typed tools and not the skills, register the MCP server instead: <code>claude mcp add runlease -- runlease mcp</code>. <a href="mcp-server-cloud-vm.html">More on the MCP server</a>.</p>
+
+<h2 id="use">What Claude does with it</h2>
+<p class="measure">The plugin adds skills that Claude reads when the task fits. You do not call them.</p>
+<div class="scroll"><table>
+  <tr><th>Skill</th><th>When Claude uses it</th></tr>
+  <tr><td><code>runlease:machine</code></td><td>A task needs a separate machine: a long build, more cores, a clean Linux box, a port to preview</td></tr>
+  <tr><td><code>runlease:sandbox</code></td><td>Code that should not run on your computer: generated code, an unfamiliar repository, an install script</td></tr>
+  <tr><td><code>runlease:fanout</code></td><td>A job that splits across several machines: test shards, a version matrix</td></tr>
+  <tr><td><code>runlease:setup</code>, <code>runlease:troubleshoot</code></td><td>Something is not installed or signed in, a command fails, or machines may have been left running</td></tr>
+</table></div>
+<p class="measure">A typical sandbox run is three commands, which Claude issues as typed tool calls:</p>
+<pre><span class="p">$</span> runlease up -n sandbox --ttl 1h -d
+<span class="p">$</span> runlease push sandbox ./run.sh /tmp/run.sh
+<span class="p">$</span> runlease exec sandbox -- bash /tmp/run.sh</pre>
+<p class="measure">While it works you see a status line entry with the time left on each lease, a band above the prompt when a lease has under ten minutes left, and a pane listing each machine with <b>Snooze</b> and <b>Delete</b> buttons.</p>
+
+<h2 id="rules">What it will not do</h2>
+<ul class="measure">
+  <li>It shows you the project or account a launch is about to use.</li>
+  <li>It never gives a machine a public address on its own. If your subnet has no NAT gateway, it shows you the choices and waits.</li>
+  <li>It never completes a cloud or relay sign-in for you. It tells you which command to run.</li>
+  <li>It does not copy SSH keys, cloud credentials or <code>.env</code> files to a machine unless you ask for exactly that.</li>
+  <li>It deletes the machines it launched when the job is done, and says so.</li>
+</ul>
+
+<h2 id="faq">Questions</h2>
+<h3>Does Claude Code itself run on the VM?</h3>
+<p class="measure">No. Claude Code stays on your computer and sends commands to the machine, the way you would with <code>ssh</code>. Your conversation and your credentials do not move.</p>
+<h3>Can the code on the VM use sudo?</h3>
+<p class="measure">Not by default. Software a job needs is installed by the manifest's <code>setup</code> steps at boot, or you turn on <code>sudo: passwordless</code> in the manifest when you want the machine to be freely changeable.</p>
+<h3>What if the session crashes with a machine running?</h3>
+<p class="measure">The lease still ends. The timer is on the VM, not in the session, so the machine deletes itself on time with nothing watching it.</p>
+<h3>How many machines can it launch?</h3>
+<p class="measure">Two at once on the free public relay. <a href="relay.html">Run your own relay</a> to set your own limit.</p>
+
+<div class="note">
+  <p><b>Running agents for a whole team?</b> Runlease gives one agent one machine. <a href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=guide" data-out="marshal" data-place="guide">Marshal</a>, from the same team, runs AI coding agents in isolated pods inside your own VPC, with credential isolation, audited egress and live tool policies.</p>
+</div>
+
+<h2 id="more">More guides</h2>
+<ul class="measure">
+  <li><a href="spot-vms-for-coding-agents.html">Spot VMs for coding agents</a></li>
+  <li><a href="mcp-server-cloud-vm.html">An MCP server for cloud machines</a></li>
+  <li><a href="ephemeral-cloud-vm.html">Cloud VMs that delete themselves</a></li>
+  <li><a href="hosted-sandbox-or-your-own-cloud.html">Hosted sandbox, or your own cloud?</a></li>
+</ul>
+<div class="next">
+  <a class="btn" href="install.html">Install Runlease</a>
+  <a class="btn" href="how-it-works.html">How it works</a>
+  <a class="btn" href="security.html">Security</a>
+</div>
+</main>
+<footer>
+  <span>Built by the team behind <a href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=footer" data-out="marshal" data-place="footer">Marshal</a>. Apache-2.0.</span>
+  <a href="how-it-works.html">How it works</a>
+  <a href="security.html">Security</a>
+  <a href="install.html">Install</a>
+  <a href="relay.html">Relay</a>
+  <a href="guides.html">Guides</a>
+  <a href="privacy.html">Privacy</a>
+  <a href="terms.html">Terms</a>
+  <a href="mailto:runlease@marshal.codes">Questions? runlease@marshal.codes</a>
+</footer>
+</div>
+<script defer src="analytics.js"></script>
+</body>
+</html>

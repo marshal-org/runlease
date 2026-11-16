@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="runlease mcp is a Model Context Protocol server: typed tools that let any coding agent launch a spot VM in your cloud, run commands on it, copy files and delete it.">
+<title>An MCP server that gives an agent a cloud VM</title>
+<link rel="canonical" href="https://runlease.online/mcp-server-cloud-vm.html">
+<meta property="og:title" content="An MCP server that gives an agent a cloud VM">
+<meta property="og:description" content="runlease mcp is a Model Context Protocol server: typed tools that let any coding agent launch a spot VM in your cloud, run commands on it, copy files and delete it.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://runlease.online/mcp-server-cloud-vm.html">
+<meta property="og:image" content="https://runlease.online/og.png">
+<meta property="og:site_name" content="Runlease">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="page.css">
+<!-- What the page is, for search engines. Data only: nothing here runs. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "An MCP server that gives an agent a cloud VM",
+  "description": "runlease mcp is a Model Context Protocol server: typed tools that let any coding agent launch a spot VM in your cloud, run commands on it, copy files and delete it.",
+  "url": "https://runlease.online/mcp-server-cloud-vm.html",
+  "inLanguage": "en",
+  "isPartOf": {
+    "@id": "https://runlease.online/#website"
+  },
+  "about": {
+    "@id": "https://runlease.online/#software"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "Marshal",
+    "url": "https://marshal.codes"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Marshal",
+    "url": "https://marshal.codes"
+  }
+}
+</script>
+</head>
+<body>
+<div class="wrap wide">
+<header>
+  <a class="mark" href="./"><img src="logo.svg" alt="" width="26" height="26">runlease</a>
+  <nav aria-label="Main">
+    <a href="how-it-works.html">How it works</a>
+    <a href="security.html">Security</a>
+    <a href="install.html">Install</a>
+    <a href="relay.html">Relay</a>
+    <a href="guides.html">Guides</a>
+    <a href="https://github.com/marshal-org/runlease" data-out="github" data-place="nav">GitHub</a>
+  </nav>
+</header>
+<main>
+<p class="eyebrow">Guide · MCP</p>
+<h1>An MCP server that gives your agent a cloud machine</h1>
+<p class="lede"><code>runlease mcp</code> is a Model Context Protocol server. An agent that speaks MCP gets typed tools to launch a machine in your cloud account, run a command on it, copy a file, extend the lease and delete it, without composing shell commands or parsing their output.</p>
+
+<nav class="toc" aria-label="On this page">
+  <a href="#register">Register it</a>
+  <a href="#tools">The tools</a>
+  <a href="#why">Why typed tools</a>
+  <a href="#faq">Questions</a>
+</nav>
+
+<h2 id="register">Register it</h2>
+<p class="measure">The server is the same binary as the CLI, so there is nothing more to install. It uses the sign-ins the CLI already has. Get one launch working by hand first:</p>
+<pre><span class="p">$</span> curl -fsSL https://runlease.online/install.sh | sh
+<span class="p">$</span> runlease login
+<span class="p">$</span> runlease up -p gcp -n box -d &amp;&amp; runlease down box --yes</pre>
+<div class="opts">
+  <div><h3>Claude Code</h3>
+<pre><span class="p">$</span> claude mcp add runlease -- runlease mcp</pre>
+    <p>Add <code>--scope user</code> to have it in every project.</p>
+  </div>
+  <div><h3>Any other MCP client</h3>
+<pre>{
+  "mcpServers": {
+    "runlease": {
+      "command": "runlease",
+      "args": ["mcp"]
+    }
+  }
+}</pre>
+    <p>Claude Desktop, Cursor, VS Code and others read this shape.</p>
+  </div>
+</div>
+<p class="measure">The client starts the server itself. You never run <code>runlease mcp</code> by hand.</p>
+
+<h2 id="tools">The tools</h2>
+<div class="scroll"><table>
+  <tr><th>Tool</th><th>What it does</th></tr>
+  <tr><td><code>runlease_up</code></td><td>Launch a spot machine: cloud, optional name, size, lease and region. Returns at once with the machine's details.</td></tr>
+  <tr><td><code>runlease_exec</code></td><td>Run a command on a machine. Returns the exit code, stdout and stderr.</td></tr>
+  <tr><td><code>runlease_push</code>, <code>runlease_pull</code></td><td>Copy one file to a machine, or from it.</td></tr>
+  <tr><td><code>runlease_snooze</code></td><td>Set a machine's self-deletion to a duration from now.</td></tr>
+  <tr><td><code>runlease_down</code></td><td>Delete a machine now.</td></tr>
+  <tr><td><code>runlease_list</code>, <code>runlease_status</code></td><td>The machines this computer tracks, who is signed in, and how many machine slots are in use. Read-only.</td></tr>
+  <tr><td><code>runlease_doctor</code></td><td>Check sign-ins, project, network and relay, and report the fix for each problem. Creates nothing.</td></tr>
+</table></div>
+
+<h2 id="why">Why typed tools</h2>
+<ul class="measure">
+  <li><b>Narrow permissions.</b> You can allow "run a command on a leased machine" without allowing every shell command on your own computer.</li>
+  <li><b>Structured results.</b> The agent gets an exit code and separate output streams, not a screen of text to interpret.</li>
+  <li><b>The same guarantees as the CLI.</b> Each tool runs the same binary. The machine still has no public address by default, your keys still stay on your computer, and the lease still ends on time.</li>
+</ul>
+
+<h2 id="faq">Questions</h2>
+<h3>Where do the machines run?</h3>
+<p class="measure">In your own AWS or Google Cloud account, as spot VMs. Nothing is hosted for you.</p>
+<h3>Does the server send anything to Runlease?</h3>
+<p class="measure">The CLI has no telemetry. It talks to your cloud and to the relay you chose, and the relay <a href="relay.html#sees">cannot read your sessions</a>.</p>
+<h3>Is there more for Claude Code than the tools?</h3>
+<p class="measure">Yes. <a href="claude-code-sandbox.html">The plugin</a> adds skills that tell Claude when a separate machine is the right call, and a live view of what is running.</p>
+
+<div class="note">
+  <p><b>Running agents for a whole team?</b> Runlease gives one agent one machine. <a href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=guide" data-out="marshal" data-place="guide">Marshal</a>, from the same team, runs AI coding agents in isolated pods inside your own VPC, with credential isolation, audited egress and live tool policies.</p>
+</div>
+
+<h2 id="more">More guides</h2>
+<ul class="measure">
+  <li><a href="claude-code-sandbox.html">A sandbox for Claude Code</a></li>
+  <li><a href="spot-vms-for-coding-agents.html">Spot VMs for coding agents</a></li>
+  <li><a href="ephemeral-cloud-vm.html">Cloud VMs that delete themselves</a></li>
+  <li><a href="hosted-sandbox-or-your-own-cloud.html">Hosted sandbox, or your own cloud?</a></li>
+</ul>
+<div class="next">
+  <a class="btn" href="install.html">Install Runlease</a>
+  <a class="btn" href="how-it-works.html">How it works</a>
+  <a class="btn" href="security.html">Security</a>
+</div>
+</main>
+<footer>
+  <span>Built by the team behind <a href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=footer" data-out="marshal" data-place="footer">Marshal</a>. Apache-2.0.</span>
+  <a href="how-it-works.html">How it works</a>
+  <a href="security.html">Security</a>
+  <a href="install.html">Install</a>
+  <a href="relay.html">Relay</a>
+  <a href="guides.html">Guides</a>
+  <a href="privacy.html">Privacy</a>
+  <a href="terms.html">Terms</a>
+  <a href="mailto:runlease@marshal.codes">Questions? runlease@marshal.codes</a>
+</footer>
+</div>
+<script defer src="analytics.js"></script>
+</body>
+</html>

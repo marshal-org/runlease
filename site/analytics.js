@@ -93,6 +93,22 @@
     send(d.event);
     delete props.verb; if (was !== undefined) props.verb = was;
   });
+  // That a link to Marshal or to the GitHub repository was followed, and
+  // from which part of the page. Both values come from fixed lists.
+  var OUT = { marshal: 'site_outbound_marshal', github: 'site_outbound_github' };
+  var PLACES = { hero: 1, strip: 1, footer: 1, nav: 1, guide: 1 };
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[data-out]') : null;
+    if (!a || sent >= 40) return;
+    // Own keys only: a value such as "toString" must not match something inherited.
+    var has = Object.prototype.hasOwnProperty, out = a.getAttribute('data-out'), place = a.getAttribute('data-place');
+    if (!has.call(OUT, out)) return;
+    sent += 1;
+    props.place = has.call(PLACES, place) ? place : 'other';
+    send(OUT[out]);
+    delete props.place;
+  });
+
   var left = false;
   window.addEventListener('pagehide', function () {
     if (left) return;

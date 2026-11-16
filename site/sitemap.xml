@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://runlease.online/</loc><lastmod>2026-11-16</lastmod></url>
+  <url><loc>https://runlease.online/claude-code-sandbox.html</loc></url>
+  <url><loc>https://runlease.online/ephemeral-cloud-vm.html</loc></url>
+  <url><loc>https://runlease.online/guides.html</loc></url>
+  <url><loc>https://runlease.online/hosted-sandbox-or-your-own-cloud.html</loc></url>
   <url><loc>https://runlease.online/how-it-works.html</loc><lastmod>2026-11-16</lastmod></url>
   <url><loc>https://runlease.online/install.html</loc><lastmod>2026-11-16</lastmod></url>
+  <url><loc>https://runlease.online/mcp-server-cloud-vm.html</loc></url>
   <url><loc>https://runlease.online/privacy.html</loc><lastmod>2026-11-16</lastmod></url>
   <url><loc>https://runlease.online/relay.html</loc><lastmod>2026-11-16</lastmod></url>
   <url><loc>https://runlease.online/security.html</loc><lastmod>2026-11-16</lastmod></url>
+  <url><loc>https://runlease.online/spot-vms-for-coding-agents.html</loc></url>
   <url><loc>https://runlease.online/terms.html</loc><lastmod>2026-11-16</lastmod></url>
 </urlset>

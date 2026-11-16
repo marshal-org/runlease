@@ -157,6 +157,11 @@
   .madeby { font-family: var(--mono); font-size: .74rem; letter-spacing: .08em; color: var(--ink-2); text-decoration: none; border: 1px solid var(--rule-2); padding: 6px 12px; white-space: nowrap; transition: border-color .15s, color .15s; }
   .madeby b { color: var(--ink); font-weight: 600; }
   .madeby:hover { border-color: var(--signal); color: var(--ink); }
+  .badges { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+  .madeby.free { border-color: var(--ok); }
+  .madeby.free b { color: var(--ok); }
+  .madeby.free { transition: border-color .15s, color .15s, background-color .15s; }
+  .madeby.free:hover { border-color: var(--ok); background-color: rgba(76, 195, 138, .1); }
   .hero h1 { font-family: var(--display); font-weight: 800; font-size: clamp(3.1rem, 9.4vw, 8.2rem); line-height: .9; letter-spacing: -.035em; margin-top: 22px; text-wrap: balance; }
   .hero h1 time { color: var(--lease); font-variant-numeric: tabular-nums; white-space: nowrap; display: inline-block; }
   .hero h1 .ch { display: inline-block; }
@@ -175,6 +180,8 @@
   .btn.small { min-height: 40px; padding: 0 14px; font-size: .78rem; }
   .ticks { display: flex; flex-wrap: wrap; gap: 8px 26px; margin-top: 30px; padding: 0; list-style: none; font-family: var(--mono); font-size: .8rem; color: var(--ink-3); }
   .ticks li::before { content: "✓ "; color: var(--ok); }
+  .ticks a { color: var(--ink-2); text-underline-offset: 3px; }
+  .ticks a:hover { color: var(--ink); }
 
   /* ---------- the playground: terminal + live architecture ---------- */
   .play { padding-top: clamp(24px, 4vw, 56px); }
@@ -342,6 +349,7 @@
     .acts .btn { flex: 1; }
     .scene { height: 480px; }
     .scene-note span:last-child { display: none; }
+    .madeby { white-space: normal; letter-spacing: .04em; }
   }
   @media (max-width: 760px), (hover: none) and (pointer: coarse) {
     .rise { opacity: 1; transform: none; transition: none; }
@@ -390,7 +398,10 @@
   <div class="wrap">
     <div class="hero-top">
       <p class="eyebrow"><b>Lease № <span id="lease-no">0001</span></b> · issued on arrival · admits one website</p>
-      <a class="madeby" href="https://marshal.codes" target="_blank" rel="noopener">Built by the <b>Marshal</b> team <span aria-hidden="true">↗</span></a>
+      <div class="badges">
+        <a class="madeby free" href="https://github.com/marshal-org/runlease" target="_blank" rel="noopener"><b>Free and open source</b> · get it on GitHub <span aria-hidden="true">↗</span></a>
+        <a class="madeby" href="https://marshal.codes" target="_blank" rel="noopener">Built by the <b>Marshal</b> team <span aria-hidden="true">↗</span></a>
+      </div>
     </div>
     <h1 id="h1">This website deletes itself in <time id="hero-time" datetime="PT3M">3:00</time>.</h1>
     <p class="lede">It was launched when you arrived, and it will be gone when its lease ends unless you snooze it. <b>That is how every Runlease machine works:</b> a cheap spot VM in your own cloud account, for you or your coding agent, that cleans up after itself.</p>
@@ -400,6 +411,7 @@
       <button class="btn" type="button" data-act="down">Delete this page now</button>
     </div>
     <ul class="ticks">
+      <li><a href="https://github.com/marshal-org/runlease" target="_blank" rel="noopener">Free and open source, Apache-2.0</a></li>
       <li>Spot prices, no markup</li>
       <li>Your cloud, your bill</li>
       <li>Keys stay on your machine</li>

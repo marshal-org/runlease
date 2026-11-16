@@ -49,15 +49,31 @@ To try it from a clone without installing: `claude --plugin-dir ./plugin`.
 
 **A live view.**
 
-- A status line entry: `runlease: 2 machines · box 41m left`.
-- A band above the prompt when a lease has under ten minutes left, with **Snooze 1h** and
-  **Dismiss**.
-- A pane (`/runlease`) listing each machine with its cloud, state, time left and hourly rate, and
-  **Snooze 1h** and **Delete** buttons. Delete takes two presses.
+- A status line entry: `runlease: 2 machines · box 41m left · $0.30/h`.
+- A pane (`/runlease`). Each machine has its cloud, region and size, the time left on its lease
+  as a bar that drains, its hourly rate and what it has cost so far. Open a row to add 30
+  minutes, 1 hour or 4 hours to the lease, copy its `ssh` command, start a prompt about it, or
+  delete it. Delete takes two presses.
+- A band above the prompt when a lease is about to end, with **+30m**, **+1h** and **Dismiss**.
+- A toast when a machine comes up, when one is gone, and when a lease is about to end. The last
+  one also raises a desktop notification.
+- One line under the call that launched a machine, naming what was launched.
 - A note when the session ends with machines still running.
 
-The view reads `runlease list --local` once a minute. That command makes no cloud call. Nothing is
-snoozed or deleted unless you press a button.
+The view reads `runlease list --local` every 30 seconds. That command makes no cloud call.
+Nothing is extended or deleted unless you press a button.
+
+**Settings** (`/config`, under the plugin).
+
+| Setting | Default | Does |
+|---|---|---|
+| Runlease pane | `auto` | `auto` opens the pane when the session launches a machine, on a wide terminal. `command` opens it only with `/runlease`. `off` turns it off |
+| Warn before a lease ends | 10 minutes | When the band, the toast and the notification appear |
+| Refresh every | 30 seconds | How often the list is read. Never faster than every 10 seconds |
+| Notify before a lease ends | on | The desktop notification |
+
+To work on the plugin: `claude plugin validate plugin`, `claude plugin test plugin`, and
+`claude --plugin-dir ./plugin` for a session that reloads it as you edit.
 
 ## What the skills hold Claude to
 

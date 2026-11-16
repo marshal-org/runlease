@@ -1,11 +1,52 @@
 {
   "name": "runlease",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Leased spot machines for coding agents, in your own cloud: skills, slash commands, typed tools and a live view of what is running.",
-  "author": { "name": "Marshal Security", "url": "https://marshal.codes" },
+  "author": {
+    "name": "Marshal Security",
+    "url": "https://marshal.codes"
+  },
   "homepage": "https://runlease.online",
   "repository": "https://github.com/marshal-org/runlease",
   "license": "Apache-2.0",
-  "keywords": ["spot", "vm", "sandbox", "gcp", "aws", "agents"],
-  "types": "./types/index.d.ts"
+  "keywords": [
+    "spot",
+    "vm",
+    "sandbox",
+    "gcp",
+    "aws",
+    "agents"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "pane": {
+      "type": "string",
+      "title": "Runlease pane",
+      "description": "auto opens the pane when this session launches a machine, on a wide terminal; command opens it only with /runlease; off turns the pane and its command off.",
+      "default": "auto",
+      "options": [
+        "auto",
+        "command",
+        "off"
+      ]
+    },
+    "warnMinutes": {
+      "type": "number",
+      "title": "Warn before a lease ends (minutes)",
+      "description": "A lease with less than this left shows a band above the prompt, with buttons to add time.",
+      "default": 10
+    },
+    "pollSeconds": {
+      "type": "number",
+      "title": "Refresh every (seconds)",
+      "description": "How often the machine list is read from this computer. It makes no cloud call. Never faster than every 10 seconds.",
+      "default": 30
+    },
+    "notify": {
+      "type": "boolean",
+      "title": "Notify before a lease ends",
+      "description": "Raise a desktop notification when a lease is about to end, as well as a toast.",
+      "default": true
+    }
+  }
 }

@@ -1,1 +1,4 @@
-{ "modules": ["./register.tsx"] }
+{
+  "description": "The Runlease pane, status line, lease warning band and toasts: what is running in your cloud, what it costs, and when each lease ends.",
+  "modules": ["./register.tsx"]
+}

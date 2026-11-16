@@ -26,7 +26,6 @@ locals {
     allowed_emails       = join(",", var.allowed_emails)
     allowed_domains      = join(",", var.allowed_domains)
     max_slots            = var.max_slots
-    tiers_yaml_b64       = base64encode(var.tiers_yaml)
   })
 }
 
@@ -114,6 +113,9 @@ resource "google_compute_instance" "relay" {
 
   # A change to the startup script replaces the VM, so what runs is always
   # what this configuration says. Slots are in memory: a replacement drops them.
+  # The limits are not part of the script. They are the runlease-tiers metadata
+  # value below, which changes in place: the VM copies it to the relay's tiers
+  # file within a minute and the relay applies it without a restart.
   metadata_startup_script   = local.startup
   allow_stopping_for_update = true
 
@@ -146,6 +148,7 @@ resource "google_compute_instance" "relay" {
   metadata = merge({
     enable-oslogin         = "TRUE"
     block-project-ssh-keys = "TRUE"
+    runlease-tiers         = var.tiers_yaml
     }, var.console_to_cloud_logging ? {
     # The image already copies the journal to the serial console. This asks
     # the platform to store that console output in Cloud Logging. No agent

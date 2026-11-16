@@ -58,8 +58,55 @@ install_verified '${relay_url}' '${relay_sha256}' /usr/local/bin/runlease-relay
 install_verified '${agent_url}' '${agent_sha256}' /usr/local/bin/runlease-agent
 
 install -d -m 0755 /etc/runlease
-echo '${tiers_yaml_b64}' | base64 -d > /etc/runlease/tiers.yaml
-chmod 0644 /etc/runlease/tiers.yaml
+
+# The limits come from the VM's runlease-tiers metadata value, so they can be
+# changed without replacing the VM. This script copies the value to the tiers
+# file when it differs; the relay notices the new file and applies it without
+# a restart. An empty or unreachable value changes nothing.
+cat > /usr/local/sbin/runlease-tiers-sync <<'SYNCEOF'
+#!/bin/bash
+set -euo pipefail
+dst=/etc/runlease/tiers.yaml
+tmp="$(mktemp /etc/runlease/.tiers.XXXXXX)"
+trap 'rm -f "$tmp"' EXIT
+curl -fsS -m 10 -H 'Metadata-Flavor: Google' \
+  'http://metadata.google.internal/computeMetadata/v1/instance/attributes/runlease-tiers' -o "$tmp"
+[ -s "$tmp" ] || { echo "runlease-tiers-sync: metadata value is empty, keeping $dst"; exit 1; }
+if [ -f "$dst" ] && cmp -s "$tmp" "$dst"; then exit 0; fi
+chmod 0644 "$tmp"
+mv -f "$tmp" "$dst"
+echo "runlease-tiers-sync: tiers file updated from metadata"
+SYNCEOF
+chmod 0755 /usr/local/sbin/runlease-tiers-sync
+
+cat > /etc/systemd/system/runlease-tiers-sync.service <<'UNITEOF'
+[Unit]
+Description=Copy the Runlease relay limits from VM metadata
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/runlease-tiers-sync
+UNITEOF
+
+cat > /etc/systemd/system/runlease-tiers-sync.timer <<'UNITEOF'
+[Unit]
+Description=Check the Runlease relay limits for a change
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
+UNITEOF
+
+# The relay must not start without its limits.
+for _ in $(seq 1 10); do
+  /usr/local/sbin/runlease-tiers-sync && break
+  sleep 2
+done
+[ -s /etc/runlease/tiers.yaml ] || { log "could not read the limits from VM metadata"; exit 1; }
 
 # The client secret is published by the relay to every CLI that signs in, so it
 # is not confidential. It still goes in an environment file, not a command line.
@@ -132,6 +179,7 @@ CADDYEOF
 
 systemctl daemon-reload
 systemctl enable runlease-relay caddy >/dev/null 2>&1
+systemctl enable --now runlease-tiers-sync.timer >/dev/null 2>&1
 systemctl restart runlease-relay
 systemctl reload caddy 2>/dev/null || systemctl restart caddy
 

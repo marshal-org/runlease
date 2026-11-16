@@ -81,7 +81,8 @@ type Config struct {
 	// cap is reached, so one caller cannot exhaust the relay's memory. Zero
 	// means no cap.
 	MaxSlots int
-	// Tiers sets per-identity limits. Nil means one tier with no
+	// Tiers sets the per-identity limits the relay starts with; ReloadTiers
+	// and SetTiers replace them while it runs. Nil means one tier with no
 	// per-identity limits.
 	Tiers *Tiers
 	// GoogleClientSecret is published, with the first of Auth.GoogleClientIDs,
@@ -99,6 +100,12 @@ type Server struct {
 	mu       sync.Mutex
 	slots    map[string]*slot // keyed by token
 	owned    map[string]int   // live slots per owner email
+
+	// live holds the limits in force. It starts as cfg.Tiers and is replaced
+	// by SetTiers and ReloadTiers; read it through tiers(), never cfg.Tiers.
+	live     atomic.Pointer[Tiers]
+	reloadMu sync.Mutex
+	tiersSum []byte // SHA-256 of the tiers file as last read
 }
 
 type slot struct {
@@ -116,13 +123,15 @@ type slot struct {
 }
 
 func New(log *slog.Logger, cfg Config) *Server {
-	return &Server{
+	s := &Server{
 		log:      log,
 		cfg:      cfg,
 		upgrader: websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }},
 		slots:    make(map[string]*slot),
 		owned:    make(map[string]int),
 	}
+	s.live.Store(cfg.Tiers)
+	return s
 }
 
 // ── HTTP routing ──────────────────────────────────────────────────────────────
@@ -280,7 +289,7 @@ func (s *Server) handleRegister(conn net.Conn, token, bearer, client string) {
 		writeMsg(conn, wireMsg{Status: "unauthorized", Message: err.Error()}) //nolint:errcheck
 		return
 	}
-	tierName, tier := s.cfg.Tiers.For(id.Email)
+	tierName, tier := s.tiers().For(id.Email)
 
 	s.mu.Lock()
 	if _, exists := s.slots[token]; exists {
@@ -531,7 +540,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-	tierName, tier := s.cfg.Tiers.For(id.Email)
+	tierName, tier := s.tiers().For(id.Email)
 	s.mu.Lock()
 	used := s.owned[id.Email]
 	s.mu.Unlock()
@@ -555,7 +564,7 @@ func (s *Server) handleDiscovery(w http.ResponseWriter, _ *http.Request) {
 		}
 	}
 	doc := map[string]any{"version": s.cfg.Version, "auth": auth}
-	if name, tier := s.cfg.Tiers.For(""); name != "" {
+	if name, tier := s.tiers().For(""); name != "" {
 		doc["defaultTier"] = map[string]any{
 			"name":     name,
 			"maxSlots": tier.MaxSlots,

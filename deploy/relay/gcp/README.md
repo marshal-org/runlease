@@ -97,7 +97,7 @@ from its own release.
 |---|---|
 | Logs | `gcloud compute ssh` through IAP (`allow_iap_ssh = true`), then `journalctl -u runlease-relay -u caddy`. Serial console output shows the boot script. |
 | Health | `GET /health` |
-| Change limits | Edit `tiers_yaml` and apply |
+| Change limits | Edit `tiers_yaml` and apply. The VM is not replaced: the running relay applies the change within about a minute and nobody is disconnected |
 | Shut it off | `terraform destroy`. Nothing is stored, so nothing is lost. |
 
 ## Usage records

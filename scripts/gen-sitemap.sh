@@ -28,6 +28,7 @@ entry() { # file
 echo '<?xml version="1.0" encoding="UTF-8"?>'
 echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
 # The home page first, then the rest in name order.
+home_done=""
 for f in index.html *.html; do
   [ -f "$f" ] || continue
   if [ "$f" = "index.html" ] && [ -n "${home_done:-}" ]; then continue; fi

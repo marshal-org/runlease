@@ -99,11 +99,13 @@
   var PLACES = { hero: 1, strip: 1, footer: 1, nav: 1, guide: 1 };
   document.addEventListener('click', function (e) {
     var a = e.target && e.target.closest ? e.target.closest('a[data-out]') : null;
-    if (!a || !OUT[a.getAttribute('data-out')] || sent >= 40) return;
+    if (!a || sent >= 40) return;
+    // Own keys only: a value such as "toString" must not match something inherited.
+    var has = Object.prototype.hasOwnProperty, out = a.getAttribute('data-out'), place = a.getAttribute('data-place');
+    if (!has.call(OUT, out)) return;
     sent += 1;
-    var place = a.getAttribute('data-place');
-    props.place = PLACES[place] ? place : 'other';
-    send(OUT[a.getAttribute('data-out')]);
+    props.place = has.call(PLACES, place) ? place : 'other';
+    send(OUT[out]);
     delete props.place;
   });
 

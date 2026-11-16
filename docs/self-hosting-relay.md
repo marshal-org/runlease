@@ -83,6 +83,7 @@ through, and idle timeouts on the proxy should be long: sessions are held open.
 | `--google-client-id` | OAuth client IDs whose ID tokens are accepted. `runlease login` signs people in with the first. |
 | `--google-client-secret` | Secret of that client, handed to CLIs for the sign-in flow. Also read from `RUNLEASE_GOOGLE_CLIENT_SECRET`. |
 | `--tiers-file` | YAML file of tiers and per-identity limits. |
+| `--tiers-reload` | How often to re-read the tiers file (default `15s`). `0` reads it only at start and on `SIGHUP`. |
 | `--max-slots` | Refuse new slots beyond this many, across everyone. Default 5000, `0` for no cap. |
 | `--insecure-no-auth` | Run with no authentication. The relay will not start open without it. |
 
@@ -138,7 +139,11 @@ assign:
 - A slot is given back when its owner runs `runlease down`, when its machine's agent has been
   absent for `idleTTL`, or when `slotTTL` runs out.
 - `runlease whoami` shows a person their tier and usage. `GET /me` is the same thing for scripts.
-- The file is read at start. Restart the relay to change limits.
+- A change to the file is applied while the relay runs, within `--tiers-reload` (15 seconds by
+  default) or at once on `SIGHUP`. Nobody is disconnected: limits are checked when a machine
+  registers, so connected sessions keep the terms they registered with.
+- A file that is not valid is not applied. The relay logs why and keeps the limits it has.
+  Replace the file by moving a new one into place, so the relay never reads half of it.
 - An unknown field in the file is an error, so a misspelt limit cannot silently mean "unlimited".
 
 A full example is in [`deploy/relay/tiers.example.yaml`](../deploy/relay/tiers.example.yaml).

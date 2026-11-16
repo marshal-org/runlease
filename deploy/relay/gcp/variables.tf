@@ -115,7 +115,7 @@ variable "max_slots" {
 }
 
 variable "tiers_yaml" {
-  description = "Contents of the tiers file. See deploy/relay/tiers.example.yaml."
+  description = "Contents of the tiers file. See deploy/relay/tiers.example.yaml. A change is applied to the running relay within about a minute, with no restart and no dropped session."
   type        = string
   default     = <<-YAML
     default: free
@@ -125,6 +125,11 @@ variable "tiers_yaml" {
         slotTTL: 8h
         idleTTL: 15m
   YAML
+
+  validation {
+    condition     = can(yamldecode(var.tiers_yaml).tiers) && can(yamldecode(var.tiers_yaml).default)
+    error_message = "tiers_yaml must be YAML with a `default` tier name and a `tiers` map."
+  }
 }
 
 # ── operations ────────────────────────────────────────────────────────────────

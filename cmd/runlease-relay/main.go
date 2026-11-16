@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/marshal-org/runlease/pkg/relay"
@@ -26,6 +29,7 @@ func main() {
 	googleClientID := flag.String("google-client-id", "", "comma-separated Google OAuth client IDs whose ID tokens are accepted. 'runlease login' signs users in with the first one.")
 	googleClientSecret := flag.String("google-client-secret", "", "client secret of the first --google-client-id, published to CLIs for the sign-in flow (not confidential for an installed-application client). Also read from RUNLEASE_GOOGLE_CLIENT_SECRET.")
 	tiersFile := flag.String("tiers-file", "", "YAML file of tiers and per-identity limits. Without it there are no per-identity limits.")
+	tiersReload := flag.Duration("tiers-reload", 15*time.Second, "how often to re-read --tiers-file and apply a change without a restart. 0 reads it only at start and on SIGHUP.")
 	insecureNoAuth := flag.Bool("insecure-no-auth", false, "run with authentication disabled: anyone who can reach the relay can register slots. For local development or a network you fully control.")
 	maxSlots := flag.Int("max-slots", 5000, "maximum number of live slots; registration is refused beyond this. 0 disables the cap.")
 
@@ -79,6 +83,21 @@ func main() {
 	}
 
 	srv := relay.New(log, cfg)
+
+	// Limits can change without a restart: connected sessions are untouched,
+	// and a file that is not valid leaves the limits in force as they are.
+	if *tiersFile != "" {
+		if *tiersReload > 0 {
+			go srv.WatchTiers(context.Background(), *tiersFile, *tiersReload)
+		}
+		hup := make(chan os.Signal, 1)
+		signal.Notify(hup, syscall.SIGHUP)
+		go func() {
+			for range hup {
+				srv.ReloadTiersNow(*tiersFile)
+			}
+		}()
+	}
 
 	log.Info("relay listening", "addr", *addr)
 	// Bound the time a peer may take to send request headers, so idle half-open

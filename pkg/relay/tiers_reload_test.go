@@ -124,6 +124,39 @@ func TestReloadTiers_badFileKeepsTheLimitsInForce(t *testing.T) {
 	}
 }
 
+// The file may change between the relay's first load and the watcher's start.
+// The watcher must apply what the file holds then, not just remember it.
+func TestWatchTiers_appliesAChangeMadeBeforeItStarted(t *testing.T) {
+	srv, url, path := fileTieredServer(t, testTiersYAML)
+	if err := os.WriteFile(path, []byte(strings.Replace(testTiersYAML, "paid.example: team", "paid.example: free", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { srv.WatchTiers(ctx, path, time.Hour); close(done) }() // no tick will fire
+	defer func() { cancel(); <-done }()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if me(t, url, "dev@paid.example")["tier"] == "free" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("a change made before the watcher started was never applied")
+}
+
+func TestWatchTiers_zeroIntervalReturns(t *testing.T) {
+	srv, _, path := fileTieredServer(t, testTiersYAML)
+	done := make(chan struct{})
+	go func() { srv.WatchTiers(context.Background(), path, 0); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("WatchTiers with a zero interval did not return")
+	}
+}
+
 func TestWatchTiers_picksUpAChange(t *testing.T) {
 	srv, url, path := fileTieredServer(t, testTiersYAML)
 	ctx, cancel := context.WithCancel(context.Background())

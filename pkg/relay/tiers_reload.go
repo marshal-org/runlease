@@ -25,14 +25,16 @@ func (s *Server) SetTiers(t *Tiers) { s.live.Store(t) }
 // error is returned for the caller to log. It reports whether the limits
 // were replaced.
 func (s *Server) ReloadTiers(path string) (bool, error) {
+	// Read under the lock, so two reloads at once (a poll and a signal)
+	// cannot apply an older read after a newer one.
+	s.reloadMu.Lock()
+	defer s.reloadMu.Unlock()
+
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return false, fmt.Errorf("reading tiers file: %w", err)
 	}
 	sum := sha256.Sum256(raw)
-
-	s.reloadMu.Lock()
-	defer s.reloadMu.Unlock()
 	if bytes.Equal(sum[:], s.tiersSum) {
 		return false, nil
 	}
@@ -48,16 +50,17 @@ func (s *Server) ReloadTiers(path string) (bool, error) {
 }
 
 // WatchTiers keeps the limits in step with the tiers file until ctx ends,
-// reading it every interval. The first read only records what the file holds:
-// the relay loaded it moments ago. Reloads and refusals are logged.
+// reading it every interval. Reloads and refusals are logged. An interval of
+// zero or less watches nothing.
 func (s *Server) WatchTiers(ctx context.Context, path string, interval time.Duration) {
-	if raw, err := os.ReadFile(path); err == nil {
-		sum := sha256.Sum256(raw)
-		s.reloadMu.Lock()
-		if s.tiersSum == nil {
-			s.tiersSum = sum[:]
-		}
-		s.reloadMu.Unlock()
+	if interval <= 0 {
+		return
+	}
+	// Apply the file once before the first tick. Normally this is the content
+	// the relay started with; if the file changed between that load and now,
+	// this is what brings the limits and the remembered content into step.
+	if _, err := s.ReloadTiers(path); err != nil {
+		s.log.Error("tiers file not applied, keeping the limits in force", "path", path, "err", err)
 	}
 	tick := time.NewTicker(interval)
 	defer tick.Stop()

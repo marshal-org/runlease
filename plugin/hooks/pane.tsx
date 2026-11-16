@@ -90,9 +90,10 @@ function machineRows($: EngineInterface, kit: Kit, width: number, at: number, co
   const name = machine.name
   const how = tone(machine, at, config.warnMs)
   const lease = leaseText(machine, at)
-  const where = [machine.provider, machine.region, machine.instanceType].filter(Boolean).join(' · ')
+  const where = [machine.provider, machine.region, machine.instanceType, machine.state === 'running' ? '' : machine.state].filter(Boolean).join(' · ')
   const cost = [rate(machine), spent(machine, at) === null ? '' : `${money(spent(machine, at) ?? 0)} so far`].filter(Boolean).join(' · ')
-  const bar = barCells(machine, at, Math.min(24, Math.max(8, width - cost.length - 5)))
+  // The bar takes what the cost leaves; on a pane too narrow for it, it is left out.
+  const bar = barCells(machine, at, Math.min(24, width - cost.length - 5))
 
   return (
     <Box key={`m:${name}`} flexDirection="column" marginTop={1}>
@@ -107,7 +108,6 @@ function machineRows($: EngineInterface, kit: Kit, width: number, at: number, co
       <Box paddingLeft={2}>
         <Text dimColor wrap="truncate-end">
           {where}
-          {machine.state !== 'running' && machine.state !== '' ? ` · ${machine.state}` : ''}
         </Text>
       </Box>
       <Box flexDirection="row" gap={2} paddingLeft={2}>

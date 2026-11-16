@@ -44,7 +44,14 @@ export function parseList(stdout: string): Machine[] {
     })
   }
   // The lease that ends first comes first; machines with no lease go last.
-  return list.sort((a, b) => (a.expiresAt ?? Infinity) - (b.expiresAt ?? Infinity) || a.name.localeCompare(b.name))
+  return list.sort((a, b) => {
+    if (a.expiresAt !== b.expiresAt) {
+      if (a.expiresAt === null) return 1
+      if (b.expiresAt === null) return -1
+      return a.expiresAt - b.expiresAt
+    }
+    return a.name.localeCompare(b.name)
+  })
 }
 
 /** A length of time as a person would say it: "45s", "7m", "3h 12m", "2d 4h". */

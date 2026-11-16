@@ -19,7 +19,8 @@ function number(v: unknown, fallback: number, floor: number): number {
   return Math.max(floor, Number.isFinite(n) ? n : fallback)
 }
 
-export function readConfig(options: PluginOptions): Config {
+export function readConfig(given?: PluginOptions): Config {
+  const options = given ?? {}
   return {
     pane: mode(options.pane, 'auto'),
     // Never faster than every 10 seconds: each read starts the CLI once.

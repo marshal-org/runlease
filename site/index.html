@@ -109,10 +109,11 @@
   .madeby { font-family: var(--mono); font-size: .74rem; letter-spacing: .08em; color: var(--ink-2); text-decoration: none; border: 1px solid var(--rule-2); padding: 6px 12px; white-space: nowrap; transition: border-color .15s, color .15s; }
   .madeby b { color: var(--ink); font-weight: 600; }
   .madeby:hover { border-color: var(--signal); color: var(--ink); }
-  .badges { display: flex; flex-wrap: wrap; gap: 8px 10px; }
+  .badges { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
   .madeby.free { border-color: var(--ok); }
   .madeby.free b { color: var(--ok); }
-  .madeby.free:hover { border-color: var(--ok); background: rgba(76, 195, 138, .1); }
+  .madeby.free { transition: border-color .15s, color .15s, background-color .15s; }
+  .madeby.free:hover { border-color: var(--ok); background-color: rgba(76, 195, 138, .1); }
   .hero h1 { font-family: var(--display); font-weight: 800; font-size: clamp(3.1rem, 9.4vw, 8.2rem); line-height: .9; letter-spacing: -.035em; margin-top: 22px; text-wrap: balance; }
   .hero h1 time { color: var(--lease); font-variant-numeric: tabular-nums; white-space: nowrap; display: inline-block; }
   .hero h1 .ch { display: inline-block; }

@@ -696,7 +696,8 @@
   var R = window.__runlease; if (!R) return;
   var sim = R.sim, term = R.term, page = R.page, reduce = R.reduce;
   var cv = document.getElementById('scene-canvas'); if (!cv || !cv.getContext) return;
-  var ctx = cv.getContext('2d'), W = 0, H = 0, dpr = 1, L = null, visible = false, mouse = { x: -1, y: -1 }, hot = null;
+  var ctx = cv.getContext('2d'); if (!ctx) return;
+  var W = 0, H = 0, dpr = 1, L = null, visible = false, mouse = { x: -1, y: -1 }, hot = null;
   var C = { void: '#03070D', deck: '#0A1524', deck2: '#0F1D31', rule: '#1D3049', rule2: '#2B4466', ink: '#E9F0F9', ink2: '#B4C3D6', ink3: '#7F93AD', lease: '#FFB547', signal: '#7BA2FF', ok: '#4CC38A', no: '#FF7A6B' };
   var MONO = '"IBM Plex Mono", ui-monospace, Menlo, monospace';
   var slots = [null, null, null, null, null, null, null, null];

@@ -1,10 +1,10 @@
 # Every change needs a maintainer's review.
-*                       @marshal-org/runlease-maintainers
+*                       @ofirmakmal
 
 # Security-sensitive paths. Changes here get a second, careful read:
 # the relay, the boot script, credential handling, and the pipelines.
-/pkg/relay/             @marshal-org/runlease-maintainers
-/pkg/userdata/          @marshal-org/runlease-maintainers
-/pkg/credential/        @marshal-org/runlease-maintainers
-/.github/               @marshal-org/runlease-maintainers
-/SECURITY.md            @marshal-org/runlease-maintainers
+/pkg/relay/             @ofirmakmal
+/pkg/userdata/          @ofirmakmal
+/pkg/credential/        @ofirmakmal
+/.github/               @ofirmakmal
+/SECURITY.md            @ofirmakmal

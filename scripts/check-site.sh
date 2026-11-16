@@ -50,7 +50,7 @@ done
 # The sitemap lists exactly the pages that may be indexed. The dates are left
 # out of the comparison: pages.yml writes them when it publishes.
 locs() { grep -o '<loc>[^<]*</loc>' | sort; }
-if [ "$(../scripts/gen-sitemap.sh | locs)" != "$(locs < sitemap.xml)" ]; then
+if [ ! -f sitemap.xml ] || [ "$(../scripts/gen-sitemap.sh | locs)" != "$(locs < sitemap.xml)" ]; then
   echo "SITE: sitemap.xml is out of date; run: scripts/gen-sitemap.sh > site/sitemap.xml" >&2
   fail=1
 fi

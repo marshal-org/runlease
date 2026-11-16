@@ -17,7 +17,7 @@ entry() { # file
   local f="$1" loc mod
   loc="$base/$f"
   [ "$f" = "index.html" ] && loc="$base/"
-  mod="$(git log -1 --format=%cs -- "$f" 2>/dev/null || true)"
+  mod="$(git log -1 --format=%cd --date=short -- "$f" 2>/dev/null || true)"
   if [ -n "$mod" ]; then
     echo "  <url><loc>$loc</loc><lastmod>$mod</lastmod></url>"
   else
@@ -27,10 +27,11 @@ entry() { # file
 
 echo '<?xml version="1.0" encoding="UTF-8"?>'
 echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
-entry index.html
-for f in *.html; do
+# The home page first, then the rest in name order.
+for f in index.html *.html; do
   [ -f "$f" ] || continue
-  [ "$f" = "index.html" ] && continue
+  if [ "$f" = "index.html" ] && [ -n "${home_done:-}" ]; then continue; fi
+  home_done=1
   # Any robots tag that says noindex, whatever else it says ("noindex, nofollow").
   # check-site.sh uses the same pattern.
   if grep -q -i -E '<meta[^>]*(name="robots"[^>]*noindex|noindex[^>]*name="robots")' "$f"; then continue; fi

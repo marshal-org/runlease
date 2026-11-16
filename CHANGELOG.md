@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/marshal-org/runlease/compare/v0.7.0...v0.7.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **ci:** move the Scorecard action to v2.5.0 ([#57](https://github.com/marshal-org/runlease/issues/57)) ([13a54d6](https://github.com/marshal-org/runlease/commit/13a54d6ccfb77e80b1a13118532fdb98584dc168))
+
 ## [0.7.0](https://github.com/marshal-org/runlease/compare/v0.6.0...v0.7.0) (2026-11-16)
 
 

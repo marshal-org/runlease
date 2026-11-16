@@ -123,7 +123,12 @@ How to check a download: [verifying a release](security.md#verifying-a-release).
 - It skips itself until Pages is switched on for the repository, so merging the workflow
   publishes nothing by accident.
 - `scripts/check-site.sh` runs first, and on every pull request: every page is complete, every
-  local link resolves, and no page loads a script from another site.
+  local link resolves, and no page loads a script from another site. Every page a search engine
+  may index has a description and a canonical address, and the sitemap lists exactly those
+  pages.
+- The published `sitemap.xml` is written at deploy time by `scripts/gen-sitemap.sh`, which dates
+  each page by the last commit that changed it. A new page needs a line in `site/sitemap.xml`
+  too: run `scripts/gen-sitemap.sh > site/sitemap.xml`.
 
 Switching it on is a repository setting: *Settings, Pages, Source: GitHub Actions*, then the
 custom domain. With the domain's DNS at another provider, the apex needs A records for GitHub

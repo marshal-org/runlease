@@ -34,7 +34,7 @@ for f in index.html *.html; do
   home_done=1
   # Any robots tag that says noindex, whatever else it says ("noindex, nofollow").
   # check-site.sh uses the same pattern.
-  if grep -q -i -E '<meta[^>]*(name="robots"[^>]*noindex|noindex[^>]*name="robots")' "$f"; then continue; fi
+  if grep -q -i -E "<meta[^>]*(name[[:space:]]*=[[:space:]]*[\"']robots[\"'][^>]*noindex|noindex[^>]*name[[:space:]]*=[[:space:]]*[\"']robots[\"'])" "$f"; then continue; fi
   entry "$f"
 done
 echo '</urlset>'

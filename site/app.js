@@ -294,9 +294,8 @@
       'font:800 22px system-ui;color:#FFB547', 'font:13px ui-monospace,monospace;color:#7F93AD');
   } catch (e) { /* no console */ }
   setInterval(tick, 250); tick();
-  document.addEventListener('visibilitychange', tick);
   // tick() stops once the page is gone; the tab title still has to follow the tab.
-  document.addEventListener('visibilitychange', function () { if (!page.alive) tabTitle(0); });
+  document.addEventListener('visibilitychange', function () { if (page.alive) tick(); else tabTitle(0); });
 
   document.addEventListener('click', function (e) {
     var b = e.target.closest ? e.target.closest('[data-act]') : null;

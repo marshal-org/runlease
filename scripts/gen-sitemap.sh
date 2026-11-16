@@ -29,8 +29,11 @@ echo '<?xml version="1.0" encoding="UTF-8"?>'
 echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
 entry index.html
 for f in *.html; do
+  [ -f "$f" ] || continue
   [ "$f" = "index.html" ] && continue
-  if grep -q -i '<meta name="robots" content="noindex' "$f"; then continue; fi
+  # Any robots tag that says noindex, whatever else it says ("noindex, nofollow").
+  # check-site.sh uses the same pattern.
+  if grep -q -i -E '<meta[^>]*(name="robots"[^>]*noindex|noindex[^>]*name="robots")' "$f"; then continue; fi
   entry "$f"
 done
 echo '</urlset>'

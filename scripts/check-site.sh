@@ -38,7 +38,8 @@ for f in *.html; do
   # A page that search engines may index says what it is and where it lives.
   # GitHub Pages serves install.html at /install as well, so without a
   # canonical address the same page is indexed under two.
-  if ! grep -q -i '<meta name="robots" content="noindex' "$f"; then
+  # The pattern is the one gen-sitemap.sh uses to leave a page out.
+  if ! grep -q -i -E '<meta[^>]*(name="robots"[^>]*noindex|noindex[^>]*name="robots")' "$f"; then
     url="https://runlease.online/$f"
     [ "$f" = "index.html" ] && url="https://runlease.online/"
     grep -q '<meta name="description" content="[^"]' "$f" || { echo "SITE: $f has no description" >&2; fail=1; }

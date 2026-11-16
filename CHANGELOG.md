@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.7.0](https://github.com/marshal-org/runlease/compare/v0.6.0...v0.7.0) (2026-11-16)
+
+
+### Features
+
+* **plugin:** a redesigned machines pane, lease bars, cost, settings and change toasts ([#55](https://github.com/marshal-org/runlease/issues/55)) ([cb792c5](https://github.com/marshal-org/runlease/commit/cb792c551394151b06013e004fa65c56318e9473))
+* **relay:** apply a change to the limits without a restart ([#50](https://github.com/marshal-org/runlease/issues/50)) ([9ccd98e](https://github.com/marshal-org/runlease/commit/9ccd98e882a5499d75b9c5cd803443f8bd5f8751))
+* **site:** a home page that is on a lease and deletes itself ([#44](https://github.com/marshal-org/runlease/issues/44)) ([16f4d87](https://github.com/marshal-org/runlease/commit/16f4d87ef6e8cfb181d8afbb3691461c25a60732))
+* **site:** a main heading that names the product, and fonts served by the site ([#53](https://github.com/marshal-org/runlease/issues/53)) ([e8413e4](https://github.com/marshal-org/runlease/commit/e8413e42926c5a5a0ade9d69c5e561cb43787b46))
+* **site:** add a contact address for questions on every page ([#48](https://github.com/marshal-org/runlease/issues/48)) ([a9bfc1b](https://github.com/marshal-org/runlease/commit/a9bfc1b78c2579b52e0b73b51b5f8befd6611fdd))
+* **site:** credit the Marshal team at the top of the home page ([#47](https://github.com/marshal-org/runlease/issues/47)) ([9c8f9bd](https://github.com/marshal-org/runlease/commit/9c8f9bd0ce98da0ff679be26bd68399ab382452b))
+* **site:** guide pages, a clearer step to Marshal for teams, and counted outbound clicks ([#54](https://github.com/marshal-org/runlease/issues/54)) ([0d2f369](https://github.com/marshal-org/runlease/commit/0d2f369b2d26bb0bf0319ffcbab40c8561fa100c))
+* **site:** say at the top of the home page that Runlease is free and open source ([#52](https://github.com/marshal-org/runlease/issues/52)) ([ab6aecb](https://github.com/marshal-org/runlease/commit/ab6aecbaa6e46924e066e7e5e7e5c9208a2db3bb))
+* **site:** tell search engines what each page is and where it lives ([#51](https://github.com/marshal-org/runlease/issues/51)) ([f15d314](https://github.com/marshal-org/runlease/commit/f15d31465e5236cb624a8ef0e5fc980160fbd17e))
+
+
+### Bug Fixes
+
+* **site:** keep the home page visible while scrolling on a phone ([#46](https://github.com/marshal-org/runlease/issues/46)) ([f00c981](https://github.com/marshal-org/runlease/commit/f00c981c43090422c0ba37d4a4b126bf6d5b1c53))
+
 ## [0.6.0](https://github.com/marshal-org/runlease/compare/v0.5.0...v0.6.0) (2026-11-15)
 
 

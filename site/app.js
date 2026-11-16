@@ -103,10 +103,18 @@
     afterBig: $('#after-big'), afterSay: $('#after-say'), leaseNo: $('#lease-no'), main: $('#main'), bar: $('#bar')
   };
 
-  // The tab counts down too: its title, and an icon whose ring empties.
+  // The tab counts down too: its title, and an icon whose ring empties. The
+  // title counts down only while the tab is in the background, which is where
+  // a tab title gets read. In front it stays the page's own title, so a search
+  // engine that renders the page records that title and not a countdown.
   var baseTitle = document.title, icon = document.querySelector('link[rel="icon"]'), iconWas = icon ? icon.href : '', iconAt = 0;
+  function tabTitle(left) {
+    var next = !document.hidden ? baseTitle
+      : page.alive ? clock(left) + ' · this tab deletes itself · Runlease' : 'deleted itself · Runlease';
+    if (document.title !== next) document.title = next; // tick() calls this four times a second
+  }
   function tabState(left) {
-    document.title = page.alive ? clock(left) + ' · this tab deletes itself · ' + baseTitle : 'deleted itself · ' + baseTitle;
+    tabTitle(left);
     if (!icon || now() - iconAt < 2000) return; iconAt = now();
     try {
       var c = document.createElement('canvas'); c.width = c.height = 64; var g = c.getContext('2d'), k = Math.max(0, Math.min(1, left / page.total));
@@ -287,7 +295,8 @@
       'font:800 22px system-ui;color:#FFB547', 'font:13px ui-monospace,monospace;color:#7F93AD');
   } catch (e) { /* no console */ }
   setInterval(tick, 250); tick();
-  document.addEventListener('visibilitychange', tick);
+  // tick() stops once the page is gone; the tab title still has to follow the tab.
+  document.addEventListener('visibilitychange', function () { if (page.alive) tick(); else tabTitle(0); });
 
   document.addEventListener('click', function (e) {
     var b = e.target.closest ? e.target.closest('[data-act]') : null;

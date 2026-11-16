@@ -3,6 +3,8 @@
 #   - every page is a complete HTML document
 #   - every local link and stylesheet points at a file that exists
 #   - nothing loads a script from another site (the site's own files are fine)
+#   - every page a search engine may index has a description and a canonical
+#     address, and the sitemap lists exactly those pages
 set -euo pipefail
 cd "$(dirname "$0")/../site"
 fail=0
@@ -32,7 +34,26 @@ for f in *.html; do
     echo "SITE: $f loads an external script; the site ships its own code only" >&2
     fail=1
   fi
+
+  # A page that search engines may index says what it is and where it lives.
+  # GitHub Pages serves install.html at /install as well, so without a
+  # canonical address the same page is indexed under two.
+  # The pattern is the one gen-sitemap.sh uses to leave a page out.
+  if ! grep -q -i -E "<meta[^>]*(name[[:space:]]*=[[:space:]]*[\"']robots[\"'][^>]*noindex|noindex[^>]*name[[:space:]]*=[[:space:]]*[\"']robots[\"'])" "$f"; then
+    url="https://runlease.online/$f"
+    [ "$f" = "index.html" ] && url="https://runlease.online/"
+    grep -q '<meta name="description" content="[^"]' "$f" || { echo "SITE: $f has no description" >&2; fail=1; }
+    grep -q -F "<link rel=\"canonical\" href=\"$url\">" "$f" || { echo "SITE: $f has no canonical link to $url" >&2; fail=1; }
+  fi
 done
+
+# The sitemap lists exactly the pages that may be indexed. The dates are left
+# out of the comparison: pages.yml writes them when it publishes.
+locs() { grep -o '<loc>[^<]*</loc>' | sort; }
+if [ ! -f sitemap.xml ] || [ "$(../scripts/gen-sitemap.sh | locs)" != "$(locs < sitemap.xml)" ]; then
+  echo "SITE: sitemap.xml is out of date; run: scripts/gen-sitemap.sh > site/sitemap.xml" >&2
+  fail=1
+fi
 
 [ "$fail" -eq 0 ] || exit 1
 echo "Site check passed for $(ls ./*.html | wc -l) pages."

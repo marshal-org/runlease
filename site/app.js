@@ -70,7 +70,7 @@
       }
       parts = alive;
       ctx.globalAlpha = 1;
-      if (parts.length) requestAnimationFrame(frame); else running = false;
+      if (parts.length) requestAnimationFrame(frame); else { running = false; cv.classList.remove('on'); }
     }
     // inward = true gathers particles into the rectangle instead of scattering.
     function emit(rect, count, inward, ember) {
@@ -85,7 +85,7 @@
         if (ember) { p.c = Math.random() < .7 ? '#FFB547' : '#FF8A3D'; p.max = rnd(70, 170); p.vy = rnd(-1.1, -.3); p.s = rnd(1, 2.6); }
         parts.push(p);
       }
-      if (!running) { running = true; requestAnimationFrame(frame); }
+      if (!running && parts.length) { running = true; cv.classList.add('on'); requestAnimationFrame(frame); }
     }
     size(); window.addEventListener('resize', size);
     return { emit: emit };

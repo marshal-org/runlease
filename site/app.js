@@ -303,7 +303,7 @@
     var b = e.target.closest ? e.target.closest('[data-copy]') : null;
     if (!b) return;
     var src = document.getElementById(b.getAttribute('data-copy')); if (!src) return;
-    var text = src.textContent, was = b.textContent;
+    var text = src.textContent, was = b.getAttribute('data-label') || b.textContent; b.setAttribute('data-label', was);
     var done = function (msg) { b.textContent = msg; setTimeout(function () { b.textContent = was; }, 1600); };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done('Copied'); }, function () { select(src); done('Select + copy'); });
     else { select(src); done('Select + copy'); }
@@ -312,7 +312,7 @@
 
   $('#share').addEventListener('click', function () {
     track('site_shared');
-    var b = this, was = b.textContent, url = 'https://runlease.online/';
+    var b = this, was = b.getAttribute('data-label') || b.textContent, url = 'https://runlease.online/'; b.setAttribute('data-label', was);
     var done = function (msg) { b.textContent = msg; setTimeout(function () { b.textContent = was; }, 2200); };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(function () { done('Link copied: ' + url); }, function () { done(url); });
     else done(url);
@@ -599,8 +599,7 @@
         var parts = input.value.split(' '), last = parts[parts.length - 1];
         var pool = parts.length === 1 ? ['runlease', 'help', 'clear'] : parts.length === 2 ? ['up', 'exec', 'list', 'snooze', 'down', 'doctor', 'whoami', 'push', 'pull', 'help'] : sim.machines.map(function (m) { return m.name; }).concat(['this-website']);
         var hit = pool.filter(function (w) { return w.indexOf(last) === 0; });
-        if (hit.length === 1) { parts[parts.length - 1] = hit[0]; input.value = parts.join(' ') + ' '; }
-        e.preventDefault();
+        if (!e.shiftKey && last && hit.length === 1) { parts[parts.length - 1] = hit[0]; input.value = parts.join(' ') + ' '; e.preventDefault(); }
       } else if (e.key === 'l' && e.ctrlKey) { out.innerHTML = ''; e.preventDefault(); }
     });
     out.addEventListener('click', function () { if (!String(window.getSelection())) input.focus({ preventScroll: true }); });
@@ -732,6 +731,7 @@
     var padX = 12, padTop = 30, gap = 8;
     L.tw = (L.cloud.w - padX * 2 - gap * (L.cols - 1)) / L.cols;
     L.th = Math.min(56, (L.cloud.h - padTop - 10 - gap * (L.rows - 1)) / L.rows);
+    Object.keys(vis).forEach(function (n) { vis[n].relayout = true; });
     L.slot = function (i) {
       var c = i % L.cols, r = Math.floor(i / L.cols);
       return { x: L.cloud.x + padX + c * (L.tw + gap), y: L.cloud.y + padTop + r * (L.th + gap) };
@@ -886,6 +886,8 @@
     ctx.restore();
   }
 
+  function place(v) { if (v.relayout) { var q = L.slot(v.slot); v.x = q.x; v.y = q.y; v.relayout = false; } }
+
   function drawMachine(v, t) {
     var m = v.m, age = now() - v.born, appear = reduce ? 1 : Math.min(1, age / 500), left = (m.expiresAt - now()), k = Math.max(0, Math.min(1, left / m.total));
     var x = v.x, y = v.y, w = L.tw, h = L.th, pending = m.state === 'pending', soon = k < .2 && !pending, isHot = hot && hot.type === 'machine' && hot.name === m.name;
@@ -980,7 +982,7 @@
     ctx.clearRect(0, 0, W, H);
     hits = [];
     drawGrid(t); drawCloud(); drawRelay(t); drawYou(t); drawWeb();
-    Object.keys(vis).forEach(function (n) { drawLink(vis[n], t); });
+    Object.keys(vis).forEach(function (n) { place(vis[n]); drawLink(vis[n], t); });
     Object.keys(vis).forEach(function (n) { drawMachine(vis[n], t); });
     drawEmpty(); drawPackets(); drawKeys(); drawGhosts();
     hot = pick(mouse.x, mouse.y);

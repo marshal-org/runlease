@@ -56,6 +56,7 @@
   button { font: inherit; color: inherit; cursor: pointer; }
   :focus-visible { outline: 2px solid var(--lease); outline-offset: 3px; }
   [hidden] { display: none !important; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .wrap { max-width: 1180px; margin: 0 auto; padding-left: var(--gutter-l); padding-right: var(--gutter-r); }
   .mono { font-family: var(--mono); }
   .eyebrow { font-family: var(--mono); font-size: .74rem; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-3); }
@@ -304,7 +305,7 @@
 <header class="leasebar" id="bar">
   <div class="wrap">
     <a class="brand" href="./" aria-label="Runlease home"><img src="logo.svg" alt="" width="24" height="24">runlease</a>
-    <div class="status" role="status" aria-label="This page's lease">
+    <div class="status" aria-label="This page is on a lease: it deletes itself when the countdown ends">
       <span class="dot" aria-hidden="true"></span>
       <span class="name">this-website</span>
       <span class="sep b" aria-hidden="true">·</span>
@@ -352,7 +353,7 @@
     <div class="stage rise">
       <div class="term" id="term">
         <div class="term-top"><i></i><i></i><i></i><span>your machine</span></div>
-        <div class="term-out" id="term-out" aria-live="polite" aria-label="Terminal output"></div>
+        <div class="term-out" id="term-out" role="log" aria-label="Terminal output"></div>
         <label class="term-in"><span class="p" aria-hidden="true">$</span><input id="term-input" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="runlease up" aria-label="Type a runlease command"></label>
         <div class="chips" id="chips" aria-label="Commands to try">
           <button type="button" data-run="runlease up -n agent-box --ttl 2h -d">up</button>
@@ -522,7 +523,7 @@
 
 </main>
 
-<div class="warn" id="warn" role="alert" aria-hidden="true"><span>this-website expires in <span id="warn-time">0:30</span></span><button type="button" data-act="snooze">Snooze 3m</button></div>
+<div class="warn" id="warn" role="status" aria-hidden="true"><span>this-website expires in <span aria-hidden="true" id="warn-time">0:30</span><span class="sr">under thirty seconds</span></span><button type="button" data-act="snooze">Snooze 3m</button></div>
 
 <canvas id="ash" aria-hidden="true"></canvas>
 

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="When an AI coding agent needs somewhere to run code, you can rent a hosted sandbox or use a VM in your own cloud account. What each is good at, and how to choose.">
+<title>Hosted code sandbox, or a VM in your own cloud?</title>
+<link rel="canonical" href="https://runlease.online/hosted-sandbox-or-your-own-cloud.html">
+<meta property="og:title" content="Hosted code sandbox, or a VM in your own cloud?">
+<meta property="og:description" content="When an AI coding agent needs somewhere to run code, you can rent a hosted sandbox or use a VM in your own cloud account. What each is good at, and how to choose.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://runlease.online/hosted-sandbox-or-your-own-cloud.html">
+<meta property="og:image" content="https://runlease.online/og.png">
+<meta property="og:site_name" content="Runlease">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="page.css">
+<!-- What the page is, for search engines. Data only: nothing here runs. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Hosted code sandbox, or a VM in your own cloud?",
+  "description": "When an AI coding agent needs somewhere to run code, you can rent a hosted sandbox or use a VM in your own cloud account. What each is good at, and how to choose.",
+  "url": "https://runlease.online/hosted-sandbox-or-your-own-cloud.html",
+  "inLanguage": "en",
+  "isPartOf": {
+    "@id": "https://runlease.online/#website"
+  },
+  "about": {
+    "@id": "https://runlease.online/#software"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "Marshal",
+    "url": "https://marshal.codes"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Marshal",
+    "url": "https://marshal.codes"
+  }
+}
+</script>
+</head>
+<body>
+<div class="wrap wide">
+<header>
+  <a class="mark" href="./"><img src="logo.svg" alt="" width="26" height="26">runlease</a>
+  <nav aria-label="Main">
+    <a href="how-it-works.html">How it works</a>
+    <a href="security.html">Security</a>
+    <a href="install.html">Install</a>
+    <a href="relay.html">Relay</a>
+    <a href="guides.html">Guides</a>
+    <a href="https://github.com/marshal-org/runlease" data-out="github" data-place="nav">GitHub</a>
+  </nav>
+</header>
+<main>
+<p class="eyebrow">Guide · Choosing</p>
+<h1>A hosted code sandbox, or a VM in your own cloud?</h1>
+<p class="lede">An agent that writes code needs somewhere to run it. There are two broad ways to give it that: a sandbox service that runs your code on its own infrastructure, or a machine in a cloud account you already have. Runlease is the second kind. This page is about when each one fits.</p>
+
+<nav class="toc" aria-label="On this page">
+  <a href="#two">The two approaches</a>
+  <a href="#compare">Side by side</a>
+  <a href="#hosted">When hosted is better</a>
+  <a href="#own">When your own cloud is better</a>
+  <a href="#faq">Questions</a>
+</nav>
+
+<h2 id="two">The two approaches</h2>
+<p class="measure"><b>A hosted sandbox</b> is a service. You call its API, it starts an isolated environment on its infrastructure, your code runs there, and you pay the service for the time.</p>
+<p class="measure"><b>A VM in your own cloud</b> is a machine in your AWS or Google Cloud account. A tool on your computer launches it under your IAM, on your network, and you pay your cloud for it. Runlease is that tool, with the two things raw cloud VMs lack for this job: the machine deletes itself, and it is reachable without a public address.</p>
+
+<h2 id="compare">Side by side</h2>
+<div class="scroll"><table>
+  <tr><th></th><th>Hosted sandbox</th><th>Runlease, in your own cloud</th></tr>
+  <tr><td><b>Where the code runs</b></td><td>The provider's infrastructure</td><td>Your cloud account</td></tr>
+  <tr><td><b>Who can see it</b></td><td>You, and whatever the provider's design allows</td><td>You. The relay in the middle <a href="security.html">cannot read the session</a></td></tr>
+  <tr><td><b>Reaching private things</b></td><td>Needs a route from the provider to your network</td><td>The machine is already on your network, under your IAM</td></tr>
+  <tr><td><b>What you get</b></td><td>Usually a container or small virtual machine, shaped by the service</td><td>A full Linux VM, up to 16 cores or a GPU</td></tr>
+  <tr><td><b>Time to start</b></td><td>Usually faster: these services are built for it</td><td>A VM boot, every time</td></tr>
+  <tr><td><b>Price</b></td><td>The provider's rate</td><td>Your cloud's spot price, nothing added</td></tr>
+  <tr><td><b>Setup</b></td><td>An API key</td><td>A cloud account, credentials, and a subnet that can reach the internet</td></tr>
+  <tr><td><b>If the vendor goes away</b></td><td>You migrate</td><td>It is open source, and the relay can be <a href="relay.html">your own</a></td></tr>
+</table></div>
+<p class="measure">Hosted sandboxes differ from one another, and some can be self-hosted. Check the one you are considering against the rows that matter to you.</p>
+
+<h2 id="hosted">When hosted is better</h2>
+<ul class="measure">
+  <li>You need an environment in a second or two, many times a minute. A VM boot is too slow for that.</li>
+  <li>You have no cloud account, or nobody to look after one.</li>
+  <li>The code is small and self-contained: a snippet, a notebook cell, a function.</li>
+  <li>You want one bill and an SDK, and where the code runs is not a concern.</li>
+</ul>
+
+<h2 id="own">When your own cloud is better</h2>
+<ul class="measure">
+  <li>The code, the data or the credentials it touches must not leave your account.</li>
+  <li>The job needs to reach things inside your network: a database, an internal registry, a staging service.</li>
+  <li>The work is heavy: a real build, a full test suite, a GPU.</li>
+  <li>You already have cloud commitments or credits, and want the spend on that bill.</li>
+  <li>You want to read the code that handles your sessions. <a href="https://github.com/marshal-org/runlease" data-out="github" data-place="guide">Runlease is open source</a>.</li>
+</ul>
+
+<h2 id="faq">Questions</h2>
+<h3>Can I use both?</h3>
+<p class="measure">Yes, and many teams will: a hosted sandbox for quick snippets, and a leased machine when the work is heavy or must stay inside the account.</p>
+<h3>Is a VM as isolated as a hosted sandbox?</h3>
+<p class="measure">A VM is a strong boundary, and it is your cloud's, the one your other workloads already rely on. What matters as much is what you put on it: Runlease does not copy your keys or cloud credentials to the machine.</p>
+<h3>What about a whole team of agents?</h3>
+<p class="measure">Runlease is one person, or one agent, and one machine at a time. Governing many agents across a company is a different problem; that is what <a href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=compare" data-out="marshal" data-place="guide">Marshal</a> is for.</p>
+
+<div class="note">
+  <p><b>Running agents for a whole team?</b> Runlease gives one agent one machine. <a href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=guide" data-out="marshal" data-place="guide">Marshal</a>, from the same team, runs AI coding agents in isolated pods inside your own VPC, with credential isolation, audited egress and live tool policies.</p>
+</div>
+
+<h2 id="more">More guides</h2>
+<ul class="measure">
+  <li><a href="claude-code-sandbox.html">A sandbox for Claude Code</a></li>
+  <li><a href="spot-vms-for-coding-agents.html">Spot VMs for coding agents</a></li>
+  <li><a href="mcp-server-cloud-vm.html">An MCP server for cloud machines</a></li>
+  <li><a href="ephemeral-cloud-vm.html">Cloud VMs that delete themselves</a></li>
+</ul>
+<div class="next">
+  <a class="btn" href="install.html">Install Runlease</a>
+  <a class="btn" href="how-it-works.html">How it works</a>
+  <a class="btn" href="security.html">Security</a>
+</div>
+</main>
+<footer>
+  <span>Built by the team behind <a href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=footer" data-out="marshal" data-place="footer">Marshal</a>. Apache-2.0.</span>
+  <a href="how-it-works.html">How it works</a>
+  <a href="security.html">Security</a>
+  <a href="install.html">Install</a>
+  <a href="relay.html">Relay</a>
+  <a href="guides.html">Guides</a>
+  <a href="privacy.html">Privacy</a>
+  <a href="terms.html">Terms</a>
+  <a href="mailto:runlease@marshal.codes">Questions? runlease@marshal.codes</a>
+</footer>
+</div>
+<script defer src="analytics.js"></script>
+</body>
+</html>

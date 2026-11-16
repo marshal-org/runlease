@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="Launch a temporary Linux VM in your own AWS or Google Cloud account with one command. It has no public address and deletes itself when its lease ends.">
+<title>Ephemeral cloud VMs that delete themselves</title>
+<link rel="canonical" href="https://runlease.online/ephemeral-cloud-vm.html">
+<meta property="og:title" content="Ephemeral cloud VMs that delete themselves">
+<meta property="og:description" content="Launch a temporary Linux VM in your own AWS or Google Cloud account with one command. It has no public address and deletes itself when its lease ends.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://runlease.online/ephemeral-cloud-vm.html">
+<meta property="og:image" content="https://runlease.online/og.png">
+<meta property="og:site_name" content="Runlease">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="page.css">
+<!-- What the page is, for search engines. Data only: nothing here runs. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Ephemeral cloud VMs that delete themselves",
+  "description": "Launch a temporary Linux VM in your own AWS or Google Cloud account with one command. It has no public address and deletes itself when its lease ends.",
+  "url": "https://runlease.online/ephemeral-cloud-vm.html",
+  "inLanguage": "en",
+  "isPartOf": {
+    "@id": "https://runlease.online/#website"
+  },
+  "about": {
+    "@id": "https://runlease.online/#software"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "Marshal",
+    "url": "https://marshal.codes"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Marshal",
+    "url": "https://marshal.codes"
+  }
+}
+</script>
+</head>
+<body>
+<div class="wrap wide">
+<header>
+  <a class="mark" href="./"><img src="logo.svg" alt="" width="26" height="26">runlease</a>
+  <nav aria-label="Main">
+    <a href="how-it-works.html">How it works</a>
+    <a href="security.html">Security</a>
+    <a href="install.html">Install</a>
+    <a href="relay.html">Relay</a>
+    <a href="guides.html">Guides</a>
+    <a href="https://github.com/marshal-org/runlease" data-out="github" data-place="nav">GitHub</a>
+  </nav>
+</header>
+<main>
+<p class="eyebrow">Guide · Temporary machines</p>
+<h1>Ephemeral cloud VMs that delete themselves</h1>
+<p class="lede">Sometimes you need a real Linux machine for an hour: to reproduce a bug on a clean box, run a heavy build, preview a branch, or try something on a GPU. Runlease launches one in your own cloud account with one command and removes it when the lease ends.</p>
+
+<nav class="toc" aria-label="On this page">
+  <a href="#one">One command</a>
+  <a href="#uses">What people use it for</a>
+  <a href="#gone">How it goes away</a>
+  <a href="#closed">Closed by default</a>
+  <a href="#faq">Questions</a>
+</nav>
+
+<h2 id="one">One command</h2>
+<pre><span class="p">$</span> runlease up -p gcp -n box --ttl 1h -d   <span class="c"># or -p aws</span>
+<span class="p">$</span> runlease exec box -- uname -a
+<span class="p">$</span> runlease connect box                    <span class="c"># a shell</span>
+<span class="p">$</span> runlease down box --yes                 <span class="c"># or let the lease delete it</span></pre>
+<p class="measure">There is no cluster to keep, no control plane and no account with us. The CLI talks to your cloud, and the machine runs under your own IAM, on your own network.</p>
+
+<h2 id="uses">What people use it for</h2>
+<div class="cards">
+  <div><p class="n">CLEAN BOX</p><h3>Reproduce a bug</h3><p>A fresh Debian or Ubuntu machine with nothing of yours on it.</p></div>
+  <div><p class="n">BIG BUILD</p><h3>Borrow cores</h3><p><code>-s compute.2xlarge</code> for the length of one build, then nothing.</p></div>
+  <div><p class="n">PREVIEW</p><h3>Show a branch</h3><p><code>runlease forward box -L 3000:localhost:3000</code> brings its port to your machine.</p></div>
+  <div><p class="n">GPU</p><h3>One job on a GPU</h3><p><code>-s compute.gpu</code>, with a short lease so it cannot be forgotten.</p></div>
+  <div><p class="n">CI</p><h3>A runner for one job</h3><p>Every command takes <code>--output json</code> and runs without a terminal.</p></div>
+  <div><p class="n">AGENTS</p><h3>A place to run things</h3><p>See <a href="claude-code-sandbox.html">a sandbox for Claude Code</a>.</p></div>
+</div>
+<p class="measure">For anything you repeat, describe the machine in a manifest: size, lease, the setup steps that install your toolchain, and the ports to forward. <code>runlease manifest new</code> writes one.</p>
+
+<h2 id="gone">How it goes away</h2>
+<p class="measure">The lease is two hours unless you set it. A timer on the VM deletes the instance when it ends. On Google Cloud the VM deletes itself through the Compute API. On AWS it powers off, and the instance is set to terminate on shutdown.</p>
+<p class="measure">That happens with your laptop closed, your network down, or the script that launched it long dead. <code>runlease snooze box 1h</code> moves the deadline when you need longer.</p>
+<p class="measure">For the cases where a machine is left stopped with a disk still billing, <code>runlease list</code> asks your cloud for every machine carrying the Runlease label and <code>runlease down --leaked</code> removes the stopped ones whose lease is over. It never deletes a running machine.</p>
+
+<h2 id="closed">Closed by default</h2>
+<p class="measure">A temporary machine should not be a temporary hole. With a relay, the VM gets no public address and its SSH server listens on localhost only. The VM dials out to the relay, and you reach it through that tunnel. The relay <a href="security.html">holds no keys and cannot read the session</a>.</p>
+
+<h2 id="faq">Questions</h2>
+<h3>How is this different from a script that calls my cloud's CLI?</h3>
+<p class="measure">The parts a script usually skips: the machine deletes itself with nothing watching, it has no public address, its host key is known before it boots, and there is one command to find what was left behind.</p>
+<h3>Do I need Kubernetes or Terraform?</h3>
+<p class="measure">No. One binary on your machine and credentials for one cloud.</p>
+<h3>What does it cost?</h3>
+<p class="measure">Runlease is free and open source. You pay your cloud the spot price of the VM, shown before launch. <a href="spot-vms-for-coding-agents.html">More on cost</a>.</p>
+
+<div class="note">
+  <p><b>Running agents for a whole team?</b> Runlease gives one agent one machine. <a href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=guide" data-out="marshal" data-place="guide">Marshal</a>, from the same team, runs AI coding agents in isolated pods inside your own VPC, with credential isolation, audited egress and live tool policies.</p>
+</div>
+
+<h2 id="more">More guides</h2>
+<ul class="measure">
+  <li><a href="claude-code-sandbox.html">A sandbox for Claude Code</a></li>
+  <li><a href="spot-vms-for-coding-agents.html">Spot VMs for coding agents</a></li>
+  <li><a href="mcp-server-cloud-vm.html">An MCP server for cloud machines</a></li>
+  <li><a href="hosted-sandbox-or-your-own-cloud.html">Hosted sandbox, or your own cloud?</a></li>
+</ul>
+<div class="next">
+  <a class="btn" href="install.html">Install Runlease</a>
+  <a class="btn" href="how-it-works.html">How it works</a>
+  <a class="btn" href="security.html">Security</a>
+</div>
+</main>
+<footer>
+  <span>Built by the team behind <a href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=footer" data-out="marshal" data-place="footer">Marshal</a>. Apache-2.0.</span>
+  <a href="how-it-works.html">How it works</a>
+  <a href="security.html">Security</a>
+  <a href="install.html">Install</a>
+  <a href="relay.html">Relay</a>
+  <a href="guides.html">Guides</a>
+  <a href="privacy.html">Privacy</a>
+  <a href="terms.html">Terms</a>
+  <a href="mailto:runlease@marshal.codes">Questions? runlease@marshal.codes</a>
+</footer>
+</div>
+<script defer src="analytics.js"></script>
+</body>
+</html>

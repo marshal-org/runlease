@@ -292,7 +292,7 @@
 
   .by { background: var(--ink); color: var(--night); padding-block: 22px; }
   .by .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 28px; }
-  .by p { font-size: 1rem; }
+  .by p { font-size: 1rem; max-width: 46em; flex: 1 1 22em; }
   .by b { font-family: var(--display); font-size: 1.1rem; }
   .by a { color: inherit; font-family: var(--mono); font-size: .8rem; font-weight: 600; border: 1px solid currentColor; padding: 9px 14px; text-decoration: none; white-space: nowrap; }
   .by a:hover { background: var(--night); color: var(--ink); }
@@ -402,8 +402,8 @@
     <div class="hero-top">
       <p class="eyebrow"><b>Lease № <span id="lease-no">0001</span></b> · issued on arrival · admits one website</p>
       <div class="badges">
-        <a class="madeby free" href="https://github.com/marshal-org/runlease" target="_blank" rel="noopener"><b>Free and open source</b> · get it on GitHub <span aria-hidden="true">↗</span></a>
-        <a class="madeby" href="https://marshal.codes" target="_blank" rel="noopener">Built by the <b>Marshal</b> team <span aria-hidden="true">↗</span></a>
+        <a class="madeby free" href="https://github.com/marshal-org/runlease" target="_blank" rel="noopener" data-out="github" data-place="hero"><b>Free and open source</b> · get it on GitHub <span aria-hidden="true">↗</span></a>
+        <a class="madeby" href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=hero" target="_blank" rel="noopener" data-out="marshal" data-place="hero">Built by the <b>Marshal</b> team <span aria-hidden="true">↗</span></a>
       </div>
     </div>
     <p class="display" id="h1">This website deletes itself in <time id="hero-time" datetime="PT3M">3:00</time>.</p>
@@ -573,6 +573,7 @@
         <li><a href="security.html">Security <span>the full threat model</span></a></li>
         <li><a href="relay.html">The relay <span>the free one, or your own</span></a></li>
         <li><a href="https://github.com/marshal-org/runlease">Source on GitHub <span>read every line</span></a></li>
+        <li><a href="guides.html">Guides <span>Claude Code, spot VMs, MCP</span></a></li>
         <li><a href="mailto:runlease@marshal.codes">Questions? Email us <span>runlease@marshal.codes</span></a></li>
       </ul>
     </div>
@@ -581,8 +582,8 @@
 
 <section class="by" aria-label="Built by Marshal" data-part="credits" style="padding-block:22px">
   <div class="wrap">
-    <p>Built by <b>Marshal</b>: AI coding agents at full speed, with full receipts.</p>
-    <a href="https://marshal.codes">marshal.codes →</a>
+    <p><b>Running agents for a whole team?</b> Runlease gives one agent one machine. Marshal, from the same team, runs AI coding agents in isolated pods inside your own VPC, with credential isolation, audited egress and live tool policies.</p>
+    <a href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=strip" target="_blank" rel="noopener" data-out="marshal" data-place="strip">See Marshal →</a>
   </div>
 </section>
 
@@ -594,6 +595,7 @@
       <a href="security.html">Security</a>
       <a href="security.html#report">Report a vulnerability</a>
       <a href="relay.html">Relay</a>
+      <a href="guides.html">Guides</a>
       <a href="privacy.html">Privacy</a>
       <a href="terms.html">Terms</a>
       <a href="classic.html">The page that does not delete itself</a>

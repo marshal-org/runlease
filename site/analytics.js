@@ -93,6 +93,20 @@
     send(d.event);
     delete props.verb; if (was !== undefined) props.verb = was;
   });
+  // That a link to Marshal or to the GitHub repository was followed, and
+  // from which part of the page. Both values come from fixed lists.
+  var OUT = { marshal: 'site_outbound_marshal', github: 'site_outbound_github' };
+  var PLACES = { hero: 1, strip: 1, footer: 1, nav: 1, guide: 1 };
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[data-out]') : null;
+    if (!a || !OUT[a.getAttribute('data-out')] || sent >= 40) return;
+    sent += 1;
+    var place = a.getAttribute('data-place');
+    props.place = PLACES[place] ? place : 'other';
+    send(OUT[a.getAttribute('data-out')]);
+    delete props.place;
+  });
+
   var left = false;
   window.addEventListener('pagehide', function () {
     if (left) return;

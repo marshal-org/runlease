@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="How to run AI coding agents on spot instances in your own AWS or Google Cloud account: what spot saves, what it can take away, and how a lease keeps the bill bounded.">
+<title>Spot VMs for AI coding agents: cost, limits and leases</title>
+<link rel="canonical" href="https://runlease.online/spot-vms-for-coding-agents.html">
+<meta property="og:title" content="Spot VMs for AI coding agents: cost, limits and leases">
+<meta property="og:description" content="How to run AI coding agents on spot instances in your own AWS or Google Cloud account: what spot saves, what it can take away, and how a lease keeps the bill bounded.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://runlease.online/spot-vms-for-coding-agents.html">
+<meta property="og:image" content="https://runlease.online/og.png">
+<meta property="og:site_name" content="Runlease">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="page.css">
+<!-- What the page is, for search engines. Data only: nothing here runs. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Spot VMs for AI coding agents: cost, limits and leases",
+  "description": "How to run AI coding agents on spot instances in your own AWS or Google Cloud account: what spot saves, what it can take away, and how a lease keeps the bill bounded.",
+  "url": "https://runlease.online/spot-vms-for-coding-agents.html",
+  "inLanguage": "en",
+  "isPartOf": {
+    "@id": "https://runlease.online/#website"
+  },
+  "about": {
+    "@id": "https://runlease.online/#software"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "Marshal",
+    "url": "https://marshal.codes"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Marshal",
+    "url": "https://marshal.codes"
+  }
+}
+</script>
+</head>
+<body>
+<div class="wrap wide">
+<header>
+  <a class="mark" href="./"><img src="logo.svg" alt="" width="26" height="26">runlease</a>
+  <nav aria-label="Main">
+    <a href="how-it-works.html">How it works</a>
+    <a href="security.html">Security</a>
+    <a href="install.html">Install</a>
+    <a href="relay.html">Relay</a>
+    <a href="guides.html">Guides</a>
+    <a href="https://github.com/marshal-org/runlease" data-out="github" data-place="nav">GitHub</a>
+  </nav>
+</header>
+<main>
+<p class="eyebrow">Guide · Cost</p>
+<h1>Spot VMs for AI coding agents</h1>
+<p class="lede">An agent that builds and tests needs a real machine, often a large one, for an hour or two. Spot capacity is the cheapest way to get it. The catch is that nobody remembers to turn the machine off. A lease does.</p>
+
+<nav class="toc" aria-label="On this page">
+  <a href="#why">Why spot fits agents</a>
+  <a href="#cost">What it costs</a>
+  <a href="#reclaim">When the cloud takes it back</a>
+  <a href="#lease">The lease</a>
+  <a href="#sizes">Sizes</a>
+  <a href="#faq">Questions</a>
+</nav>
+
+<h2 id="why">Why spot fits agents</h2>
+<p class="measure">Spot capacity is the same hardware as an ordinary cloud VM, sold cheaper because the cloud may take it back. That is a bad deal for a database and a good one for an agent's work, which is short, repeatable and already saved somewhere else: the code is in git and the result is a patch or a test report.</p>
+<p class="measure">Spot capacity costs 60 to 90% less than on-demand. You pay your cloud directly, at your own rates, with nothing added by Runlease.</p>
+
+<h2 id="cost">What it costs</h2>
+<p class="measure"><code>runlease up</code> prints the hourly price and the cost of the whole lease before the machine starts, so an agent, and you, see the number first.</p>
+<pre><span class="p">$</span> runlease up -p aws -s compute.large --ttl 2h -d
+<span class="p">$</span> runlease list      <span class="c"># each machine with its hourly rate and what its lease will cost</span></pre>
+<p class="measure">Because the machine is in your account, the charge appears on your own cloud bill under your own tags and budgets. There is no second bill and no usage to reconcile.</p>
+
+<h2 id="reclaim">When the cloud takes it back</h2>
+<p class="measure">A spot VM can be reclaimed at any time. That is a property of spot capacity, not a failure. On Google Cloud a reclaimed machine is deleted. On AWS it terminates.</p>
+<p class="measure">Plan for it the way you would for any disposable machine:</p>
+<ul class="measure">
+  <li>Keep the source of truth off the machine. Push branches, and <code>runlease pull</code> the artifacts you want to keep.</li>
+  <li>Make the job restartable. A manifest's <code>setup</code> steps rebuild the same machine on the next launch.</li>
+  <li>Split long jobs. Four machines for thirty minutes are less exposed than one machine for two hours.</li>
+</ul>
+
+<h2 id="lease">The lease</h2>
+<p class="measure">Every machine has a lease, two hours unless you say otherwise. A timer on the VM deletes the instance when it runs out. Nothing outside the VM has to be running for that to happen: not your laptop, not the agent, not the relay.</p>
+<pre><span class="p">$</span> runlease snooze box 1h    <span class="c"># the work needs longer</span>
+<span class="p">$</span> runlease down box --yes   <span class="c"># the work is done early</span>
+<span class="p">$</span> runlease down --leaked    <span class="c"># delete stopped machines whose lease is over</span></pre>
+<p class="measure">This is the difference between cheap per hour and cheap in total. An agent that crashes mid-task leaves behind a machine that costs money for two more hours, not two more months.</p>
+
+<h2 id="sizes">Sizes</h2>
+<p class="measure">Sizes are portable names that map to a concrete type on each cloud. <code>runlease catalog</code> prints the full mapping.</p>
+<div class="scroll"><table>
+  <tr><th>Size</th><th>Google Cloud, first choice</th><th>AWS, first choice</th></tr>
+  <tr><td><code>compute.small</code></td><td>e2-small</td><td>t3.small</td></tr>
+  <tr><td><code>compute.medium</code></td><td>e2-medium</td><td>c5.large</td></tr>
+  <tr><td><code>compute.large</code></td><td>e2-standard-4</td><td>c5.xlarge</td></tr>
+  <tr><td><code>compute.xlarge</code></td><td>e2-standard-8</td><td>c5.2xlarge</td></tr>
+  <tr><td><code>compute.2xlarge</code></td><td>e2-standard-16</td><td>c5.4xlarge</td></tr>
+  <tr><td><code>compute.gpu</code></td><td colspan="2">a GPU machine; see <code>runlease catalog</code></td></tr>
+</table></div>
+
+<h2 id="faq">Questions</h2>
+<h3>Does Runlease add a fee?</h3>
+<p class="measure">No. Runlease is free and open source under Apache-2.0. You pay your cloud for the VM and nothing to us.</p>
+<h3>Which clouds?</h3>
+<p class="measure">AWS and Google Cloud. Machines run in your own account, on your network, under your IAM.</p>
+<h3>Can I use on-demand capacity instead?</h3>
+<p class="measure">Runlease launches spot machines. For work that must not be interrupted, a spot machine is the wrong tool, with or without Runlease.</p>
+
+<div class="note">
+  <p><b>Running agents for a whole team?</b> Runlease gives one agent one machine. <a href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=guide" data-out="marshal" data-place="guide">Marshal</a>, from the same team, runs AI coding agents in isolated pods inside your own VPC, with credential isolation, audited egress and live tool policies.</p>
+</div>
+
+<h2 id="more">More guides</h2>
+<ul class="measure">
+  <li><a href="claude-code-sandbox.html">A sandbox for Claude Code</a></li>
+  <li><a href="mcp-server-cloud-vm.html">An MCP server for cloud machines</a></li>
+  <li><a href="ephemeral-cloud-vm.html">Cloud VMs that delete themselves</a></li>
+  <li><a href="hosted-sandbox-or-your-own-cloud.html">Hosted sandbox, or your own cloud?</a></li>
+</ul>
+<div class="next">
+  <a class="btn" href="install.html">Install Runlease</a>
+  <a class="btn" href="how-it-works.html">How it works</a>
+  <a class="btn" href="security.html">Security</a>
+</div>
+</main>
+<footer>
+  <span>Built by the team behind <a href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=footer" data-out="marshal" data-place="footer">Marshal</a>. Apache-2.0.</span>
+  <a href="how-it-works.html">How it works</a>
+  <a href="security.html">Security</a>
+  <a href="install.html">Install</a>
+  <a href="relay.html">Relay</a>
+  <a href="guides.html">Guides</a>
+  <a href="privacy.html">Privacy</a>
+  <a href="terms.html">Terms</a>
+  <a href="mailto:runlease@marshal.codes">Questions? runlease@marshal.codes</a>
+</footer>
+</div>
+<script defer src="analytics.js"></script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="Guides to Runlease: a sandbox for Claude Code, spot VMs for coding agents, the MCP server, temporary cloud machines, and how to choose between a hosted sandbox and your own cloud.">
+<title>Runlease guides: sandboxes, spot VMs and MCP for coding agents</title>
+<link rel="canonical" href="https://runlease.online/guides.html">
+<meta property="og:title" content="Runlease guides: sandboxes, spot VMs and MCP for coding agents">
+<meta property="og:description" content="Guides to Runlease: a sandbox for Claude Code, spot VMs for coding agents, the MCP server, temporary cloud machines, and how to choose between a hosted sandbox and your own cloud.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://runlease.online/guides.html">
+<meta property="og:image" content="https://runlease.online/og.png">
+<meta property="og:site_name" content="Runlease">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="page.css">
+<!-- What the page is, for search engines. Data only: nothing here runs. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  "name": "Runlease guides: sandboxes, spot VMs and MCP for coding agents",
+  "description": "Guides to Runlease: a sandbox for Claude Code, spot VMs for coding agents, the MCP server, temporary cloud machines, and how to choose between a hosted sandbox and your own cloud.",
+  "url": "https://runlease.online/guides.html",
+  "isPartOf": {
+    "@id": "https://runlease.online/#website"
+  },
+  "hasPart": [
+    {
+      "@type": "TechArticle",
+      "headline": "A sandbox for Claude Code: a disposable VM in your own cloud",
+      "url": "https://runlease.online/claude-code-sandbox.html"
+    },
+    {
+      "@type": "TechArticle",
+      "headline": "Spot VMs for AI coding agents: cost, limits and leases",
+      "url": "https://runlease.online/spot-vms-for-coding-agents.html"
+    },
+    {
+      "@type": "TechArticle",
+      "headline": "An MCP server that gives an agent a cloud VM",
+      "url": "https://runlease.online/mcp-server-cloud-vm.html"
+    },
+    {
+      "@type": "TechArticle",
+      "headline": "Ephemeral cloud VMs that delete themselves",
+      "url": "https://runlease.online/ephemeral-cloud-vm.html"
+    },
+    {
+      "@type": "TechArticle",
+      "headline": "Hosted code sandbox, or a VM in your own cloud?",
+      "url": "https://runlease.online/hosted-sandbox-or-your-own-cloud.html"
+    }
+  ]
+}
+</script>
+</head>
+<body>
+<div class="wrap wide">
+<header>
+  <a class="mark" href="./"><img src="logo.svg" alt="" width="26" height="26">runlease</a>
+  <nav aria-label="Main">
+    <a href="how-it-works.html">How it works</a>
+    <a href="security.html">Security</a>
+    <a href="install.html">Install</a>
+    <a href="relay.html">Relay</a>
+    <a href="guides.html" aria-current="page">Guides</a>
+    <a href="https://github.com/marshal-org/runlease" data-out="github" data-place="nav">GitHub</a>
+  </nav>
+</header>
+<main>
+<p class="eyebrow">Guides</p>
+<h1>Guides to giving a coding agent a machine</h1>
+<p class="lede">Short, practical pages on the jobs Runlease is used for. Each one stands alone.</p>
+
+<div class="cards">
+  <div><p class="n">CLAUDE CODE</p><h3><a href="claude-code-sandbox.html">A sandbox for Claude Code</a></h3><p>Give Claude Code a separate Linux machine to build, test and run untrusted code on: a spot VM in your own AWS or Google Cloud account that deletes itself.</p></div>
+  <div><p class="n">COST</p><h3><a href="spot-vms-for-coding-agents.html">Spot VMs for coding agents</a></h3><p>How to run AI coding agents on spot instances in your own AWS or Google Cloud account: what spot saves, what it can take away, and how a lease keeps the bill bounded.</p></div>
+  <div><p class="n">MCP</p><h3><a href="mcp-server-cloud-vm.html">An MCP server for cloud machines</a></h3><p>runlease mcp is a Model Context Protocol server: typed tools that let any coding agent launch a spot VM in your cloud, run commands on it, copy files and delete it.</p></div>
+  <div><p class="n">TEMPORARY MACHINES</p><h3><a href="ephemeral-cloud-vm.html">Cloud VMs that delete themselves</a></h3><p>Launch a temporary Linux VM in your own AWS or Google Cloud account with one command. It has no public address and deletes itself when its lease ends.</p></div>
+  <div><p class="n">CHOOSING</p><h3><a href="hosted-sandbox-or-your-own-cloud.html">Hosted sandbox, or your own cloud?</a></h3><p>When an AI coding agent needs somewhere to run code, you can rent a hosted sandbox or use a VM in your own cloud account. What each is good at, and how to choose.</p></div>
+</div>
+
+<div class="note">
+  <p><b>Running agents for a whole team?</b> Runlease gives one agent one machine. <a href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=guide" data-out="marshal" data-place="guide">Marshal</a>, from the same team, runs AI coding agents in isolated pods inside your own VPC, with credential isolation, audited egress and live tool policies.</p>
+</div>
+<div class="next">
+  <a class="btn" href="install.html">Install Runlease</a>
+  <a class="btn" href="how-it-works.html">How it works</a>
+</div>
+</main>
+<footer>
+  <span>Built by the team behind <a href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=footer" data-out="marshal" data-place="footer">Marshal</a>. Apache-2.0.</span>
+  <a href="how-it-works.html">How it works</a>
+  <a href="security.html">Security</a>
+  <a href="install.html">Install</a>
+  <a href="relay.html">Relay</a>
+  <a href="guides.html">Guides</a>
+  <a href="privacy.html">Privacy</a>
+  <a href="terms.html">Terms</a>
+  <a href="mailto:runlease@marshal.codes">Questions? runlease@marshal.codes</a>
+</footer>
+</div>
+<script defer src="analytics.js"></script>
+</body>
+</html>

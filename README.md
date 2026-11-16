@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  Built by <a href="https://marshal.codes"><strong>Marshal</strong></a>: AI coding agents at full speed, with full receipts.<br>
+  Built by <a href="https://marshal.codes/?utm_source=github&amp;utm_medium=readme&amp;utm_campaign=runlease&amp;utm_content=top"><strong>Marshal</strong></a>: AI coding agents at full speed, with full receipts.<br>
   Marshal runs coding agents in isolated pods inside your own VPC. Runlease is the tool we built to give them, and our tests, a real machine for an hour.
 </p>
 
@@ -291,9 +291,13 @@ Pre-1.0. The CLI and the manifest format can still change between minor versions
 
 ## Built by Marshal
 
-Runlease is built and maintained by [Marshal](https://marshal.codes). Marshal runs AI coding
+Runlease is built and maintained by [Marshal](https://marshal.codes/?utm_source=github&utm_medium=readme&utm_campaign=runlease&utm_content=section). Marshal runs AI coding
 agents in isolated pods inside your own VPC, with credential isolation, audited egress and live
 tool policies.
+
+**Running agents for a whole team?** Runlease gives one agent one machine. When you need policy,
+audit and isolation across many agents and many people, [see Marshal](https://marshal.codes/?utm_source=github&utm_medium=readme&utm_campaign=runlease&utm_content=team)
+or [book a demo](https://marshal.codes/?utm_source=github&utm_medium=readme&utm_campaign=runlease&utm_content=demo#demo).
 
 Runlease stands alone: you do not need Marshal to use it. We built it to give agents and tests a
 real machine for an hour, and we use it ourselves.

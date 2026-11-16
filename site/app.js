@@ -141,6 +141,7 @@
     document.body.classList.toggle('expiring', soon);
     el.warn.classList.toggle('on', soon);
     el.warn.setAttribute('aria-hidden', soon ? 'false' : 'true');
+    el.warn.inert = !soon;
     embers(left); tabState(left);
     // A lease that ends while the tab is in the background waits to be seen.
     if (left <= 0 && !document.hidden) terminate('lease');
@@ -205,7 +206,7 @@
     dying = true; page.alive = false; iconAt = 0; tabState(0);
     track(reason === 'down' ? 'site_deleted_by_hand' : 'site_lease_ended');
     var lived = now() - page.startedAt, cost = pageCost();
-    el.warn.classList.remove('on');
+    el.warn.classList.remove('on'); el.warn.setAttribute('aria-hidden', 'true'); el.warn.inert = true;
     document.body.classList.remove('expiring');
     try { window.dispatchEvent(new CustomEvent('runlease:page', { detail: { state: 'terminating', reason: reason } })); } catch (e) { /* old browser */ }
 
@@ -214,7 +215,7 @@
     // The page does not blink out. It is taken apart piece by piece, from the
     // bottom of the screen upward, each piece leaving as ash, the headline
     // letter by letter, and the status bar last.
-    var GRAINS = '.eyebrow, .madeby, .lede, .acts > *, .ticks li, h2, .stage, .fact, .wire > div, .cc > div, .use, .none > div, .get pre, .links li, .fine, .switch, .verdict, .by .wrap > *, footer .wrap > *, .perf';
+    var GRAINS = '.eyebrow, .madeby, h1.what, .lede, .acts > *, .ticks li, h2, .stage, .fact, .wire > div, .cc > div, .use, .none > div, .get pre, .links li, .fine, .switch, .verdict, .by .wrap > *, footer .wrap > *, .perf';
     var grains = $$(GRAINS, el.main).filter(function (g) { var r = g.getBoundingClientRect(); return r.bottom > 0 && r.top < vh && r.width > 0; })
       .sort(function (a, b) { var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return (rb.top - ra.top) || (rb.left - ra.left); });
     var h1 = $('#h1'), h1r = h1.getBoundingClientRect(), h1Visible = h1r.bottom > 0 && h1r.top < vh;

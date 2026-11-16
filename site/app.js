@@ -109,8 +109,9 @@
   // engine that renders the page records that title and not a countdown.
   var baseTitle = document.title, icon = document.querySelector('link[rel="icon"]'), iconWas = icon ? icon.href : '', iconAt = 0;
   function tabTitle(left) {
-    document.title = !document.hidden ? baseTitle
+    var next = !document.hidden ? baseTitle
       : page.alive ? clock(left) + ' · this tab deletes itself · Runlease' : 'deleted itself · Runlease';
+    if (document.title !== next) document.title = next; // tick() calls this four times a second
   }
   function tabState(left) {
     tabTitle(left);

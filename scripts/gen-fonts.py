@@ -24,13 +24,17 @@ def covers(rng):
     for part in rng.split(','):
         part = part.strip().upper().replace('U+', '')
         lo, _, hi = part.partition('-')
-        lo, hi = int(lo, 16), int(hi or lo, 16)
+        hi = hi or lo
+        # U+01?? is shorthand for U+0100-01FF
+        lo, hi = int(lo.replace('?', '0'), 16), int(hi.replace('?', 'F'), 16)
         if any(lo <= c <= hi for c in used):
             return True
     return False
 
 css = get(CSS_URL).decode()
 blocks = re.findall(r'/\* ([a-z-]+) \*/\s*@font-face \{(.*?)\}', css, re.S)
+if not blocks:
+    sys.exit('no @font-face rules found: the font stylesheet has changed shape, nothing written')
 os.makedirs(SITE + 'fonts', exist_ok=True)
 out, seen, total = [], {}, 0
 for subset, body in blocks:
@@ -45,6 +49,10 @@ for subset, body in blocks:
         name = '%s-%s-%s.woff2' % (slug, weight.replace(' ', '-'), subset)
         if fam.startswith('Bricolage') or fam == 'IBM Plex Sans':
             name = '%s-%s.woff2' % (slug, subset)       # one variable file covers every weight
+        # Two different files must never land on one name: that would set
+        # several weights in whichever was written last.
+        if name in seen.values():
+            sys.exit('%s would be written twice from different sources: %s is not one variable file' % (name, fam))
         data = get(url)
         io.open(SITE + 'fonts/' + name, 'wb').write(data)
         seen[url] = name

@@ -290,6 +290,37 @@
   .links a span { color: var(--ink-3); font-family: var(--mono); font-size: .8rem; text-align: right; }
   .links a:hover { color: var(--lease); }
 
+  /* ---------- where it fits: the software factory ----------
+     A delivery line of seven stations, with Runlease marked at one and Marshal
+     at another. Every border belongs to the piece that carries it, so each
+     piece leaves whole when the page ends. */
+  .fit-say { color: var(--ink-2); font-size: 1.12rem; max-width: 46em; margin-top: 22px; }
+  .fit-say q { color: var(--ink); font-weight: 500; }
+  .fit a { color: var(--ink); text-decoration-color: var(--lease); text-decoration-thickness: 2px; }
+  .fit a:hover { color: var(--lease); }
+  .line { list-style: none; padding: 0; margin: 44px 0 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); counter-reset: station; }
+  .line li { counter-increment: station; min-width: 0; padding: 14px 14px 18px; border-top: 2px solid var(--rule-2); border-right: 1px solid var(--rule); font-family: var(--display); font-weight: 700; font-size: 1.2rem; line-height: 1.15; color: var(--ink-2); }
+  .line li:first-child { border-left: 1px solid var(--rule); }
+  .line li::before { content: counter(station, decimal-leading-zero); display: block; margin-bottom: 8px; font-family: var(--mono); font-size: .7rem; font-weight: 500; letter-spacing: .14em; color: var(--ink-3); }
+  .line li b { display: block; margin-top: 10px; font-family: var(--mono); font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+  .line .here { color: var(--ink); border-top-color: var(--lease); background: var(--lease-wash); }
+  .line .here b { color: var(--lease); }
+  .line .near { color: var(--ink); border-top-color: var(--signal); background: var(--signal-wash); }
+  .line .near b { color: var(--signal); }
+  .parts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 20px; }
+  .part { display: flex; flex-direction: column; min-width: 0; padding: 26px 24px 24px; border: 1px solid var(--rule); border-top: 2px solid var(--lease); background: var(--deck); }
+  .part.near { border-top-color: var(--signal); }
+  .part .k { font-family: var(--mono); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--lease); font-weight: 600; }
+  .part.near .k { color: var(--signal); }
+  .part h3 { font-family: var(--display); font-size: 1.45rem; font-weight: 700; line-height: 1.12; margin: 10px 0; text-wrap: balance; }
+  .part p { color: var(--ink-2); font-size: .98rem; }
+  .part p + p { margin-top: 10px; }
+  .part .more { margin-top: auto; padding-top: 20px; font-family: var(--mono); font-size: .82rem; font-weight: 600; }
+  .part.near a { text-decoration-color: var(--signal); }
+  .part.near a:hover { color: var(--signal); }
+  .fit-note { margin-top: 32px; padding-left: 18px; border-left: 2px solid var(--lease); color: var(--ink-2); max-width: 54em; }
+  .fit-note b { color: var(--ink); font-weight: 600; }
+
   /* Who makes this. The one light section on a dark page, so it reads as a
      note from the makers and not as one more feature of the tool. */
   .by { background: var(--ink); color: var(--night); padding-block: clamp(56px, 8vw, 104px); }
@@ -346,6 +377,8 @@
     .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .get-grid, .none, .by .wrap { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+    .line li { padding: 12px 10px 14px; font-size: 1.02rem; }
+    .line li b { font-size: .62rem; letter-spacing: .08em; }
     .leasebar nav a.opt { display: none; }
   }
   @media (max-width: 680px) {
@@ -355,7 +388,15 @@
     .wire > div { min-height: 0; }
     .cc { grid-template-columns: minmax(0, 1fr); }
     .cc > div + div { border-left: 0; border-top: 1px solid var(--rule); }
-    .facts, .uses { grid-template-columns: minmax(0, 1fr); }
+    .facts, .uses, .parts { grid-template-columns: minmax(0, 1fr); }
+    /* The line runs down the page on a phone: one station per row, its tool at the end of the row. */
+    .line { grid-template-columns: minmax(0, 1fr); }
+    .line li { display: flex; align-items: baseline; gap: 14px; padding: 12px 14px; border-top: 0; border-right: 1px solid var(--rule); border-left: 2px solid var(--rule-2); border-bottom: 1px solid var(--rule); font-size: 1.1rem; }
+    .line li:first-child { border-left: 2px solid var(--rule-2); border-top: 1px solid var(--rule); }
+    .line li::before { margin-bottom: 0; }
+    .line li b { margin: 0 0 0 auto; font-size: .7rem; letter-spacing: .12em; }
+    .line .here { border-left-color: var(--lease); }
+    .line .near { border-left-color: var(--signal); }
     .status .name, .status .cost, .status .sep.b, .leasebar nav a { display: none; }
     .leasebar nav { gap: 8px; }
     .install { width: 100%; }
@@ -587,6 +628,40 @@
         <li><a href="mailto:runlease@marshal.codes">Questions? Email us <span>runlease@marshal.codes</span></a></li>
       </ul>
     </div>
+  </div>
+</section>
+
+<section class="fit" id="factory" aria-labelledby="fit-h" data-part="software factory">
+  <div class="wrap">
+    <p class="eyebrow rise"><b>Where it fits</b> · the software factory</p>
+    <h2 class="rise" id="fit-h">Runlease is one part of a software factory.</h2>
+    <p class="fit-say rise">Agents made writing code cheap. The delivery line around the code was built for people who type, so the wait moves down the line: to CI, to shared test environments, to review. <a href="https://thesoftwarefactory.site/" target="_blank" rel="noopener">The Software Factory: a guide to building with AI coding agents</a> is about tuning that line, one constraint at a time. It opens with this: <q>You do not install a software factory. You tune one.</q></p>
+    <ol class="line rise" aria-label="The seven stations of a delivery line. Marshal is a part at Code. Runlease is a part at Verify.">
+      <li>Spec</li>
+      <li class="near">Code <b>Marshal</b></li>
+      <li>CI</li>
+      <li class="here">Verify <b>Runlease</b></li>
+      <li>Review</li>
+      <li>Merge</li>
+      <li>Release</li>
+    </ol>
+    <div class="parts rise">
+      <div class="part">
+        <p class="k">Verify · Runlease</p>
+        <h3>A machine for every agent, so nobody waits for staging.</h3>
+        <p>Ten agents and one shared test environment means nine are waiting and one is breaking it. The guide's answer is an environment for every agent, thrown away afterwards.</p>
+        <p>Runlease supplies the machine for that: a spot VM in your own cloud account for each agent, gone when its lease ends. Bringing your product up on it is still your part of the job.</p>
+        <p class="more"><a href="https://thesoftwarefactory.site/playbook/environment-per-agent/" target="_blank" rel="noopener">The play: give every agent its own environment&nbsp;<span aria-hidden="true">↗</span></a></p>
+      </div>
+      <div class="part near">
+        <p class="k">Code · Marshal</p>
+        <h3>Guardrails first, then autonomy.</h3>
+        <p>A security lead asks one question before agents may run without approvals: what can the agent reach? The guide's answer is isolation, credentials the agent never holds, and a record of every action.</p>
+        <p>Marshal is the runtime for that: agents work in isolated pods inside your own VPC, with credential isolation, audited egress and live tool policies.</p>
+        <p class="more"><a href="https://thesoftwarefactory.site/playbook/guardrails-before-autonomy/" target="_blank" rel="noopener">The play: guardrails before autonomy&nbsp;<span aria-hidden="true">↗</span></a></p>
+      </div>
+    </div>
+    <p class="fit-note rise"><b>Neither tool is a software factory.</b> The factory is your own delivery line, and a tool is one part at one station. Bring a part in when its station is the one holding the line. To find which station that is, play <a href="https://thesoftwarefactory.site/lights-out/" target="_blank" rel="noopener">Lights Out, the simulator</a>. The guide is a community project that Marshal's founder started, written in the open.</p>
   </div>
 </section>
 

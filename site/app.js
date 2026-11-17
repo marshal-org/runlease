@@ -215,7 +215,7 @@
     // The page does not blink out. It is taken apart piece by piece, from the
     // bottom of the screen upward, each piece leaving as ash, the headline
     // letter by letter, and the status bar last.
-    var GRAINS = '.eyebrow, .madeby, h1.what, .lede, .acts > *, .ticks li, h2, .stage, .fact, .wire > div, .cc > div, .use, .none > div, .get pre, .links li, .fine, .switch, .verdict, .by .say, .by .go, .by li, footer .wrap > *, .perf';
+    var GRAINS = '.eyebrow, .madeby, h1.what, .lede, .acts > *, .ticks li, h2, .stage, .fact, .wire > div, .cc > div, .use, .none > div, .get pre, .links li, .fine, .switch, .verdict, .fit-say, .line li, .part, .fit-note, .by .say, .by .go, .by li, footer .wrap > *, .perf';
     var grains = $$(GRAINS, el.main).filter(function (g) { var r = g.getBoundingClientRect(); return r.bottom > 0 && r.top < vh && r.width > 0; })
       .sort(function (a, b) { var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return (rb.top - ra.top) || (rb.left - ra.left); });
     var h1 = $('#h1'), h1r = h1.getBoundingClientRect(), h1Visible = h1r.bottom > 0 && h1r.top < vh;

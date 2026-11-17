@@ -187,6 +187,26 @@
   [data-step="5"] #b-vm { stroke: var(--lease); stroke-dasharray: 4 4; }
   [data-step="5"] #h5 { fill: var(--lease); }
 
+  /* where it fits: the stations of a delivery line, with Runlease at one and Marshal at another */
+  .line { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); counter-reset: station; border-left: 1px solid var(--rule); }
+  .line li { counter-increment: station; min-width: 0; padding: 14px 14px 18px; border-top: 2px solid var(--rule); border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); font-family: var(--display); font-weight: 700; font-size: 1.15rem; line-height: 1.15; color: var(--ink-2); }
+  .line li::before { content: counter(station, decimal-leading-zero); display: block; margin-bottom: 8px; font-family: var(--mono); font-size: .7rem; font-weight: 500; letter-spacing: .14em; color: var(--ink-3); }
+  .line li b { display: block; margin-top: 10px; font-family: var(--mono); font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+  .line .here { color: var(--ink); border-top-color: var(--lease); background: var(--lease-wash); }
+  .line .here b { color: var(--lease); }
+  .line .near { color: var(--ink); border-top-color: var(--signal); background: var(--signal-wash); }
+  .line .near b { color: var(--signal); }
+  .parts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 20px; }
+  .part { min-width: 0; padding: 24px 22px; border: 1px solid var(--rule); border-top: 2px solid var(--lease); background: var(--sheet); }
+  .part.near { border-top-color: var(--signal); }
+  .part .k { font-family: var(--mono); font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; color: var(--lease); font-weight: 600; }
+  .part.near .k { color: var(--signal); }
+  .part h3 { font-size: 1.35rem; font-weight: 700; line-height: 1.15; margin: 8px 0; }
+  .part p { color: var(--ink-2); font-size: .97rem; }
+  .part p + p { margin-top: 10px; }
+  .fit-note { margin-top: 28px; padding-left: 18px; border-left: 2px solid var(--lease); color: var(--ink-2); max-width: 54em; }
+  .fit-note b { color: var(--ink); font-weight: 600; }
+
   /* built by Marshal: a strip under the hero, and a fuller section near the end */
   section.by-strip { background: var(--ink); color: var(--paper); padding-block: 0; }
   .by-strip .wrap { display: flex; align-items: center; justify-content: space-between; gap: 10px 28px; flex-wrap: wrap; padding-block: 16px; }
@@ -324,6 +344,12 @@
   footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
 
   @media (max-width: 900px) {
+    .line { grid-template-columns: minmax(0, 1fr); border-top: 1px solid var(--rule); }
+    .line li { display: flex; align-items: baseline; gap: 14px; padding: 12px 14px; border-top: 0; border-left: 2px solid var(--rule); }
+    .line li::before { margin-bottom: 0; }
+    .line li b { margin: 0 0 0 auto; }
+    .line .here { border-left-color: var(--lease); }
+    .line .near { border-left-color: var(--signal); }
     .hero .wrap, .how, .use, .oss { grid-template-columns: minmax(0, 1fr); gap: 36px; }
     .unm { grid-template-columns: minmax(0, 1fr); }
     .unm-vm { border-left: 0; border-top: 1px solid var(--rule); }
@@ -341,6 +367,7 @@
     body { font-size: 16px; }
     .claims, .cc, .posture, .uses { grid-template-columns: minmax(0, 1fr); }
     .by { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+    .parts { grid-template-columns: minmax(0, 1fr); }
     .plan + .plan { border-left: 0; border-top: 1px dashed var(--rule); }
     .claim { border-right: 0; margin-right: 0; border-top: 1px solid var(--rule); }
     .claim:first-child { border-top: 0; }
@@ -866,6 +893,42 @@
 }</pre>
       </div>
     </div>
+  </div>
+</section>
+
+<section class="band" id="factory" aria-labelledby="fit-h">
+  <div class="wrap">
+    <div class="sec-hd">
+      <p class="eyebrow">Where it fits</p>
+      <h2 id="fit-h">Runlease is one part of a software factory.</h2>
+      <p>Agents made writing code cheap. The delivery line around the code was built for people who type, so the wait moves down the line: to CI, to shared test environments, to review. <a href="https://thesoftwarefactory.site/">The Software Factory: a guide to building with AI coding agents</a> is about tuning that line, one constraint at a time. It opens with this: <q>You do not install a software factory. You tune one.</q></p>
+    </div>
+    <ol class="line" aria-label="The seven stations of a delivery line. Marshal is a part at Code. Runlease is a part at Verify.">
+      <li>Spec</li>
+      <li class="near">Code <b>Marshal</b></li>
+      <li>CI</li>
+      <li class="here">Verify <b>Runlease</b></li>
+      <li>Review</li>
+      <li>Merge</li>
+      <li>Release</li>
+    </ol>
+    <div class="parts">
+      <div class="part">
+        <p class="k">Verify · Runlease</p>
+        <h3>A machine for every agent, so nobody waits for staging.</h3>
+        <p>Ten agents and one shared test environment means nine are waiting and one is breaking it. The guide's answer is an environment for every agent, thrown away afterwards.</p>
+        <p>Runlease supplies the machine for that: a spot VM in your own cloud account for each agent, gone when its lease ends. Bringing your product up on it is still your part of the job.</p>
+        <p><a href="https://thesoftwarefactory.site/playbook/environment-per-agent/">The play: give every agent its own environment</a></p>
+      </div>
+      <div class="part near">
+        <p class="k">Code · Marshal</p>
+        <h3>Guardrails first, then autonomy.</h3>
+        <p>A security lead asks one question before agents may run without approvals: what can the agent reach? The guide's answer is isolation, credentials the agent never holds, and a record of every action.</p>
+        <p>Marshal is the runtime for that: agents work in isolated pods inside your own VPC, with credential isolation, audited egress and live tool policies.</p>
+        <p><a href="https://thesoftwarefactory.site/playbook/guardrails-before-autonomy/">The play: guardrails before autonomy</a></p>
+      </div>
+    </div>
+    <p class="fit-note"><b>Neither tool is a software factory.</b> The factory is your own delivery line, and a tool is one part at one station. Bring a part in when its station is the one holding the line. To find which station that is, play <a href="https://thesoftwarefactory.site/lights-out/">Lights Out, the simulator</a>. The guide is a community project that Marshal's founder started, written in the open.</p>
   </div>
 </section>
 

@@ -64,8 +64,13 @@ func apiDisabled(gerr *googleapi.Error) bool {
 	return false
 }
 
-// CheckRegion reads the zone this provider launches in.
+// CheckRegion reads the zone this provider launches in. A region is accepted
+// too: ResolvePlacement turns it into a zone at launch.
 func (p *Provider) CheckRegion(ctx context.Context) error {
+	if !zoneSuffix.MatchString(p.zone) {
+		_, err := p.zonesOf(ctx, p.zone)
+		return err
+	}
 	_, err := p.svc.Zones.Get(p.projectID, p.zone).Fields("name").Context(ctx).Do()
 	if isNotFound(err) {
 		return fmt.Errorf("%s is not a zone project %s can use (zones look like us-central1-a): %w", p.zone, p.projectID, err)

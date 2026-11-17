@@ -461,6 +461,20 @@ func doctorCloud(ctx context.Context, t doctorTarget, open func(context.Context)
 		}
 		return []doctorCheck{cred, proj}
 	}
+	// Before the account is described, so that line names the zone a launch
+	// would really use. What came back is judged below, at the region check.
+	var (
+		pl     *provider.Placement
+		perr   error
+		placed bool
+	)
+	if placer, ok := p.(provider.Placer); ok {
+		placed = true
+		pctx, cancel := bounded()
+		pl, perr = placer.ResolvePlacement(pctx, provider.PlacementRequest{
+			Network: t.network, Subnet: t.subnet, AnyRegion: regionNotChosen(t.regionWhy)})
+		cancel()
+	}
 	cred.Detail = "work"
 	if d, ok := p.(provider.AccountDescriber); ok {
 		dctx, cancel := bounded()
@@ -473,9 +487,38 @@ func doctorCloud(ctx context.Context, t doctorTarget, open func(context.Context)
 		checks = append(checks, proj)
 	}
 
+	regionFix := doctorRegionFix(t.provider)
+	// What a launch fills in itself is not a failure: resolve the zone and
+	// network the way 'up' does, and check the result.
+	if placed {
+		asked := fmt.Sprintf("%s (%s)", t.region, t.regionWhy)
+		switch {
+		case perr == nil:
+			if pl.Region != t.region {
+				t.regionWhy = fmt.Sprintf("picked by runlease; you had %s, %s", t.region, t.regionWhy)
+			}
+			t.region, t.network, t.subnet = pl.Region, pl.Network, pl.Subnet
+		case errors.Is(perr, provider.ErrBadRegion):
+			what, _ := splitFirstLine(strings.TrimPrefix(perr.Error(), provider.ErrBadRegion.Error()+": "))
+			return append(checks, doctorCheck{ID: id("region"), Title: cloud + " " + regionWord(t.provider),
+				Status: statusFail, Detail: asked + ": " + what, Fix: regionFix})
+		case isSignInError(perr):
+			// Reported by the checks below, which name the fix for it.
+		case errors.Is(perr, provider.ErrNoNetwork):
+			what, fix := splitFirstLine(strings.TrimPrefix(perr.Error(), provider.ErrNoNetwork.Error()+": "))
+			if fix == "" {
+				fix = networkFix(t.provider)
+			}
+			return append(checks,
+				doctorCheck{ID: id("region"), Title: cloud + " " + regionWord(t.provider), Status: statusOK, Detail: asked},
+				doctorCheck{ID: id("network"), Title: cloud + " network", Status: statusFail, Detail: what, Fix: fix})
+		}
+		// Any other error is the check failing, not the launch: the checks
+		// below report it in their own words.
+	}
+
 	region := doctorCheck{ID: id("region"), Title: cloud + " " + regionWord(t.provider), Status: statusOK,
 		Detail: fmt.Sprintf("%s (%s)", t.region, t.regionWhy)}
-	regionFix := doctorRegionFix(t.provider)
 	rctx, cancel := bounded()
 	err = pre.CheckRegion(rctx)
 	cancel()
@@ -573,6 +616,12 @@ func credentialsFix(prov string, err error) string {
 		return hint
 	}
 	return "aws sts get-caller-identity   (shows what AWS itself says; then sign in again, for example 'aws sso login')"
+}
+
+// splitFirstLine separates a message's first line from the lines under it.
+func splitFirstLine(s string) (first, rest string) {
+	first, rest, _ = strings.Cut(s, "\n")
+	return strings.TrimSpace(first), strings.TrimSpace(rest)
 }
 
 func doctorRegionFix(prov string) string {

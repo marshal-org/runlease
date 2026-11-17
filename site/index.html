@@ -298,7 +298,9 @@
   .by .eyebrow b { color: var(--night); }
   .by h2 { font-size: clamp(1.9rem, 3.8vw, 3rem); }
   .by .say { color: #24324A; font-size: 1.08rem; max-width: 34em; margin-top: 18px; }
-  .by ul { list-style: none; padding: 0; margin: 0; border-top: 2px solid var(--night); }
+  .by ul { list-style: none; padding: 0; margin: 0; }
+  /* The rule above the list belongs to the first item, so it leaves with it when the page ends. */
+  .by li:first-child { border-top: 2px solid var(--night); }
   .by li { padding: 16px 0; border-bottom: 1px solid rgba(5, 11, 20, .18); color: #24324A; }
   .by li b { display: block; color: var(--night); font-family: var(--display); font-size: 1.12rem; }
   .by .go { display: inline-flex; align-items: center; gap: 8px; min-height: 54px; margin-top: 28px; padding: 0 22px; background: var(--night); color: var(--ink); border: 1px solid var(--night); font-family: var(--mono); font-size: .88rem; font-weight: 600; text-decoration: none; transition: background .15s, color .15s; }

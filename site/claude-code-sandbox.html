@@ -66,6 +66,7 @@
   <a href="#why">Why a separate machine</a>
   <a href="#setup">Set it up</a>
   <a href="#use">What Claude does with it</a>
+  <a href="#view">What you see</a>
   <a href="#rules">What it will not do</a>
   <a href="#faq">Questions</a>
 </nav>
@@ -103,7 +104,25 @@
 <pre><span class="p">$</span> runlease up -n sandbox --ttl 1h -d
 <span class="p">$</span> runlease push sandbox ./run.sh /tmp/run.sh
 <span class="p">$</span> runlease exec sandbox -- bash /tmp/run.sh</pre>
-<p class="measure">While it works you see a status line entry with the time left on each lease, a band above the prompt when a lease has under ten minutes left, and a pane listing each machine with <b>Snooze</b> and <b>Delete</b> buttons.</p>
+
+<h2 id="view">What you see while it works</h2>
+<p class="measure">The plugin draws in the Claude Code window itself. Type <code>/runlease</code> for the machines pane. Each machine has its cloud, region and size, the time left on its lease as a bar that drains, its hourly rate and what it has cost so far.</p>
+<pre><span class="k">Runlease</span>                                         <span class="c">1 machine · $0.15/h</span>
+<span class="c">────────────────────────────────────────────────────────────────────</span>
+<span class="p">●</span> box <span class="c">▾</span>                                                     41m left
+  <span class="c">gcp · europe-west1-b · e2-standard-8</span>
+  <span class="p">━━━━━━━━━━━━━━━━</span><span class="c">────────  $0.15/h · $0.05 so far</span>
+  <span class="c">Lease</span>  +30m  +1h  +4h
+  Use in prompt  Copy ssh  Delete
+<span class="c">────────────────────────────────────────────────────────────────────</span>
+Refresh  Launch another  Docs
+<span class="c">Each machine deletes itself when its lease ends.</span></pre>
+<p class="measure">Open a row to add 30 minutes, 1 hour or 4 hours to the lease, copy its <code>ssh</code> command, start a prompt about the machine, or delete it. Delete takes two presses.</p>
+<p class="measure">When a lease has under ten minutes left, a band appears above the prompt, with a toast and a desktop notification:</p>
+<pre><span class="p">●</span> box 7m left, then it deletes itself   +30m  +1h  Dismiss</pre>
+<p class="measure">The status line carries the same at a glance:</p>
+<pre>2 machines · box 7m left · $0.15/h</pre>
+<p class="measure">The view reads the list of machines kept on your computer every 30 seconds. It makes no cloud call, and nothing is extended or deleted unless you press a button. The pane, the warning time and the notification are settings under <code>/config</code>.</p>
 
 <h2 id="rules">What it will not do</h2>
 <ul class="measure">

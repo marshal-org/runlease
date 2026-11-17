@@ -30,6 +30,8 @@ runlease list                                   # what is running, time left, co
    later command.
 2. **Always pass `-d`.** Without it `up` tries to open an interactive shell.
 3. **Read the `☁` line** `up` prints: project or account, region, identity. Wrong one: stop, ask.
+   A `📍 Using ...` line above it means Runlease picked the zone, region or network itself
+   because none was named. Tell the person what it picked.
 4. **`exec` runs one program.** `runlease exec box -- 'a && b'` fails. Use
    `runlease exec box -- bash -c 'a && b'`.
 5. **The first `exec` may need a wait.** The machine takes 30-60 seconds to connect after `up -d`.

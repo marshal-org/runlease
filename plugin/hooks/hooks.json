@@ -1,4 +1,6 @@
 {
-  "description": "The Runlease pane, status line, lease warning band and toasts: what is running in your cloud, what it costs, and when each lease ends.",
-  "modules": ["./register.tsx"]
+  "description": "See every machine Claude is using while it works: a pane with each lease and its cost, a status line entry, and a warning with one-press extend before a lease ends.",
+  "modules": [
+    "./register.tsx"
+  ]
 }

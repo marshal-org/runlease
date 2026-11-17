@@ -112,7 +112,7 @@ var configureCmd = &cobra.Command{
 		}
 		cfg.Defaults.Region = ask("Default region / zone", regionDefault)
 
-		fmt.Fprintf(out, "\n  Classes: compute.micro, compute.small, compute.medium, compute.large, compute.gpu\n")
+		fmt.Fprintf(out, "\n  Classes: compute.micro, compute.small, compute.medium, compute.large, compute.xlarge, compute.2xlarge, compute.gpu\n")
 		sizeDefault := cfg.Defaults.Size
 		if sizeDefault == "" {
 			sizeDefault = "compute.small"
@@ -164,7 +164,7 @@ var configSetCmd = &cobra.Command{
 	Long: `Set a configuration value and save it to ~/.runlease/config.yaml.
 
 Valid keys:
-  relay.addr          default relay address  (e.g. wss://relay.runlease.online)
+  relay.addr          default relay address  (e.g. wss://connect.runlease.online)
   defaults.provider   default provider       (aws or gcp)
   defaults.size       default instance class (e.g. compute.small)
   defaults.ttl        default instance TTL   (e.g. 2h)

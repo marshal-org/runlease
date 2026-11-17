@@ -70,7 +70,7 @@ func init() {
 	upCmd.Flags().StringVarP(&quickSize, "size", "s", "compute.small", "instance class (quick mode)")
 	upCmd.Flags().IntVar(&quickDiskSize, "disk-size", 0, "boot disk size in GB (quick mode; 0 = image default)")
 	upCmd.Flags().StringVar(&quickImage, "image", "", "base image ID (quick mode; GCP defaults to debian-12)")
-	upCmd.Flags().StringVar(&quickRelay, "relay", "", "relay address, e.g. wss://relay.example.com (quick mode)")
+	upCmd.Flags().StringVar(&quickRelay, "relay", "", "relay address, e.g. wss://relay.example.com, or none for no relay (quick mode)")
 	upCmd.Flags().StringVar(&quickTTL, "ttl", "2h", "instance TTL (quick mode)")
 	upCmd.Flags().StringVarP(&quickName, "name", "n", "", "instance name (quick mode; auto-generated if empty)")
 	upCmd.Flags().BoolVar(&quickSelfTerminate, "self-terminate", true, "allow the instance to delete itself (required for TTL to work)")
@@ -587,9 +587,10 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 		}
 	}
 
-	relayAddr := rlconfig.NormalizeRelayAddr(quickRelay)
-	if relayAddr == "" {
-		relayAddr = cfg.Relay.Addr
+	// --relay none launches without the relay set in the config.
+	relayAddr := cfg.Relay.Addr
+	if quickRelay != "" {
+		relayAddr = relayAnswer(quickRelay)
 	}
 
 	if quickProvider != "gcp" && quickNetwork != "" {

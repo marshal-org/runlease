@@ -127,7 +127,10 @@ def existing():
 def manifest_problems():
     """The hand-written manifests must agree with the Claude Code plugin."""
     problems = []
-    load = lambda rel: json.loads((ROOT / rel).read_text(encoding="utf-8"))
+
+    def load(rel):
+        return json.loads((ROOT / rel).read_text(encoding="utf-8"))
+
     claude = load("plugin/.claude-plugin/plugin.json")
     antigravity = load(".antigravity-plugin/plugin.json")
     gemini = load("gemini-extension.json")
@@ -148,14 +151,21 @@ def manifest_problems():
     return problems
 
 
+def unix(data):
+    """Line endings as git stores them: a Windows checkout may hold CRLF."""
+    return data.replace(b"\r\n", b"\n")
+
+
 def main():
     check = sys.argv[1:] == ["--check"]
     if sys.argv[1:] and not check:
         sys.exit(__doc__)
     want = wanted()
-    stale = [p for p, content in want.items() if not p.is_file() or p.read_bytes() != content]
+    stale = [p for p, content in want.items() if not p.is_file() or unix(p.read_bytes()) != unix(content)]
     extra = sorted(existing() - set(want))
-    rel = lambda p: str(p.relative_to(ROOT))
+
+    def rel(p):
+        return str(p.relative_to(ROOT))
 
     if check:
         problems = [f"out of date: {rel(p)}" for p in stale]

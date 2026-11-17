@@ -24,9 +24,13 @@ created. On the person's own relay the limit is theirs.
 N=2
 for i in $(seq 1 $N); do runlease up -p gcp -n shard-$i --ttl 1h -d; done
 
-# wait until each answers (30-60s after launch)
+# wait until each answers (30-60s after launch); give up on one after 3 minutes
 for i in $(seq 1 $N); do
-  until runlease exec shard-$i -- true 2>/dev/null; do sleep 10; done
+  for try in $(seq 1 18); do
+    runlease exec shard-$i -- true 2>/dev/null && break
+    [ "$try" -eq 18 ] && echo "shard-$i never answered: see the troubleshoot skill" >&2
+    sleep 10
+  done
 done
 
 # send the work, run the shards at the same time, each writing its own result file

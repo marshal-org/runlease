@@ -201,7 +201,15 @@ func runLogin(cmd *cobra.Command, _ []string) error {
 		}
 		fmt.Fprintf(out, "   Saved as your relay. Change it with: runlease config set relay.addr ADDRESS\n")
 	}
-	if d.DefaultTier != nil && d.DefaultTier.MaxSlots > 0 {
+	// Say the tier this person actually has. The relay's default tier is only
+	// the answer when the relay cannot be asked.
+	if a, err := fetchAccount(cmd.Context(), relayAddr); err == nil && a.Tier != "" {
+		if a.Slots.Max > 0 {
+			fmt.Fprintf(out, "   %s tier: up to %d machines at once, each for up to %s.\n", a.Tier, a.Slots.Max, a.SlotTTL)
+		} else {
+			fmt.Fprintf(out, "   %s tier: no limit on machines, each for up to %s.\n", a.Tier, a.SlotTTL)
+		}
+	} else if d.DefaultTier != nil && d.DefaultTier.MaxSlots > 0 {
 		fmt.Fprintf(out, "   %s tier: up to %d machines at once, each for up to %s.\n",
 			d.DefaultTier.Name, d.DefaultTier.MaxSlots, d.DefaultTier.SlotTTL)
 	}

@@ -400,7 +400,7 @@ func runUp(cmd *cobra.Command, _ []string) error {
 				fmt.Fprintf(out, "   or set 'publicIp: true' for direct SSH.\n")
 			} else {
 				fmt.Fprintf(out, "\n💡 Tip: add a relay to connect without a public IP next time:\n")
-				fmt.Fprintf(out, "   runlease config set relay.addr wss://relay.runlease.online\n")
+				fmt.Fprintf(out, "   runlease config set relay.addr wss://connect.runlease.online\n")
 			}
 		}
 

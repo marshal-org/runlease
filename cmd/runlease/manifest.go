@@ -60,7 +60,7 @@ provider: gcp                  # "aws" or "gcp".
 region: us-central1-a          # AWS region or GCP zone.
 
 # One of (mutually exclusive):
-instanceClass: compute.small   # Portable class: micro | small | medium | large | gpu
+instanceClass: compute.small   # Portable class: micro | small | medium | large | xlarge | 2xlarge | gpu
 # instanceType: t3.large       # Concrete cloud type; takes precedence over class.
 
 # ── Image ───────────────────────────────────────────────────────────────────
@@ -80,7 +80,7 @@ instanceClass: compute.small   # Portable class: micro | small | medium | large 
                                # VM can reach the relay. With a relay, SSH
                                # listens on localhost only either way.
 relay:
-  addr: wss://relay.runlease.online   # Set for tunneled access (no inbound firewall).
+  addr: wss://connect.runlease.online   # Set for tunneled access (no inbound firewall).
                                    # Leave empty to use direct SSH on the public IP.
 
 # ── Lifecycle ───────────────────────────────────────────────────────────────
@@ -276,7 +276,7 @@ func runManifestNew(cmd *cobra.Command, _ []string) error {
 	}
 	region := ask("Region / zone", regionDefault)
 
-	fmt.Fprintf(out, "\n  Classes: compute.micro, compute.small, compute.medium, compute.large, compute.gpu\n")
+	fmt.Fprintf(out, "\n  Classes: compute.micro, compute.small, compute.medium, compute.large, compute.xlarge, compute.2xlarge, compute.gpu\n")
 	sizeDefault := cfg.Defaults.Size
 	if sizeDefault == "" {
 		sizeDefault = "compute.small"

@@ -476,7 +476,7 @@
   done
 <span class="p">$</span> runlease list</pre></div>
       <div class="usecase"><span class="k">GPU</span><h3>A GPU for an afternoon</h3><p>One spot GPU for an evaluation or a fine-tune, on a lease, so it cannot be left running overnight by mistake.</p>
-<pre><span class="p">$</span> runlease up -p gcp -s compute.gpu --ttl 3h
+<pre><span class="p">$</span> runlease up -p aws -s compute.gpu --ttl 3h
 <span class="p">$</span> runlease snooze 1h   <span class="c"># need longer</span></pre></div>
       <div class="usecase"><span class="k">Previews</span><h3>Show a branch running</h3><p>Run the app on the machine and open it on your own localhost. It is reached through the tunnel, not through an open port.</p>
 <pre><span class="p">$</span> runlease forward demo -L 3000:localhost:3000

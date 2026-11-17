@@ -82,7 +82,7 @@
   <div><p class="n">CLEAN BOX</p><h3>Reproduce a bug</h3><p>A fresh Debian or Ubuntu machine with nothing of yours on it.</p></div>
   <div><p class="n">BIG BUILD</p><h3>Borrow cores</h3><p><code>-s compute.2xlarge</code> for the length of one build, then nothing.</p></div>
   <div><p class="n">PREVIEW</p><h3>Show a branch</h3><p><code>runlease forward box -L 3000:localhost:3000</code> brings its port to your machine.</p></div>
-  <div><p class="n">GPU</p><h3>One job on a GPU</h3><p><code>-s compute.gpu</code>, with a short lease so it cannot be forgotten.</p></div>
+  <div><p class="n">GPU</p><h3>One job on a GPU</h3><p><code>-p aws -s compute.gpu</code>, with a short lease so it cannot be forgotten.</p></div>
   <div><p class="n">CI</p><h3>A runner for one job</h3><p>Every command takes <code>--output json</code> and runs without a terminal.</p></div>
   <div><p class="n">AGENTS</p><h3>A place to run things</h3><p>See <a href="claude-code-sandbox.html">a sandbox for Claude Code</a>.</p></div>
 </div>

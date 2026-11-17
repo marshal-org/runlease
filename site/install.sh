@@ -12,7 +12,7 @@
 #
 # It does not use sudo, and it changes nothing outside the install directory.
 #
-#   RUNLEASE_VERSION=v0.5.0   install a specific release (default: latest)
+#   RUNLEASE_VERSION=v0.7.1   install a specific release (default: latest)
 #   RUNLEASE_INSTALL_DIR=...  where to put the binary (default: ~/.local/bin)
 set -eu
 

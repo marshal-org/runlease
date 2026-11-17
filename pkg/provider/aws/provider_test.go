@@ -27,6 +27,8 @@ type mockEC2 struct {
 	imagesErr    error
 	subnetsOut   *ec2.DescribeSubnetsOutput
 	subnetsErr   error
+	// subnetsFn, when set, answers DescribeSubnets in place of the two above.
+	subnetsFn func(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error)
 	// routeTables is keyed by the name of the first filter in the request:
 	// "association.subnet-id" for a subnet's own table, "vpc-id" for the main one.
 	routeTables map[string]*ec2.DescribeRouteTablesOutput
@@ -37,7 +39,10 @@ func (m *mockEC2) GetConsoleOutput(_ context.Context, _ *ec2.GetConsoleOutputInp
 	return &ec2.GetConsoleOutputOutput{}, nil
 }
 
-func (m *mockEC2) DescribeSubnets(_ context.Context, _ *ec2.DescribeSubnetsInput, _ ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error) {
+func (m *mockEC2) DescribeSubnets(_ context.Context, in *ec2.DescribeSubnetsInput, _ ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error) {
+	if m.subnetsFn != nil {
+		return m.subnetsFn(in)
+	}
 	return m.subnetsOut, m.subnetsErr
 }
 
@@ -45,7 +50,11 @@ func (m *mockEC2) DescribeRouteTables(_ context.Context, in *ec2.DescribeRouteTa
 	if m.routesErr != nil {
 		return nil, m.routesErr
 	}
-	if out, ok := m.routeTables[awssdk.ToString(in.Filters[0].Name)]; ok {
+	key := "" // no filter: every route table of the region
+	if len(in.Filters) > 0 {
+		key = awssdk.ToString(in.Filters[0].Name)
+	}
+	if out, ok := m.routeTables[key]; ok {
 		return out, nil
 	}
 	return &ec2.DescribeRouteTablesOutput{}, nil

@@ -31,7 +31,7 @@ Launch with `runlease up -m my-runner-manifest.yaml`.
 |---|---|---|
 | `name` | string | Instance name. Becomes the hostname prefix (`rl-<name>-<rand>`), the registry key, and the `runlease-managed` tag. |
 | `provider` | enum | `aws` or `gcp`. |
-| `region` | string | AWS region (`us-east-1`) or GCP zone (`us-central1-a`). |
+| `region` | string | AWS region (`us-east-1`) or GCP zone (`us-central1-a`). A GCP region (`europe-west4`) also works: its first zone is used. So does an AWS availability zone (`us-east-1a`): the launch goes to the subnet in that zone. |
 | **one of** `instanceClass` **or** `instanceType` | string | Portable class (`compute.small` …) **or** concrete cloud type (`t3.large`, `e2-standard-4`). Mutually exclusive. |
 
 ### Image
@@ -114,7 +114,7 @@ Persisted to the registry at `up` time so `forward --all` doesn't need to re-rea
 | Field | Type | Notes |
 |---|---|---|
 | `aws.securityGroupIDs` | []string | Attach these SGs. |
-| `aws.subnetID` | string | Subnet placement. |
+| `aws.subnetID` | string | Subnet placement. Omit to use the default VPC. In a region with no default VPC, runlease picks a subnet of the one VPC that has a route to the internet (an internet gateway for `publicIp: true`, a NAT gateway otherwise); with several such VPCs it stops and lists the subnets. |
 | `aws.instanceProfile` | string | IAM instance profile ARN — required if your setup scripts hit AWS APIs. |
 
 #### GCP
@@ -123,10 +123,10 @@ Persisted to the registry at `up` time so `forward --all` doesn't need to re-rea
 |---|---|---|
 | `gcp.serviceAccount` | string | SA email to attach. Needed for `selfTermination: true` (the script uses the metadata server to issue the delete call). The SA must hold the `compute.instances.delete` **IAM permission** — the `cloud-platform` scope runlease grants is necessary but not sufficient; without the IAM grant the self-delete returns 403 and the VM merely powers off, lingering in a `TERMINATED` state. See note below. |
 | `gcp.networkTags` | []string | GCE network tags — typically firewall selectors. |
-| `gcp.network` | string | VPC network name or self-link. Omit for the auto-created auto-mode `default` network. |
-| `gcp.subnetwork` | string | Subnetwork name or self-link. **Required for custom-mode VPCs** (projects with no `default` network) — without it GCP rejects the launch with `Invalid value for field 'networkInterfaces[0].network': ''`. Setting the subnetwork is enough; GCP infers the network from it, so `gcp.network` is usually optional. |
+| `gcp.network` | string | VPC network name or self-link. Omit to use the `default` network, or, when the project has none, its only network. |
+| `gcp.subnetwork` | string | Subnetwork name or self-link. Omit when the network has exactly one subnetwork in the region: runlease finds and uses it. Setting the subnetwork is enough; GCP infers the network from it, so `gcp.network` is usually optional. |
 
-> **Custom-mode VPCs need `gcp.subnetwork`.** Projects created without the auto-mode `default` network (common for anything past a migration to a custom VPC) will fail every launch until you point runlease at a real subnet. Quick mode exposes the same via `runlease up --provider gcp --subnet SUBNET [--network NETWORK]`.
+> **Custom-mode VPCs.** With one subnetwork in the region, nothing needs setting. With several, runlease does not guess: before anything is created, the launch stops and lists each one as the flags to pass (`--subnet SUBNET`, or `gcp.subnetwork` here). `runlease doctor --provider gcp` shows the same choice without launching.
 
 > **Self-termination needs a delete grant — scope it tightly.** When you attach a custom `serviceAccount`, that SA — not the project default — is the principal the self-delete API call runs as. Grant it `compute.instances.delete`, but constrain the grant to runlease-managed VMs rather than handing it project-wide instance-admin. IAM can't express "delete only itself" (the SA isn't bound to one VM), but a name-prefix condition on the `rl-` convention gets close:
 >

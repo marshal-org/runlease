@@ -63,6 +63,8 @@ func cloudErrorHint(s string) string {
 		return "Your AWS sign-in has expired or is missing. Sign in again (for example 'aws sso login'), then retry."
 	case strings.Contains(s, "networkInterfaces[0].network") && strings.Contains(s, "cannot be found"):
 		return "This project has no network named 'default'. Name the one to use:\n  --network NAME --subnet NAME   (or gcp.network / gcp.subnetwork in the manifest)"
+	case strings.Contains(s, "field 'zone'") && strings.Contains(s, "Unknown zone"):
+		return "That is not a Google Cloud zone. Zones look like us-central1-a:\n  --region ZONE"
 	case strings.Contains(s, "service control policy"):
 		return "Your AWS organization blocks this action here, most often because the region is not one it allows.\nTry the region your organization uses:\n  --region REGION"
 	case strings.Contains(s, "amazonaws.com") && strings.Contains(s, "no such host"):
@@ -82,7 +84,7 @@ func containsAny(s string, marks []string) bool {
 
 var (
 	gcpLocation = regexp.MustCompile(`^[a-z]+-[a-z]+[0-9]+(-[a-z])?$`)    // us-central1 or us-central1-a
-	awsLocation = regexp.MustCompile(`^[a-z]{2}(-[a-z]+)+-[0-9]+[a-z]?$`) // us-east-1, us-gov-west-1
+	awsLocation = regexp.MustCompile(`^[a-z]{2}(-[a-z]+)+-[0-9]+[a-z]?$`) // us-east-1, us-gov-west-1, or a zone: us-east-1a
 )
 
 // regionFits reports whether region is written the way prov writes them. The

@@ -66,7 +66,7 @@ func init() {
 	upCmd.Flags().BoolVar(&attach, "attach", false, "after provisioning, tail setup logs and apply manifest.forwards (blocks until Ctrl+C)")
 	upCmd.Flags().BoolVar(&upPublicIP, "public-ip", false, "give the instance a public IP (default: only when no relay is set); overrides the manifest")
 	upCmd.Flags().StringVarP(&quickProvider, "provider", "p", "", "provider: aws or gcp (quick mode — no manifest needed)")
-	upCmd.Flags().StringVarP(&quickRegion, "region", "r", "", "region/zone (quick mode; defaults: us-east-1 for aws, us-central1-a for gcp)")
+	upCmd.Flags().StringVarP(&quickRegion, "region", "r", "", "region/zone (quick mode; defaults: us-east-1 for aws, us-central1-a for gcp; a gcp region such as europe-west4 gets its first zone, an aws zone such as us-east-1a its region)")
 	upCmd.Flags().StringVarP(&quickSize, "size", "s", "compute.small", "instance class (quick mode)")
 	upCmd.Flags().IntVar(&quickDiskSize, "disk-size", 0, "boot disk size in GB (quick mode; 0 = image default)")
 	upCmd.Flags().StringVar(&quickImage, "image", "", "base image ID (quick mode; GCP defaults to debian-12)")
@@ -145,15 +145,6 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		m.PublicIP = &upPublicIP
 	}
 
-	if m.Provider == "aws" && m.BaseImage == "" {
-		fmt.Fprintf(cmd.OutOrStdout(), "🔍 Resolving latest Amazon Linux 2023 AMI for %s...\n", m.Region)
-		ami, err := awsprovider.ResolveAL2023AMI(cmd.Context(), m.Region)
-		if err != nil {
-			return fmt.Errorf("auto-resolving AMI: %w", err)
-		}
-		m.BaseImage = ami
-		fmt.Fprintf(cmd.OutOrStdout(), "   └─ %s\n", ami)
-	}
 	if m.Provider == "gcp" && m.BaseImage == "" {
 		m.BaseImage = gcpprovider.DefaultImageFamily
 		fmt.Fprintf(cmd.OutOrStdout(), "🔍 Using default GCP image: Debian 12\n")
@@ -174,6 +165,22 @@ func runUp(cmd *cobra.Command, _ []string) error {
 	p, err := newProvider(ctx, provider.ProviderType(m.Provider), m.Region, "")
 	if err != nil {
 		return fmt.Errorf("initializing provider: %w", err)
+	}
+	// Fill in the zone and network the user did not name, and refuse a launch
+	// that could not work, before a relay slot or a machine exists.
+	if err := resolvePlacement(ctx, cmd.OutOrStdout(), cmd.ErrOrStderr(), p, m); err != nil {
+		return err
+	}
+	// After the placement: it may have moved the launch to another region,
+	// and an AMI belongs to one region.
+	if m.Provider == "aws" && m.BaseImage == "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "🔍 Resolving latest Amazon Linux 2023 AMI for %s...\n", m.Region)
+		ami, err := awsprovider.ResolveAL2023AMI(cmd.Context(), m.Region)
+		if err != nil {
+			return fmt.Errorf("auto-resolving AMI: %w", err)
+		}
+		m.BaseImage = ami
+		fmt.Fprintf(cmd.OutOrStdout(), "   └─ %s\n", ami)
 	}
 	// Say where this is about to happen, before anything is created.
 	if d, ok := p.(provider.AccountDescriber); ok {
@@ -569,10 +576,13 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 	if region != "" && !regionFits(quickProvider, region) {
 		return nil, fmt.Errorf("%q does not fit %s: %s", region, quickProvider, regionExample(quickProvider))
 	}
+	quickRegionDefaulted = false
 	if region == "" {
-		if region, _ = defaultRegionFor(quickProvider, cfg); region == "" {
+		var why string
+		if region, why = defaultRegionFor(quickProvider, cfg); region == "" {
 			return nil, fmt.Errorf("unknown provider %q — supported: aws, gcp", quickProvider)
 		}
+		quickRegionDefaulted = regionNotChosen(why)
 	}
 
 	image := quickImage
@@ -641,15 +651,80 @@ func defaultRegionFor(prov string, cfg *rlconfig.Config) (region, why string) {
 	}
 	switch prov {
 	case "gcp":
-		return "us-central1-a", "runlease's default"
+		return "us-central1-a", regionWhyBuiltIn
 	case "aws":
 		// The region the user's own AWS setup names, before a guess.
 		if r := configuredAWSRegion(context.Background()); r != "" {
-			return r, "from your AWS setup"
+			return r, regionWhyAWSSetup
 		}
-		return "us-east-1", "runlease's default"
+		return "us-east-1", regionWhyBuiltIn
 	}
 	return "", ""
+}
+
+// regionWhyBuiltIn is defaultRegionFor's reason for a region nobody chose.
+const regionWhyBuiltIn = "runlease's default"
+
+// regionWhyAWSSetup is its reason for the region the AWS config names.
+const regionWhyAWSSetup = "from your AWS setup"
+
+// regionNotChosen reports whether a region with that reason was picked for
+// the user rather than by them for runlease: by --region, or as the saved
+// default.
+func regionNotChosen(why string) bool {
+	return why == regionWhyBuiltIn || why == regionWhyAWSSetup
+}
+
+// quickRegionDefaulted is true when quick mode used a region the user did not
+// choose for runlease. The launch may then move to the one region that works:
+// the one where a Google Cloud project has its network, or the one an AWS
+// organization allows.
+var quickRegionDefaulted bool
+
+// resolvePlacement lets the provider fill in the zone and network that were
+// not named, says what it chose, and writes the result back to the manifest.
+// A request that cannot work stops here. If the check itself fails (a
+// permission the identity lacks, a timeout) the launch goes ahead as asked,
+// and the cloud reports whatever is wrong.
+func resolvePlacement(ctx context.Context, out, errOut io.Writer, p provider.CloudProvider, m *manifest.Manifest) error {
+	placer, ok := p.(provider.Placer)
+	if !ok {
+		return nil
+	}
+	// An AWS availability zone given as the region: the provider already
+	// works in its region, and everything after this has to as well.
+	if r, ok := p.(interface{ Region() string }); ok {
+		m.Region = r.Region()
+	}
+	checkCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	pl, err := placer.ResolvePlacement(checkCtx, provider.PlacementRequest{
+		Network:   m.GCP.Network,
+		Subnet:    subnetForProvider(m),
+		AnyRegion: quickRegionDefaulted,
+		PublicIP:  m.WantsPublicIP(),
+	})
+	switch {
+	case err == nil:
+	case errors.Is(err, provider.ErrBadRegion), errors.Is(err, provider.ErrNoNetwork):
+		return fmt.Errorf("%w\n\nNothing was created", err)
+	case isSignInError(err) || ctx.Err() != nil:
+		return err
+	default:
+		fmt.Fprintf(errOut, "⚠  Could not check the zone and network before launching (%s). Launching as asked.\n", oneLine(err))
+		return nil
+	}
+	for _, note := range pl.Notes {
+		fmt.Fprintf(out, "📍 Using %s\n", note)
+	}
+	m.Region = pl.Region
+	switch provider.ProviderType(m.Provider) {
+	case provider.ProviderGCP:
+		m.GCP.Network, m.GCP.Subnetwork = pl.Network, pl.Subnet
+	case provider.ProviderAWS:
+		m.AWS.SubnetID = pl.Subnet
+	}
+	return nil
 }
 
 // configuredAWSRegion is a variable so a test does not read the AWS setup of

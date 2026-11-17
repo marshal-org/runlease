@@ -1,9 +1,9 @@
 {
   "name": "runlease",
-  "version": "0.3.0",
-  "description": "Leased spot machines for coding agents, in your own cloud: skills, slash commands, typed tools and a live view of what is running.",
+  "version": "0.3.1",
+  "description": "Give Claude Code a real cloud machine when the task outgrows your laptop: long builds, code you would not run locally, test runs split across machines. Spot VMs in your own Google Cloud or AWS account, with a live view of each lease and its cost. Every machine deletes itself when its lease ends. Built by the Marshal team.",
   "author": {
-    "name": "Marshal Security",
+    "name": "The Marshal team",
     "url": "https://marshal.codes"
   },
   "homepage": "https://runlease.online",

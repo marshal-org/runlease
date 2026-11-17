@@ -70,12 +70,23 @@ deleted unless you press a button.
   exactly that.
 - It deletes the machines it launched when the job is done, and says so.
 
-## What it runs and reads
+## What it runs, sends and fetches
 
-- The `runlease` CLI on your computer, with the cloud sign-ins you already have. The plugin holds
-  no credentials of its own.
-- `runlease list --local` on a timer (every 30 seconds by default) for the live view.
-- No telemetry. The plugin makes no network call itself.
+Everything goes through the `runlease` CLI on your computer. The plugin holds no credentials of
+its own, sends no telemetry and makes no network call itself.
+
+- **Runs:** the `runlease` command. As an MCP server (`runlease mcp`) for the typed tools, and
+  `runlease list --local`, `runlease snooze` and `runlease down` for the live view and its
+  buttons.
+- **In your cloud:** when Claude or you launch a machine, the CLI calls the Google Cloud or AWS
+  API with the sign-in you already have, and creates a spot VM in your account, on your bill. It
+  deletes the VM when the lease ends or when you say so.
+- **Sends:** commands and files you or Claude send to a machine travel over SSH, through the
+  relay you signed in to (`connect.runlease.online` by default, or your own). The relay passes
+  encrypted traffic and cannot read it.
+- **Fetches:** nothing. Installing the CLI is a step you run yourself.
+- **Reads:** `runlease list --local` every 30 seconds by default, which reads a file on your
+  computer and makes no cloud call.
 
 ## Settings
 
@@ -91,4 +102,4 @@ claude --plugin-dir ./plugin     # a session that reloads the plugin as you edit
 ```
 
 Full reference: [docs/claude-plugin.md](../docs/claude-plugin.md). Issues:
-<https://github.com/marshal-org/runlease/issues>. Security reports: [SECURITY.md](../SECURITY.md).
+<https://github.com/marshal-org/runlease/issues>. Security reports: [SECURITY.md](../SECURITY.md). License: [Apache-2.0](LICENSE).

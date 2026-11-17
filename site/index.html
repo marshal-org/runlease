@@ -290,12 +290,22 @@
   .links a span { color: var(--ink-3); font-family: var(--mono); font-size: .8rem; text-align: right; }
   .links a:hover { color: var(--lease); }
 
-  .by { background: var(--ink); color: var(--night); padding-block: 22px; }
-  .by .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 28px; }
-  .by p { font-size: 1rem; max-width: 46em; flex: 1 1 22em; }
-  .by b { font-family: var(--display); font-size: 1.1rem; }
-  .by a { color: inherit; font-family: var(--mono); font-size: .8rem; font-weight: 600; border: 1px solid currentColor; padding: 9px 14px; text-decoration: none; white-space: nowrap; }
-  .by a:hover { background: var(--night); color: var(--ink); }
+  /* Who makes this. The one light section on a dark page, so it reads as a
+     note from the makers and not as one more feature of the tool. */
+  .by { background: var(--ink); color: var(--night); padding-block: clamp(56px, 8vw, 104px); }
+  .by .wrap { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 56px; align-items: start; }
+  .by .eyebrow { color: #33435A; }
+  .by .eyebrow b { color: var(--night); }
+  .by h2 { font-size: clamp(1.9rem, 3.8vw, 3rem); }
+  .by .say { color: #24324A; font-size: 1.08rem; max-width: 34em; margin-top: 18px; }
+  .by ul { list-style: none; padding: 0; margin: 0; }
+  /* The rule above the list belongs to the first item, so it leaves with it when the page ends. */
+  .by li:first-child { border-top: 2px solid var(--night); }
+  .by li { padding: 16px 0; border-bottom: 1px solid rgba(5, 11, 20, .18); color: #24324A; }
+  .by li b { display: block; color: var(--night); font-family: var(--display); font-size: 1.12rem; }
+  .by .go { display: inline-flex; align-items: center; gap: 8px; min-height: 54px; margin-top: 28px; padding: 0 22px; background: var(--night); color: var(--ink); border: 1px solid var(--night); font-family: var(--mono); font-size: .88rem; font-weight: 600; text-decoration: none; transition: background .15s, color .15s; }
+  .by .go:hover { background: transparent; color: var(--night); }
+  .by :focus-visible { outline-color: var(--night); }
   footer { padding-block: 34px 48px; color: var(--ink-3); font-size: .86rem; }
   footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px 28px; }
   footer nav { display: flex; flex-wrap: wrap; gap: 6px 18px; }
@@ -335,7 +345,7 @@
     .scene { height: 520px; order: -1; border-bottom: 1px solid var(--rule); }
     .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .get-grid, .none { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+    .get-grid, .none, .by .wrap { grid-template-columns: minmax(0, 1fr); gap: 32px; }
     .leasebar nav a.opt { display: none; }
   }
   @media (max-width: 680px) {
@@ -580,10 +590,20 @@
   </div>
 </section>
 
-<section class="by" aria-label="Built by Marshal" data-part="credits" style="padding-block:22px">
+<section class="by" id="marshal" aria-labelledby="by-h" data-part="credits">
   <div class="wrap">
-    <p><b>Running agents for a whole team?</b> Runlease gives one agent one machine. Marshal, from the same team, runs AI coding agents in isolated pods inside your own VPC, with credential isolation, audited egress and live tool policies.</p>
-    <a href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=strip" target="_blank" rel="noopener" data-out="marshal" data-place="strip">See Marshal →</a>
+    <div>
+      <p class="eyebrow"><b>Who makes this</b> · the Marshal team</p>
+      <h2 id="by-h">Runlease is built by Marshal.</h2>
+      <p class="say">Runlease gives one agent one machine. Marshal runs AI coding agents for a whole team, in isolated pods inside your own VPC, with credential isolation, audited egress and live tool policies.</p>
+      <p class="say">We built Runlease to give agents and tests a real machine for an hour, and we use it ourselves. It is open source and stands alone: you do not need Marshal to use it.</p>
+      <a class="go" href="https://marshal.codes/?utm_source=runlease&amp;utm_medium=site&amp;utm_campaign=oss&amp;utm_content=section" target="_blank" rel="noopener" data-out="marshal" data-place="section">See Marshal <span aria-hidden="true">↗</span></a>
+    </div>
+    <ul>
+      <li><b>Runlease gives an agent a machine.</b> A leased spot VM in your cloud, reached over SSH, gone when the lease ends.</li>
+      <li><b>Marshal runs the agents.</b> Isolated workspaces, the credentials they may use, and a record of everything they did.</li>
+      <li><b>The same idea in both.</b> Your infrastructure, your keys, and nothing left running that you did not ask for.</li>
+    </ul>
   </div>
 </section>
 

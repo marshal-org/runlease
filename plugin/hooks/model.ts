@@ -99,7 +99,15 @@ export function barCells(machine: Machine, at: number, width: number): { full: n
 }
 
 export function money(usd: number): string {
+  // A small spot machine costs a fraction of a cent for its first minutes.
+  if (usd > 0 && usd < 0.01) return 'under $0.01'
   return usd < 10 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(0)}`
+}
+
+/** A total hourly rate. Under ten cents it keeps the third decimal, or a small spot machine would read as free. */
+export function perHour(usd: number): string {
+  if (usd > 0 && usd < 0.001) return 'under $0.001/h'
+  return `$${usd.toFixed(usd > 0 && usd < 0.1 ? 3 : 2)}/h`
 }
 
 /** The hourly rate: three decimals, as spot prices are quoted. */
@@ -156,7 +164,7 @@ export function statusLine(board: Board): string | undefined {
   const first = soonest(list)
   if (first !== null) parts.push(`${first.name} ${leaseText(first, board.readAt)}`)
   const hourly = burn(list, board.readAt)
-  if (hourly !== null) parts.push(`$${hourly.toFixed(2)}/h`)
+  if (hourly !== null) parts.push(perHour(hourly))
   return parts.join(' · ')
 }
 

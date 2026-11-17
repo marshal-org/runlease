@@ -3,7 +3,7 @@ import type { EngineInterface } from 'claude-code'
 
 import type { Busy, Machine } from '../types'
 import type { Config } from './config'
-import { barCells, burn, count, cut, EMPTY_BOARD, leaseText, money, nextToEnd, rate, span, spent, tone, type Tone } from './model'
+import { barCells, burn, count, cut, EMPTY_BOARD, leaseText, money, nextToEnd, perHour, rate, span, spent, tone, type Tone } from './model'
 import { extend, refresh, remove, type Kit } from './state'
 
 const boardAtom = atom({ plugin: 'runlease', key: 'board' } as const, EMPTY_BOARD, { shape: 'board-1' })
@@ -171,7 +171,7 @@ export async function renderPane($: EngineInterface, kit: Kit, width: number, co
 
   const hourly = burn(list, at)
   const first = nextToEnd(list, at)
-  const summary = [count(list.length), hourly === null ? '' : `$${hourly.toFixed(2)}/h`, first === null || list.length < 2 ? '' : `next ends in ${span((first.expiresAt ?? at) - at)}`]
+  const summary = [count(list.length), hourly === null ? '' : perHour(hourly), first === null || list.length < 2 ? '' : `next ends in ${span((first.expiresAt ?? at) - at)}`]
     .filter(Boolean)
     .join(' · ')
 

@@ -1,11 +1,23 @@
 # Runlease for Claude Code
 
-Leased spot machines for coding agents, in your own cloud. This plugin teaches Claude Code to
-launch a real Linux VM when a task needs one, use it, and give it back, and it shows what is
-running while Claude works.
+**Give Claude a real machine when the task outgrows your laptop.**
 
-[Runlease](https://runlease.online) is open source (Apache-2.0). The machines run in your own
-Google Cloud or AWS account, at spot prices, and each one deletes itself when its lease ends.
+A two-hour build. An install script you would not run on your own computer. A test suite split
+across eight machines. With this plugin Claude Code launches a Linux VM in your own cloud
+account, does the work there, and gives the machine back. You see every machine, its lease and
+its cost in a pane beside the chat.
+
+- **Your cloud, at spot prices.** The machines run in your own Google Cloud or AWS account.
+  `runlease up` prints the hourly rate and the cost of the lease before it launches.
+- **Nothing left running.** Every machine has a lease and deletes itself when it ends. The timer
+  is on the VM, so it holds even if your session crashes.
+- **No open ports.** Machines are reached through a relay that passes encrypted traffic and
+  cannot read it. They need no inbound firewall rule.
+- **Claude stays on your computer.** Your conversation and your credentials do not move to the
+  machine.
+
+Built by the [Marshal](https://marshal.codes) team. [Runlease](https://runlease.online) is open
+source under Apache-2.0.
 
 ## Install
 

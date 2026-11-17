@@ -10,6 +10,8 @@ import {
   isRunleaseTool,
   launchedName,
   leaseText,
+  money,
+  perHour,
   nextToEnd,
   parseList,
   receipt,
@@ -71,6 +73,19 @@ test('cost so far is the rate over the time since launch', () => {
   expect(burn([box!], NOW)).toBe(0.15)
   expect(burn([box!], NOW + 3600000)).toBe(null)
   expect(nextToEnd([box!], NOW + 3600000)).toBe(null)
+})
+
+test('a cheap machine never reads as free', () => {
+  // A small spot machine is a fraction of a cent an hour: two decimals would print $0.00.
+  expect(perHour(0.0004)).toBe('under $0.001/h')
+  expect(perHour(0.0022)).toBe('$0.002/h')
+  expect(perHour(0.15)).toBe('$0.15/h')
+  expect(perHour(1.5)).toBe('$1.50/h')
+  expect(money(0.0005)).toBe('under $0.01')
+  expect(money(0)).toBe('$0.00')
+  expect(money(0.13)).toBe('$0.13')
+  const [cheap] = parseList(JSON.stringify([{ name: 'tiny', provider: 'aws', state: 'running', usdPerHour: 0.0022, createdAt: '2026-11-16T09:55:00Z', expiresAt: '2026-11-16T10:30:00Z' }]))
+  expect(statusLine({ machines: [cheap!], readAt: NOW, isInstalled: true })).toBe('1 machine · tiny 30m left · $0.002/h')
 })
 
 test('the status line names the lease that ends first, and clears with none', () => {

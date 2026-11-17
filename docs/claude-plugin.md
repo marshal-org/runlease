@@ -1,7 +1,10 @@
 # The Claude Code plugin
 
-The plugin teaches Claude Code how to use Runlease, and shows what is running while it works. It
-lives in [`plugin/`](../plugin) in this repository.
+The plugin gives Claude Code a real machine when a task outgrows your laptop: a long build, code
+you would not run locally, a test suite split across machines. Claude launches a spot VM in your
+own cloud account, works there, and gives it back, and you see each machine, its lease and its
+cost while it works. It is built by the [Marshal](https://marshal.codes) team and lives in
+[`plugin/`](../plugin) in this repository.
 
 ## Install
 

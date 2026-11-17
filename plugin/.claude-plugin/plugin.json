@@ -1,6 +1,6 @@
 {
   "name": "runlease",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Leased spot machines for coding agents, in your own cloud: skills, slash commands, typed tools and a live view of what is running.",
   "author": {
     "name": "Marshal Security",
@@ -15,7 +15,10 @@
     "sandbox",
     "gcp",
     "aws",
-    "agents"
+    "agents",
+    "cloud",
+    "mcp",
+    "remote-execution"
   ],
   "types": "./types/index.d.ts",
   "userConfig": {

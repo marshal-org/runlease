@@ -72,6 +72,10 @@ Nothing is extended or deleted unless you press a button.
 | Refresh every | 30 seconds | How often the list is read. Never faster than every 10 seconds |
 | Notify before a lease ends | on | The desktop notification |
 
+**What it runs and reads.** The plugin runs the `runlease` CLI on your computer with the cloud
+sign-ins you already have. It holds no credentials, sends no telemetry and makes no network call
+itself.
+
 To work on the plugin: `claude plugin validate plugin`, `claude plugin test plugin`, and
 `claude --plugin-dir ./plugin` for a session that reloads it as you edit.
 

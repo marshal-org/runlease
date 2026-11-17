@@ -19,10 +19,12 @@ Runlease errors end with a line saying what to do. Read the whole error before a
 | `Google Cloud sign-in has expired or is missing` | Application default sign-in | Ask the person to run `gcloud auth application-default login` |
 | `GCP project not configured` | No project set | `gcloud config set project PROJECT`, or `export GOOGLE_CLOUD_PROJECT=PROJECT` |
 | `AWS sign-in has expired or is missing` | AWS session | Ask the person to run `aws sso login` |
-| `organization blocks this action` | Region not allowed by the AWS organization | Pass the allowed region: `--region REGION` |
+| `may not use REGION. It may use: ...` / `organization blocks this action` | Region not allowed by the AWS organization, or not enabled | Pass one of the regions the error lists: `--region REGION` |
+| `has no region` / `has no zone ... Its zones are` | A region or zone that does not exist | Use one the error lists. A Google Cloud region with no zone letter is fine: the first zone is used |
 | `does not fit aws` / `does not fit gcp` | A region written for the other cloud | AWS regions look like `us-east-1`, GCP zones like `us-central1-a` |
 | `has no NAT gateway` | A machine with no public IP could not reach the relay | Show the person the choices it lists. Do not add `--public-ip` yourself |
-| `no network named 'default'` | The project has no default network | `--network NAME --subnet NAME` |
+| `places a machine could join` / `VPCs a machine could join` | More than one network fits, and Runlease does not guess | Show the person the `--subnet` lines the error lists and ask which. Do not pick one yourself |
+| `has no subnetwork in` / `has no VPC` / `no network named` | Nothing to launch on in that region | The error names the regions that have a network, or the one command that creates one. Show it to the person; do not create networks yourself |
 | `no relay set` / `run 'runlease login'` | Relay sign-in | Ask the person to run `runlease login` |
 | tier limit reached | Too many machines on the relay | `runlease list`, then `runlease down` one. Stopped machines hold a place for 15 minutes |
 | `is already tracked` | The name is in use | `runlease down NAME` first, or use another name |

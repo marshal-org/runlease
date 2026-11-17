@@ -1,10 +1,15 @@
 {
   "name": "runlease",
   "owner": { "name": "Marshal Security", "url": "https://marshal.codes" },
+  "metadata": {
+    "description": "Runlease: leased spot machines for coding agents, in your own Google Cloud or AWS account."
+  },
   "plugins": [
     {
       "name": "runlease",
       "source": "./plugin",
+      "category": "development",
+      "homepage": "https://runlease.online/claude-code-sandbox.html",
       "description": "Leased spot machines for coding agents, in your own cloud: skills, slash commands, typed tools and a live view of what is running."
     }
   ]

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/marshal-org/runlease/compare/v0.7.2...v0.8.0) (2026-11-17)
+
+
+### Features
+
+* **site:** say who builds Runlease in a full section on the home page ([#64](https://github.com/marshal-org/runlease/issues/64)) ([c9f4b82](https://github.com/marshal-org/runlease/commit/c9f4b8267a4177411cfee4a4b254ad2fa7e5282d))
+
 ## [0.7.2](https://github.com/marshal-org/runlease/compare/v0.7.1...v0.7.2) (2026-11-17)
 
 

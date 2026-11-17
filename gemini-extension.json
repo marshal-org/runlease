@@ -1,0 +1,9 @@
+{
+  "name": "runlease",
+  "version": "0.3.0",
+  "description": "Leased spot machines for coding agents, in your own cloud: skills, slash commands and typed tools to launch a VM, use it and give it back.",
+  "contextFileName": "rules/AGENTS.md",
+  "mcpServers": {
+    "runlease": { "command": "runlease", "args": ["mcp"] }
+  }
+}

@@ -47,6 +47,25 @@ Clients that read an `mcpServers` map (Claude Desktop, Cursor, VS Code and other
 
 Use the full path to the binary if `runlease` is not on the `PATH` the client starts servers with.
 
+## MCP Registry
+
+The server is published to the [MCP Registry](https://registry.modelcontextprotocol.io) as
+`io.github.marshal-org/runlease` from each release, starting with the first release after v0.9.0.
+Clients and catalogs that read the registry can find it there.
+
+The registry entry points at MCP bundles (`.mcpb` files) attached to the GitHub release, one per
+platform: `runlease-<os>-<arch>.mcpb` for linux and darwin on amd64 and arm64, and for windows on
+amd64. A bundle holds the same `runlease` binary as the release and a manifest that starts it as
+`runlease mcp`. The registry has no field for operating system or CPU architecture, so a client
+picks its bundle by file name. Each bundle is listed in `checksums.txt` and has a build provenance
+attestation, like the binaries: see [Verifying a release](security.md#verifying-a-release).
+
+A bundle does not replace the setup above. The server still needs the sign-in and cloud
+credentials, and `runlease login` is a terminal command, so install the CLI as well.
+
+The manifest and the registry entry are built from [`mcpb/`](../mcpb) by
+`scripts/build-mcpb.sh` and `scripts/gen-server-json.sh`.
+
 ## Tools
 
 | Tool | What it does |

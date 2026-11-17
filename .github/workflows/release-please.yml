@@ -9,9 +9,15 @@ name: Release Please
 # What a release contains (see docs/ci.md and docs/security.md):
 #   - CLI binaries for linux, darwin and windows
 #   - agent and relay binaries for linux
+#   - one MCP bundle (.mcpb) per CLI binary, for MCP clients that install bundles
 #   - checksums.txt with the SHA-256 of every file
 #   - on a public repository: a keyless Sigstore signature of checksums.txt and
 #     a build provenance attestation for every binary
+#
+# After the upload, the last job publishes the release's server.json to the
+# MCP Registry (see docs/mcp.md). It signs in with the workflow's OIDC token,
+# so there is no registry secret. If it fails, the release is already complete
+# and the job can be run again on its own.
 #
 # The CLI is built AFTER the agent, with the agent's SHA-256 compiled in. A VM
 # launched by a release CLI refuses any agent binary that does not match it.
@@ -113,9 +119,38 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  # Wraps each CLI binary in an MCP bundle. It runs before `publish` so the
+  # bundles are checksummed, signed and attested with everything else, and in
+  # its own job so the checkout stays out of the job that holds write tokens.
+  bundles:
+    name: Build MCP bundles
+    needs: [release-please, cli]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: cli-*
+          path: dist
+          merge-multiple: true
+      - name: Build
+        env:
+          VERSION: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          scripts/build-mcpb.sh "$VERSION" dist
+          count="$(find dist -name '*.mcpb' | wc -l)"
+          [ "$count" -eq 5 ] || { echo "expected 5 bundles, built $count"; exit 1; }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mcpb
+          path: dist/*.mcpb
+          if-no-files-found: error
+
   publish:
     name: Checksums, signature, upload
-    needs: [release-please, server, cli]
+    needs: [release-please, server, cli, bundles]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -148,3 +183,82 @@ jobs:
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
           files: dist/*
+
+  # Lists the release in the MCP Registry. Everything it publishes is already
+  # on the GitHub release: a failure here (the registry is down, say) shows up
+  # as a failed job and leaves the release as it is. Re-running the job is
+  # safe: a version the registry already has is skipped.
+  registry:
+    name: Publish to the MCP Registry
+    needs: [release-please, publish]
+    # The registry needs the bundles to be publicly downloadable.
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # the registry sign-in; it grants io.github.<owner>/*
+    env:
+      MCP_PUBLISHER_VERSION: v1.8.9
+      MCP_REGISTRY: https://registry.modelcontextprotocol.io
+      TAG: ${{ needs.release-please.outputs.tag_name }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # Fetched the way a client fetches them, so server.json describes the
+      # bytes the release really serves.
+      - name: Download the bundles from the release
+        run: |
+          set -euo pipefail
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+          mkdir bundles && cd bundles
+          curl -fsSL --retry 3 -o checksums.txt "${base}/checksums.txt"
+          grep -E ' \*?runlease-[a-z0-9]+-[a-z0-9]+\.mcpb$' checksums.txt > mcpb.sums
+          for f in $(awk '{ sub(/^\*/, "", $2); print $2 }' mcpb.sums); do
+            curl -fsSL --retry 3 -o "$f" "${base}/${f}"
+          done
+          sha256sum --check mcpb.sums
+          rm checksums.txt mcpb.sums
+      - name: Generate server.json
+        run: |
+          scripts/gen-server-json.sh "$TAG" bundles > server.json
+          cat server.json
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - name: Download and verify mcp-publisher
+        run: |
+          set -euo pipefail
+          archive="mcp-publisher_linux_amd64.tar.gz"
+          base="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+          curl -fsSL --retry 3 -o "$archive" "${base}/${archive}"
+          curl -fsSL --retry 3 -o "${archive}.sigstore.json" "${base}/${archive}.sigstore.json"
+          cosign verify-blob \
+            --bundle "${archive}.sigstore.json" \
+            --certificate-identity "https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/${MCP_PUBLISHER_VERSION}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$archive"
+          tar xzf "$archive" mcp-publisher
+          rm -f "$archive" "${archive}.sigstore.json"
+      - name: Validate server.json
+        run: ./mcp-publisher validate server.json
+      - name: Publish
+        run: |
+          set -euo pipefail
+          name="$(jq -r '.name' server.json)"
+          version="$(jq -r '.version' server.json)"
+          url="${MCP_REGISTRY}/v0/servers/$(jq -rn --arg n "$name" '$n | @uri')/versions/${version}"
+          if [ "$(curl -s -o /dev/null -w '%{http_code}' "$url")" = "200" ]; then
+            echo "${name} ${version} is already in the registry. Nothing to publish."
+            exit 0
+          fi
+          for attempt in 1 2 3; do
+            if ./mcp-publisher login github-oidc --registry="$MCP_REGISTRY" &&
+               ./mcp-publisher publish server.json; then
+              exit 0
+            fi
+            echo "Attempt ${attempt} failed."
+            [ "$attempt" -eq 3 ] || sleep 30
+          done
+          echo "Could not publish ${name} ${version}. The GitHub release is complete; re-run this job to try again."
+          exit 1

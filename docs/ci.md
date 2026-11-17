@@ -32,6 +32,7 @@ flowchart TD
     RP -->|"release PR merged"| Build["Build agent, then CLI with the agent digest"]
     Build --> Sign["Checksums, Sigstore signature, provenance"]
     Sign --> Rel["GitHub Release"]
+    Rel --> Reg["MCP Registry<br/>OIDC sign-in, no secret"]
 ```
 
 ## What runs on a pull request
@@ -40,7 +41,7 @@ flowchart TD
 
 | Job | Checks |
 |---|---|
-| Build and test | `gofmt`, `go mod tidy` is clean, `go build`, `go vet`, `go test`, and a cross-compile for macOS and Windows |
+| Build and test | `gofmt`, `go mod tidy` is clean, `go build`, `go vet`, `go test`, a cross-compile for macOS and Windows, and `scripts/check-mcpb.sh` (the MCP bundle builds and lists the tools the server offers) |
 | Static analysis | `staticcheck` |
 | Workflow policy | `scripts/check-workflows.sh`: hosted runners only, no secrets, pinned actions, safe triggers |
 | Known vulnerabilities | `govulncheck`, which fails only on vulnerabilities the code can actually reach |
@@ -111,13 +112,21 @@ The build order matters:
 2. The SHA-256 of the linux/amd64 agent is computed.
 3. **The CLI** is built for every platform with that digest compiled in. A VM launched by that CLI
    refuses any agent that does not match.
-4. `checksums.txt` is generated over every file.
-5. `checksums.txt` is **signed with Sigstore**, keyless, using the workflow's own OIDC identity.
+4. Each CLI binary is wrapped in an **MCP bundle** (`runlease-<os>-<arch>.mcpb`), in a job with
+   no write token.
+5. `checksums.txt` is generated over every file, bundles included.
+6. `checksums.txt` is **signed with Sigstore**, keyless, using the workflow's own OIDC identity.
    There is no signing key to leak.
-6. A **build provenance attestation** is produced for every binary.
+7. A **build provenance attestation** is produced for every binary and bundle.
+8. Everything is uploaded to the GitHub Release.
+9. A last job publishes the release to the **MCP Registry** (see [MCP server](mcp.md#mcp-registry)).
+   It signs in to the registry with the workflow's OIDC token, so there is no registry secret. It
+   runs after the upload: if the registry is down the job fails, the release is already complete,
+   and the job can be run again.
 
-Steps 5 and 6 write the repository's identity to a public transparency log, so they are skipped
-while the repository is private.
+Steps 6 and 7 write the repository's identity to a public transparency log, so they are skipped
+while the repository is private. So is step 9: the registry needs the bundles to be publicly
+downloadable.
 
 How to check a download: [verifying a release](security.md#verifying-a-release).
 

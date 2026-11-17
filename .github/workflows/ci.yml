@@ -56,6 +56,10 @@ jobs:
         run: |
           GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null ./cmd/runlease
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o /dev/null ./cmd/runlease
+      # The bundle scripts otherwise run only during a release, where a failure
+      # stops the upload.
+      - name: MCP bundle builds and lists the server's tools
+        run: scripts/check-mcpb.sh
 
   policy:
     name: Workflow policy

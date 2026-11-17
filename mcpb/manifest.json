@@ -1,0 +1,75 @@
+{
+  "manifest_version": "0.3",
+  "name": "runlease",
+  "display_name": "Runlease",
+  "version": "0.0.0",
+  "description": "Lease short-lived cloud spot machines in your own account: launch, run commands, copy files, delete.",
+  "long_description": "Runlease launches a spot machine in your own GCP or AWS account, reaches it through a relay that cannot read the session, and deletes it when its lease ends. This bundle runs `runlease mcp`, which gives an MCP client typed tools to launch a machine, run a command on it, copy files, extend the lease and delete it.\n\nThe server uses the same sign-in, config and cloud credentials as the `runlease` CLI. Set those up in a terminal first: see https://github.com/marshal-org/runlease/blob/main/docs/mcp.md. Machines are billed to your own cloud account until they are deleted.",
+  "author": {
+    "name": "Marshal Security",
+    "url": "https://github.com/marshal-org"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marshal-org/runlease.git"
+  },
+  "homepage": "https://runlease.online",
+  "documentation": "https://github.com/marshal-org/runlease/blob/main/docs/mcp.md",
+  "support": "https://github.com/marshal-org/runlease/issues",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/runlease",
+    "mcp_config": {
+      "command": "${__dirname}/server/runlease",
+      "args": ["mcp"],
+      "platform_overrides": {
+        "win32": {
+          "command": "${__dirname}/server/runlease.exe"
+        }
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "runlease_status",
+      "description": "Who is signed in, how many machine slots are in use, and the machines this computer tracks. Read-only."
+    },
+    {
+      "name": "runlease_up",
+      "description": "Launch a spot machine in your own cloud account. Returns at once, without waiting for boot."
+    },
+    {
+      "name": "runlease_exec",
+      "description": "Run a shell command on a machine and return its exit code, stdout and stderr."
+    },
+    {
+      "name": "runlease_push",
+      "description": "Copy one local file to a machine."
+    },
+    {
+      "name": "runlease_pull",
+      "description": "Copy one file from a machine to this computer."
+    },
+    {
+      "name": "runlease_list",
+      "description": "List the machines this computer tracks, as JSON. Read-only."
+    },
+    {
+      "name": "runlease_snooze",
+      "description": "Set a machine's self-deletion to a duration from now."
+    },
+    {
+      "name": "runlease_down",
+      "description": "Delete a machine now, with its disk and everything on it."
+    },
+    {
+      "name": "runlease_doctor",
+      "description": "Check that this computer can launch machines and report what to fix. Read-only."
+    }
+  ],
+  "keywords": ["cloud", "spot", "vm", "ssh", "sandbox", "gcp", "aws"],
+  "license": "Apache-2.0",
+  "compatibility": {
+    "platforms": ["linux", "darwin", "win32"]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.marshal-org/runlease",
+  "title": "Runlease",
+  "description": "Lease short-lived cloud spot machines in your own account: launch, run commands, copy files, delete.",
+  "version": "0.0.0",
+  "repository": {
+    "url": "https://github.com/marshal-org/runlease",
+    "source": "github"
+  },
+  "websiteUrl": "https://runlease.online",
+  "packages": []
+}

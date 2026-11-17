@@ -2,8 +2,8 @@
   "$schema": "https://antigravity.google/schemas/v1/plugin.json",
   "name": "runlease",
   "displayName": "Runlease",
-  "version": "0.3.0",
-  "description": "Leased spot machines for coding agents, in your own cloud: skills and typed tools to launch a VM, use it and give it back.",
+  "version": "0.3.1",
+  "description": "Give your coding agent a real cloud machine when the task outgrows your laptop: long builds, code you would not run locally, test runs split across machines. Spot VMs in your own Google Cloud or AWS account that delete themselves when the lease ends. Built by the Marshal team.",
   "logo": "site/logo.svg",
   "suggestedPrompts": [
     "Check that Runlease is set up on this computer",
@@ -11,7 +11,7 @@
     "Show my Runlease machines and the time left on each lease"
   ],
   "author": {
-    "name": "Marshal Security",
+    "name": "The Marshal team",
     "url": "https://marshal.codes"
   },
   "homepage": "https://runlease.online",

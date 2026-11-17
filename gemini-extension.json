@@ -1,9 +1,14 @@
 {
   "name": "runlease",
-  "version": "0.3.0",
-  "description": "Leased spot machines for coding agents, in your own cloud: skills, slash commands and typed tools to launch a VM, use it and give it back.",
+  "version": "0.3.1",
+  "description": "Give your coding agent a real cloud machine when the task outgrows your laptop: long builds, code you would not run locally, test runs split across machines. Spot VMs in your own Google Cloud or AWS account that delete themselves when the lease ends. Built by the Marshal team.",
   "contextFileName": "rules/AGENTS.md",
   "mcpServers": {
-    "runlease": { "command": "runlease", "args": ["mcp"] }
+    "runlease": {
+      "command": "runlease",
+      "args": [
+        "mcp"
+      ]
+    }
   }
 }

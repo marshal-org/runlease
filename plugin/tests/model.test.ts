@@ -77,6 +77,7 @@ test('cost so far is the rate over the time since launch', () => {
 
 test('a cheap machine never reads as free', () => {
   // A small spot machine is a fraction of a cent an hour: two decimals would print $0.00.
+  expect(perHour(0.0004)).toBe('under $0.001/h')
   expect(perHour(0.0022)).toBe('$0.002/h')
   expect(perHour(0.15)).toBe('$0.15/h')
   expect(perHour(1.5)).toBe('$1.50/h')

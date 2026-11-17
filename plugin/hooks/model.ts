@@ -106,6 +106,7 @@ export function money(usd: number): string {
 
 /** A total hourly rate. Under ten cents it keeps the third decimal, or a small spot machine would read as free. */
 export function perHour(usd: number): string {
+  if (usd > 0 && usd < 0.001) return 'under $0.001/h'
   return `$${usd.toFixed(usd > 0 && usd < 0.1 ? 3 : 2)}/h`
 }
 

@@ -3,7 +3,7 @@ description: Launch a leased Runlease machine and report how to use it
 argument-hint: "[gcp|aws] [name] [lease, e.g. 1h]"
 ---
 
-Launch one Runlease machine using the `runlease:machine` skill.
+Launch one Runlease machine using the Runlease `machine` skill.
 
 Arguments given: `$ARGUMENTS`. Read them as, in any order: a cloud (`gcp` or `aws`), a machine name,
 and a lease length. For anything missing: use the saved default cloud if `runlease config` has one,

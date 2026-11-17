@@ -30,8 +30,8 @@ the agent that runs on each machine.
 
 ## 3. Sign-ins: the person does these, not you
 
-Each of these opens a browser or shows a code. Ask the person to run it (in Claude Code:
-`! <command>`), then continue.
+Each of these opens a browser or shows a code. Ask the person to run it in their own terminal (in
+Claude Code they can type `! <command>` at the prompt), then continue.
 
 | What | Command | When |
 |---|---|---|

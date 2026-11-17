@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "runlease": { "command": "runlease", "args": ["mcp"] }
+  }
+}

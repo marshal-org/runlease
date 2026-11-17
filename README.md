@@ -233,6 +233,18 @@ a live view of what is running:
 
 What it adds and what it holds Claude to: [the Claude Code plugin](docs/claude-plugin.md).
 
+## For Antigravity and the Gemini CLI
+
+The same skills, commands and typed tools install in Google's coding agents, without the live
+view:
+
+```bash
+agy plugin install https://github.com/marshal-org/runlease           # Antigravity
+gemini extensions install https://github.com/marshal-org/runlease    # Gemini CLI
+```
+
+What is included and what is not: [Antigravity and Gemini CLI](docs/google-agents.md).
+
 ## The relay
 
 A relay is one small Go binary. You have three choices:

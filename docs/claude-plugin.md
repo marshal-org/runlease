@@ -97,3 +97,15 @@ To work on the plugin: `claude plugin validate plugin`, `claude plugin test plug
 The plugin is free and so is the public relay. The machines run in your cloud account, on your
 bill, at spot prices. `runlease up` prints the hourly rate and the cost of the lease before it
 launches.
+
+## The plugin directory edition
+
+`claude-directory/` is the edition submitted to the Claude plugin directory: the same skills
+and slash commands, with no MCP server, no live view and no code file. The directory takes
+those only from an organization it has verified. Its skills and commands are copies:
+edit `plugin/`, then run `scripts/gen-agent-plugins.py`. Its `plugin.json` and `README.md` are
+written by hand, and the script's `--check` fails if its version differs from `plugin/`.
+
+```bash
+claude plugin validate claude-directory --profile directory --strict
+```

@@ -38,7 +38,8 @@ fi
 
 packages="[]"
 for f in "${bundles[@]}"; do
-  sha="$(sha256sum "$f" | cut -d' ' -f1)"
+  # macOS has shasum, not sha256sum.
+  sha="$( (sha256sum "$f" 2>/dev/null || shasum -a 256 "$f") | cut -d' ' -f1)"
   packages="$(jq -c \
     --arg url "${base}/$(basename "$f")" --arg version "$version" --arg sha "$sha" \
     '. + [{registryType: "mcpb", identifier: $url, version: $version, fileSha256: $sha, transport: {type: "stdio"}}]' \

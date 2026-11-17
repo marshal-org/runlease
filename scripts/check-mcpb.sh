@@ -32,7 +32,11 @@ unzip -q "$bundle" -d "$work/bundle"
 manifest="$work/bundle/manifest.json"
 command="$(jq -r '.server.mcp_config.command' "$manifest")"
 command="${command//\$\{__dirname\}/$work/bundle}"
-mapfile -t args < <(jq -r '.server.mcp_config.args[]' "$manifest")
+# Not mapfile: macOS ships bash 3.2, which does not have it.
+args=()
+while IFS= read -r arg; do
+  args+=("$arg")
+done < <(jq -r '.server.mcp_config.args[]' "$manifest")
 [ "$command" = "$work/bundle/$(jq -r '.server.entry_point' "$manifest")" ] ||
   { echo "check-mcpb: mcp_config.command and entry_point name different files" >&2; exit 1; }
 
@@ -40,10 +44,10 @@ printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"check-mcpb","version":"0"}}}' \
   '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' |
-  RUNLEASE_HOME="$work/home" "$command" "${args[@]}" 2>/dev/null > "$work/replies"
+  RUNLEASE_HOME="$work/home" "$command" "${args[@]}" 2> "$work/stderr.log" > "$work/replies" || true
 
 jq -e 'select(.id == 1) | .result.serverInfo.name == "runlease"' "$work/replies" >/dev/null ||
-  { echo "check-mcpb: the bundled server did not answer initialize" >&2; exit 1; }
+  { echo "check-mcpb: the bundled server did not answer initialize. It printed:" >&2; cat "$work/stderr.log" >&2; exit 1; }
 
 want="$(jq -r 'select(.id == 2) | .result.tools[].name' "$work/replies" | sort)"
 have="$(jq -r '.tools[].name' mcpb/manifest.json | sort)"
@@ -53,7 +57,8 @@ if [ -z "$want" ] || [ "$want" != "$have" ]; then
   exit 1
 fi
 
-sha="$(sha256sum "$bundle" | cut -d' ' -f1)"
+# macOS has shasum, not sha256sum.
+sha="$( (sha256sum "$bundle" 2>/dev/null || shasum -a 256 "$bundle") | cut -d' ' -f1)"
 scripts/gen-server-json.sh 0.0.0 "$work/dist" > "$work/server.json"
 jq -e --arg sha "$sha" --arg file "runlease-${goos}-${goarch}.mcpb" '
   .version == "0.0.0" and (.description | length) <= 100 and (.packages | length) == 1 and

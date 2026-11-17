@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/marshal-org/runlease/pkg/config"
 )
 
 type Manifest struct {
@@ -142,6 +144,7 @@ func Load(path string) (*Manifest, error) {
 	if err := yaml.Unmarshal(data, &m); err != nil {
 		return nil, fmt.Errorf("parsing manifest: %w", err)
 	}
+	m.Relay.Addr = config.NormalizeRelayAddr(m.Relay.Addr)
 	baseDir := filepath.Dir(path)
 	if err := m.resolveSetupFiles(baseDir); err != nil {
 		return nil, err

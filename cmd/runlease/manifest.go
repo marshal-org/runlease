@@ -297,7 +297,11 @@ func runManifestNew(cmd *cobra.Command, _ []string) error {
 	image := ask(imagePrompt, imageDefault)
 
 	fmt.Fprintln(out)
-	relayAddr := ask("Relay address (leave empty to skip)", cfg.Relay.Addr)
+	relayPrompt := "Relay address (leave empty to skip)"
+	if cfg.Relay.Addr != "" {
+		relayPrompt = "Relay address (Enter to keep, none for no relay)"
+	}
+	relayAddr := relayAnswer(ask(relayPrompt, cfg.Relay.Addr))
 
 	ttlDefault := cfg.Defaults.TTL
 	if ttlDefault == "" {

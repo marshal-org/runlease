@@ -126,7 +126,16 @@ var configureCmd = &cobra.Command{
 		cfg.Defaults.TTL = ask("Default TTL", ttlDefault)
 
 		fmt.Fprintln(out)
-		cfg.Relay.Addr = ask("Relay address (leave empty to skip)", cfg.Relay.Addr)
+		// The free public relay is offered when nothing is set, so pressing
+		// Enter gives a working setup. It is shown, never applied silently.
+		relayDefault := cfg.Relay.Addr
+		if relayDefault == "" {
+			relayDefault = publicRelay
+			fmt.Fprintf(out, "  The relay lets you reach machines that have no public IP.\n")
+			fmt.Fprintf(out, "  %s is the free public relay.\n", publicRelay)
+		}
+		fmt.Fprintf(out, "  Press Enter to keep it, type another address to replace it, or type none for no relay.\n")
+		cfg.Relay.Addr = relayAnswer(ask("Relay address", relayDefault))
 
 		if err := rlconfig.Save(path, cfg); err != nil {
 			return err
@@ -145,10 +154,14 @@ var configureCmd = &cobra.Command{
 			fmt.Fprintf(out, "   runlease up --size compute.medium --ttl 4h\n\n")
 			fmt.Fprintf(out, "📡 Relay configured — connect without a public IP:\n\n")
 			fmt.Fprintf(out, "   runlease connect <name>\n")
+			if cfg.Relay.Addr == publicRelay {
+				fmt.Fprintf(out, "\n🔑 The public relay needs a sign-in first:\n\n")
+				fmt.Fprintf(out, "   runlease login\n")
+			}
 		} else {
 			fmt.Fprintf(out, "   runlease up\n\n")
 			fmt.Fprintf(out, "💡 Tip: add a relay to connect without a public IP:\n\n")
-			fmt.Fprintf(out, "   runlease config set relay.addr wss://your-relay.example.com\n")
+			fmt.Fprintf(out, "   runlease config set relay.addr %s\n", publicRelay)
 		}
 		fmt.Fprintf(out, "\n📋 Need advanced options? (VPC, security groups, custom AMI, service accounts)\n\n")
 		fmt.Fprintf(out, "   runlease manifest new      — guided wizard with all available fields\n")
@@ -185,4 +198,14 @@ Valid keys:
 		fmt.Fprintf(cmd.OutOrStdout(), "Set %s = %s  (%s)\n", args[0], args[1], path)
 		return nil
 	},
+}
+
+// relayAnswer reads the answer to the relay question in a wizard: "none" (or
+// "-", "off", "skip") means no relay, anything else is an address.
+func relayAnswer(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "none", "-", "off", "skip", "no":
+		return ""
+	}
+	return rlconfig.NormalizeRelayAddr(v)
 }

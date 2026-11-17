@@ -71,7 +71,7 @@ func clientForSession(s signin.Session) *signin.Client {
 // relayFromFlagOrConfig resolves which relay an account command talks to.
 func relayFromFlagOrConfig() (string, error) {
 	if loginRelay != "" {
-		return loginRelay, nil
+		return config.NormalizeRelayAddr(loginRelay), nil
 	}
 	cfg, err := config.Load(defaultConfigPath())
 	if err != nil {
@@ -138,7 +138,8 @@ func fetchDiscovery(ctx context.Context, relayAddr string) (*relayDiscovery, err
 }
 
 // publicRelay is the free relay run by the project. It is only ever a
-// suggestion, and the one default: 'runlease login' with no relay chosen.
+// suggestion: the default of 'runlease login' with no relay chosen, and the
+// offered answer in 'runlease configure'.
 const publicRelay = "wss://connect.runlease.online"
 
 func runLogin(cmd *cobra.Command, _ []string) error {

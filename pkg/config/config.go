@@ -4,9 +4,27 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+// NormalizeRelayAddr turns a relay address as a person types it into the form
+// the rest of runlease uses: ws[s]://host[:port] or host:port. A relay is
+// reached over a WebSocket, but its address is also a web address, so people
+// write https://relay.example.com. That means the same relay as wss://.
+func NormalizeRelayAddr(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if i := strings.Index(addr, "://"); i >= 0 {
+		switch strings.ToLower(addr[:i]) {
+		case "https", "wss":
+			addr = "wss" + addr[i:]
+		case "http", "ws":
+			addr = "ws" + addr[i:]
+		}
+	}
+	return strings.TrimRight(addr, "/")
+}
 
 type Config struct {
 	Relay    RelayConfig    `yaml:"relay,omitempty"`
@@ -38,6 +56,7 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
+	c.Relay.Addr = NormalizeRelayAddr(c.Relay.Addr)
 	return &c, nil
 }
 
@@ -57,7 +76,7 @@ func Save(path string, c *Config) error {
 func (c *Config) Set(key, value string) error {
 	switch key {
 	case "relay.addr":
-		c.Relay.Addr = value
+		c.Relay.Addr = NormalizeRelayAddr(value)
 	case "defaults.provider":
 		c.Defaults.Provider = value
 	case "defaults.size":

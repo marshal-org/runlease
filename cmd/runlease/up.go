@@ -587,7 +587,7 @@ func buildQuickManifest() (*manifest.Manifest, error) {
 		}
 	}
 
-	relayAddr := quickRelay
+	relayAddr := rlconfig.NormalizeRelayAddr(quickRelay)
 	if relayAddr == "" {
 		relayAddr = cfg.Relay.Addr
 	}

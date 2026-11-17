@@ -25,6 +25,11 @@ pkg/lifecycle/        Reclaim daemon (TTL expiry sweeper)
 pkg/signin/           `runlease login`: Google device sign-in flow + saved session (~/.runlease/auth.json)
 deploy/relay/         Terraform module for a relay VM (gcp/) + tiers.example.yaml
 site/                 Project website, published by .github/workflows/pages.yml
+plugin/               Claude Code plugin: the source of truth for skills and commands
+skills/ commands/ antigravity/ rules/ .antigravity-plugin/ gemini-extension.json mcp_config.json
+                      Antigravity plugin + Gemini CLI extension. skills/, commands/ and antigravity/
+                      are generated from plugin/ by scripts/gen-agent-plugins.py (--check fails on
+                      drift). See docs/google-agents.md
 docs/                 Reference + integration docs (Mermaid only — no ASCII diagrams)
                       - manifest.md            full schema reference (CLI: `runlease manifest schema`)
 examples/manifests/   Sample manifest YAMLs

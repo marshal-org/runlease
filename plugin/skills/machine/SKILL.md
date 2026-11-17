@@ -9,8 +9,9 @@ A Runlease machine is a spot VM in the person's own cloud account. It costs them
 until it is deleted, and it deletes itself when its lease ends. Treat it like a borrowed tool:
 take the smallest one for the shortest time, and give it back.
 
-If `runlease` is missing or a command fails on a sign-in, use the `runlease:setup` skill first.
-If the `runlease_*` tools are available, prefer them to the shell: same actions, typed arguments.
+If `runlease` is missing or a command fails on a sign-in, use the Runlease `setup` skill first.
+If the Runlease MCP tools are available (`runlease_up`, `runlease_exec` and the rest; some agents
+show them with a prefix), prefer them to the shell: same actions, typed arguments.
 
 ## The loop
 

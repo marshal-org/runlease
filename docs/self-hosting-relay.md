@@ -19,7 +19,7 @@ For what the relay can and cannot see, read the [threat model](security.md).
 ## Get the binaries
 
 ```bash
-VERSION=v0.5.0
+VERSION=v0.7.1
 BASE="https://github.com/marshal-org/runlease/releases/download/${VERSION}"
 curl -fsSLO "${BASE}/runlease-relay-linux-amd64"
 curl -fsSLO "${BASE}/runlease-agent-linux-amd64"

@@ -30,15 +30,15 @@ Read [self-hosting the relay](../../../docs/self-hosting-relay.md) for what the 
 
 ```hcl
 module "relay" {
-  source = "github.com/marshal-org/runlease//deploy/relay/gcp?ref=v0.5.0"
+  source = "github.com/marshal-org/runlease//deploy/relay/gcp?ref=v0.7.1"
 
   project_id = "my-relay-project"
   hostname   = "relay.example.com"
   acme_email = "ops@example.com"
 
-  relay_binary_url = "https://github.com/marshal-org/runlease/releases/download/v0.5.0/runlease-relay-linux-amd64"
+  relay_binary_url = "https://github.com/marshal-org/runlease/releases/download/v0.7.1/runlease-relay-linux-amd64"
   relay_sha256     = "<from checksums.txt>"
-  agent_binary_url = "https://github.com/marshal-org/runlease/releases/download/v0.5.0/runlease-agent-linux-amd64"
+  agent_binary_url = "https://github.com/marshal-org/runlease/releases/download/v0.7.1/runlease-agent-linux-amd64"
   agent_sha256     = "<from checksums.txt>"
 
   google_client_id     = "1234567890-abc.apps.googleusercontent.com"
@@ -79,8 +79,8 @@ When the release is not publicly downloadable, upload the two binaries to a buck
 project and give `gs://` URLs:
 
 ```hcl
-  relay_binary_url = "gs://my-relay-binaries/v0.5.0/runlease-relay-linux-amd64"
-  agent_binary_url = "gs://my-relay-binaries/v0.5.0/runlease-agent-linux-amd64"
+  relay_binary_url = "gs://my-relay-binaries/v0.7.1/runlease-relay-linux-amd64"
+  agent_binary_url = "gs://my-relay-binaries/v0.7.1/runlease-agent-linux-amd64"
   binary_bucket    = "my-relay-binaries"
 ```
 

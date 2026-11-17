@@ -52,14 +52,14 @@
 </ol>
 <div class="scroll"><table>
   <tr><th>Setting</th><th>Default</th><th>Meaning</th></tr>
-  <tr><td><code>RUNLEASE_VERSION</code></td><td><code>latest</code></td><td>A specific release, for example <code>v0.5.0</code></td></tr>
+  <tr><td><code>RUNLEASE_VERSION</code></td><td><code>latest</code></td><td>A specific release, for example <code>v0.7.1</code></td></tr>
   <tr><td><code>RUNLEASE_INSTALL_DIR</code></td><td><code>~/.local/bin</code></td><td>Where the binary goes</td></tr>
 </table></div>
 
 <h2 id="manual">Install by hand</h2>
 <p class="measure">The script is a convenience. These are the same steps, and they are the way to install on Windows.</p>
 <pre><span class="c"># pick the latest release, and your platform</span>
-<span class="p">$</span> VERSION=v0.5.0
+<span class="p">$</span> VERSION=v0.7.1
 <span class="p">$</span> OS=linux ARCH=amd64      <span class="c"># or darwin / arm64</span>
 <span class="p">$</span> BASE=https://github.com/marshal-org/runlease/releases/download/$VERSION
 
@@ -193,15 +193,17 @@ relay:
   </div>
   <div class="threat-panel" role="tabpanel" id="mp-gpu" aria-labelledby="mt-gpu">
     <h3>GPU job</h3>
-    <p class="who">One spot GPU for a short job. File: <a href="https://github.com/marshal-org/runlease/blob/main/examples/manifests/gpu.yaml"><code>examples/manifests/gpu.yaml</code></a></p>
-<pre># One spot GPU for a short job. Spot GPUs are reclaimed more often than CPUs,
-# so keep the work resumable. Check your GPU quota in the region first.
+    <p class="who">One spot GPU for a short job, on AWS. File: <a href="https://github.com/marshal-org/runlease/blob/main/examples/manifests/gpu.yaml"><code>examples/manifests/gpu.yaml</code></a></p>
+<pre># One spot GPU for a short job, on AWS. Spot GPUs are reclaimed more often than
+# CPUs, so keep the work resumable. Check your GPU spot quota in the region first.
+# The default image has no NVIDIA driver: install one in setup, or set baseImage
+# to an AMI that has it.
 #
 #   runlease up -m gpu.yaml
 name: gpu-job
-provider: gcp
-region: us-central1-a
-instanceClass: compute.gpu     # about 4-8 vCPU / 16-32 GB and one GPU
+provider: aws
+region: us-east-1              # a region
+instanceClass: compute.gpu     # g4dn.xlarge: 4 vCPU / 16 GB and one NVIDIA T4
 diskSizeGb: 100
 reclaim:
   ttl: 3h

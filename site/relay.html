@@ -129,15 +129,15 @@
 <h3>With Terraform, on Google Cloud</h3>
 <p class="measure">The repository ships a module that stands up everything on this page on one VM: its own network, inbound 80 and 443 only, a static address, a service account with no cloud access, checksum-verified binaries and automatic TLS. It is the module the public relay runs on.</p>
 <pre><span class="k">module</span> "relay" {
-  source = "github.com/marshal-org/runlease//deploy/relay/gcp?ref=v0.5.0"
+  source = "github.com/marshal-org/runlease//deploy/relay/gcp?ref=v0.7.1"
 
   project_id = "my-relay-project"
   hostname   = "relay.example.com"
   acme_email = "ops@example.com"
 
-  relay_binary_url = "https://github.com/marshal-org/runlease/releases/download/v0.5.0/runlease-relay-linux-amd64"
+  relay_binary_url = "https://github.com/marshal-org/runlease/releases/download/v0.7.1/runlease-relay-linux-amd64"
   relay_sha256     = "&lt;from checksums.txt&gt;"
-  agent_binary_url = "https://github.com/marshal-org/runlease/releases/download/v0.5.0/runlease-agent-linux-amd64"
+  agent_binary_url = "https://github.com/marshal-org/runlease/releases/download/v0.7.1/runlease-agent-linux-amd64"
   agent_sha256     = "&lt;from checksums.txt&gt;"
 
   <span class="c"># a private relay for one organisation</span>
@@ -147,7 +147,7 @@
 <p class="measure">Point the hostname's A record at the module's <code>address</code> output. Create the DNS record before the VM, or restart the VM once the record resolves: it asks for its certificate at boot.</p>
 
 <h3>By hand</h3>
-<pre><span class="p">$</span> VERSION=v0.5.0
+<pre><span class="p">$</span> VERSION=v0.7.1
 <span class="p">$</span> BASE=https://github.com/marshal-org/runlease/releases/download/$VERSION
 <span class="p">$</span> curl -fsSLO $BASE/runlease-relay-linux-amd64
 <span class="p">$</span> curl -fsSLO $BASE/runlease-agent-linux-amd64

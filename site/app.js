@@ -534,7 +534,7 @@
 
     async function doctor() {
       var rows = [
-        ['ok', 'CLI version: v0.6.0 (your browser)'],
+        ['ok', 'CLI version: v0.7.1 (your browser)'],
         ['ok', 'Relay sign-in: signed in as you, tier demo, ' + sim.machines.length + ' of ' + LIMIT + ' machines in use'],
         ['ok', 'Relay agent: the relay serves the agent this CLI expects'],
         ['ok', 'Cloud credentials: project your-project, as you'],
@@ -557,7 +557,7 @@
         case 'sync': return print('Synced ' + sim.machines.length + ' instance(s).');
         case 'doctor': return doctor();
         case 'whoami': print('you on wss://connect.runlease.online (simulated)'); return print('tier: demo (' + sim.machines.length + ' of ' + LIMIT + ' machines in use, time ×' + SCALE + ')');
-        case 'version': return print('v0.6.0 (the one in this page is a simulation)');
+        case 'version': return print('v0.7.1 (the one in this page is a simulation)');
         case 'login': return print('Already signed in, in the sense that none of this is real.', 'd');
         case 'connect': case 'ssh': return print('An interactive shell is the one thing a web page cannot fake well. Install it: it takes ten seconds.', 'd');
         case 'forward': if (rest[0] && !target(rest[0])) return; if (rest[0]) sim.emit('exec', sim.get(rest[0])); print('🔀 -L 127.0.0.1:3000 → localhost:3000 (via SSH)'); return print('Reached through the tunnel. No port is opened on the machine.', 'd');

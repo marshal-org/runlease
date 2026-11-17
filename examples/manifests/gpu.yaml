@@ -1,11 +1,13 @@
-# One spot GPU for a short job. Spot GPUs are reclaimed more often than CPUs,
-# so keep the work resumable. Check your GPU quota in the region first.
+# One spot GPU for a short job, on AWS. Spot GPUs are reclaimed more often than
+# CPUs, so keep the work resumable. Check your GPU spot quota in the region first.
+# The default image has no NVIDIA driver: install one in setup, or set baseImage
+# to an AMI that has it.
 #
 #   runlease up -m gpu.yaml
 name: gpu-job
-provider: gcp
-region: us-central1-a
-instanceClass: compute.gpu     # about 4-8 vCPU / 16-32 GB and one GPU
+provider: aws
+region: us-east-1              # a region
+instanceClass: compute.gpu     # g4dn.xlarge: 4 vCPU / 16 GB and one NVIDIA T4
 diskSizeGb: 100
 reclaim:
   ttl: 3h

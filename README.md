@@ -58,7 +58,7 @@ The [script](site/install.sh) downloads the release for your machine, checks its
 `checksums.txt`, and puts `runlease` in `~/.local/bin`. It uses no sudo. To do the same by hand:
 
 ```bash
-VERSION=v0.5.0   # pick the latest
+VERSION=v0.7.1   # pick the latest
 OS=linux ARCH=amd64   # or darwin / arm64
 curl -fsSLO "https://github.com/marshal-org/runlease/releases/download/${VERSION}/runlease-${OS}-${ARCH}"
 curl -fsSLO "https://github.com/marshal-org/runlease/releases/download/${VERSION}/checksums.txt"

@@ -13,6 +13,10 @@ This script writes:
   skills/<name>/SKILL.md                         copy of plugin/skills/<name>/SKILL.md
   commands/runlease/<cmd>.toml                   from plugin/commands/<cmd>.md (Gemini CLI)
   antigravity/skills/runlease-<cmd>/SKILL.md     from plugin/commands/<cmd>.md (Antigravity)
+  claude-directory/{skills,commands}/...         copies, plus LICENSE and the icon: the edition
+                                                 submitted to the Claude plugin directory, which
+                                                 takes no MCP server, mod or code file from an
+                                                 organization it has not verified
 
 Usage:
   scripts/gen-agent-plugins.py           write the files
@@ -34,6 +38,10 @@ SRC_COMMANDS = ROOT / "plugin" / "commands"
 OUT_SKILLS = ROOT / "skills"
 OUT_GEMINI_COMMANDS = ROOT / "commands" / "runlease"
 OUT_AGY_COMMAND_SKILLS = ROOT / "antigravity" / "skills"
+OUT_DIRECTORY = ROOT / "claude-directory"
+# Copied as they are into the directory edition. Its plugin.json and README.md are hand-written.
+DIRECTORY_COPIES = ("skills", "commands", "LICENSE", ".claude-plugin/icon.png")
+DIRECTORY_HAND_WRITTEN = (".claude-plugin/plugin.json", "README.md")
 
 # What a command's argument placeholder becomes in each format.
 CLAUDE_ARGS = "`$ARGUMENTS`"
@@ -113,15 +121,25 @@ def wanted():
         out[OUT_GEMINI_COMMANDS / f"{name}.toml"] = gemini_command(name, fields, body).encode()
         skill, text = antigravity_command_skill(name, fields, body)
         out[OUT_AGY_COMMAND_SKILLS / skill / "SKILL.md"] = text.encode()
+    plugin = ROOT / "plugin"
+    for item in DIRECTORY_COPIES:
+        src = plugin / item
+        if not src.exists():
+            sys.exit(f"{src}: missing, and the directory edition needs it")
+        files = [src] if src.is_file() else sorted(f for f in src.rglob("*") if f.is_file())
+        for f in files:
+            out[OUT_DIRECTORY / f.relative_to(plugin)] = f.read_bytes()
     return out
 
 
 def existing():
     found = set()
-    for base in (OUT_SKILLS, OUT_GEMINI_COMMANDS, OUT_AGY_COMMAND_SKILLS):
+    for base in (OUT_SKILLS, OUT_GEMINI_COMMANDS, OUT_AGY_COMMAND_SKILLS, OUT_DIRECTORY):
         if base.is_dir():
             found.update(p for p in base.rglob("*") if p.is_file())
-    return found
+    # Everything else in the directory edition must be a copy: one stray code file there
+    # and the directory refuses the submission.
+    return found - {OUT_DIRECTORY / rel for rel in DIRECTORY_HAND_WRITTEN}
 
 
 def manifest_problems():
@@ -134,7 +152,15 @@ def manifest_problems():
     claude = load("plugin/.claude-plugin/plugin.json")
     antigravity = load(".antigravity-plugin/plugin.json")
     gemini = load("gemini-extension.json")
-    for label, manifest in ((".antigravity-plugin/plugin.json", antigravity), ("gemini-extension.json", gemini)):
+    directory = load("claude-directory/.claude-plugin/plugin.json")
+    for key in ("mcpServers", "hooks", "types", "userConfig"):
+        if key in directory:
+            problems.append(f"claude-directory/.claude-plugin/plugin.json: {key} is not allowed in the directory edition")
+    for label, manifest in (
+        (".antigravity-plugin/plugin.json", antigravity),
+        ("gemini-extension.json", gemini),
+        ("claude-directory/.claude-plugin/plugin.json", directory),
+    ):
         if manifest.get("version") != claude["version"]:
             problems.append(
                 f"{label}: version {manifest.get('version')} is not the plugin/ version {claude['version']}"

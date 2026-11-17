@@ -1,0 +1,18 @@
+---
+description: Launch a leased Runlease machine and report how to use it
+argument-hint: "[gcp|aws] [name] [lease, e.g. 1h]"
+---
+
+Launch one Runlease machine using the Runlease `machine` skill.
+
+Arguments given: `$ARGUMENTS`. Read them as, in any order: a cloud (`gcp` or `aws`), a machine name,
+and a lease length. For anything missing: use the saved default cloud if `runlease config` has one,
+otherwise ask which cloud; name the machine after the current task; use a 1 hour lease.
+
+Steps:
+1. Run `runlease up -p CLOUD -n NAME --ttl LEASE -d`.
+2. Show the `☁` line it printed, so the person sees the project or account used.
+3. If it stops for a missing NAT gateway or a sign-in, show the choices it lists and wait. Do not
+   add `--public-ip` on your own.
+4. Wait until `runlease exec NAME -- true` succeeds, then report: name, size, hourly rate, when the
+   lease ends, and the commands to run something on it and to delete it.

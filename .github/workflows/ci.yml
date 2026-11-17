@@ -60,6 +60,9 @@ jobs:
       # stops the upload.
       - name: MCP bundle builds and lists the server's tools
         run: scripts/check-mcpb.sh
+      # skills/, commands/, antigravity/ and claude-directory/ are copies of plugin/.
+      - name: Generated plugin copies match plugin/
+        run: python3 scripts/gen-agent-plugins.py --check
 
   policy:
     name: Workflow policy

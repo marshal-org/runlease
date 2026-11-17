@@ -3,11 +3,11 @@
   "name": "runlease",
   "display_name": "Runlease",
   "version": "0.0.0",
-  "description": "Lease short-lived cloud spot machines in your own account: launch, run commands, copy files, delete.",
-  "long_description": "Runlease launches a spot machine in your own GCP or AWS account, reaches it through a relay that cannot read the session, and deletes it when its lease ends. This bundle runs `runlease mcp`, which gives an MCP client typed tools to launch a machine, run a command on it, copy files, extend the lease and delete it.\n\nThe server uses the same sign-in, config and cloud credentials as the `runlease` CLI. Set those up in a terminal first: see https://github.com/marshal-org/runlease/blob/main/docs/mcp.md. Machines are billed to your own cloud account until they are deleted.",
+  "description": "Give your coding agent a real cloud machine when the task outgrows your laptop: spot VMs in your own Google Cloud or AWS account that delete themselves when the lease ends. Built by the Marshal team.",
+  "long_description": "Runlease launches a spot machine in your own GCP or AWS account, reaches it through a relay that cannot read the session, and deletes it when its lease ends. This bundle runs `runlease mcp`, which gives an MCP client typed tools to launch a machine, run a command on it, copy files, extend the lease and delete it.\n\nThe server uses the same sign-in, config and cloud credentials as the `runlease` CLI. Set those up in a terminal first: see https://github.com/marshal-org/runlease/blob/main/docs/mcp.md. Machines are billed to your own cloud account until they are deleted.\n\nRunlease is open source (Apache-2.0) and built by the Marshal team: https://marshal.codes",
   "author": {
-    "name": "Marshal Security",
-    "url": "https://github.com/marshal-org"
+    "name": "The Marshal team",
+    "url": "https://marshal.codes"
   },
   "repository": {
     "type": "git",
@@ -21,7 +21,9 @@
     "entry_point": "server/runlease",
     "mcp_config": {
       "command": "${__dirname}/server/runlease",
-      "args": ["mcp"],
+      "args": [
+        "mcp"
+      ],
       "platform_overrides": {
         "win32": {
           "command": "${__dirname}/server/runlease.exe"
@@ -67,9 +69,21 @@
       "description": "Check that this computer can launch machines and report what to fix. Read-only."
     }
   ],
-  "keywords": ["cloud", "spot", "vm", "ssh", "sandbox", "gcp", "aws"],
+  "keywords": [
+    "cloud",
+    "spot",
+    "vm",
+    "ssh",
+    "sandbox",
+    "gcp",
+    "aws"
+  ],
   "license": "Apache-2.0",
   "compatibility": {
-    "platforms": ["linux", "darwin", "win32"]
+    "platforms": [
+      "linux",
+      "darwin",
+      "win32"
+    ]
   }
 }

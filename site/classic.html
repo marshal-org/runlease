@@ -344,7 +344,7 @@
   footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
 
   @media (max-width: 900px) {
-    .line { grid-template-columns: minmax(0, 1fr); border-top: 1px solid var(--rule); }
+    .line { grid-template-columns: minmax(0, 1fr); border-top: 1px solid var(--rule); border-left: 0; }
     .line li { display: flex; align-items: baseline; gap: 14px; padding: 12px 14px; border-top: 0; border-left: 2px solid var(--rule); }
     .line li::before { margin-bottom: 0; }
     .line li b { margin: 0 0 0 auto; }
@@ -916,7 +916,7 @@
       <div class="part">
         <p class="k">Verify · Runlease</p>
         <h3>A machine for every agent, so nobody waits for staging.</h3>
-        <p>Ten agents and one shared test environment means nine are waiting and one is breaking it. The guide's answer is an environment for every agent, thrown away afterwards.</p>
+        <p>With ten agents and one shared test environment, nine are waiting and one is breaking it. The guide's answer is an environment for every agent, thrown away afterwards.</p>
         <p>Runlease supplies the machine for that: a spot VM in your own cloud account for each agent, gone when its lease ends. Bringing your product up on it is still your part of the job.</p>
         <p><a href="https://thesoftwarefactory.site/playbook/environment-per-agent/">The play: give every agent its own environment</a></p>
       </div>

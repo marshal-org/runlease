@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.0](https://github.com/marshal-org/runlease/compare/v0.8.0...v0.9.0) (2026-11-17)
+
+
+### Features
+
+* **plugin:** a README, directory metadata and the new launch messages; show the live view on the site ([#72](https://github.com/marshal-org/runlease/issues/72)) ([1598a6d](https://github.com/marshal-org/runlease/commit/1598a6dd258a81974445f3920b8c6d0d41d49226))
+* **up:** pick the zone, region and network a launch needs, before anything is created ([#70](https://github.com/marshal-org/runlease/issues/70)) ([c451ccc](https://github.com/marshal-org/runlease/commit/c451ccc10eef85222618f1ca455f2db214474938))
+
 ## [0.8.0](https://github.com/marshal-org/runlease/compare/v0.7.2...v0.8.0) (2026-11-17)
 
 

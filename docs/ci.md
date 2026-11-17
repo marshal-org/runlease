@@ -99,6 +99,12 @@ Releases are cut by [release-please](https://github.com/googleapis/release-pleas
 conventional commits: `feat` bumps the minor version, `fix` the patch. Merging the release pull
 request creates the tag and the GitHub Release, and the same run builds and uploads the binaries.
 
+A commit that changes only files under `site/` never cuts a release, whatever its type
+(`exclude-paths` in `.release-please-config.json`). The website, `install.sh` included, is
+published by `pages.yml` on its own, and a release is never cheap: every release has a new agent
+digest, so the public relay has to be redeployed with it. A commit that touches `site/` and
+anything else still counts.
+
 The build order matters:
 
 1. **Agent and relay** are built first, for linux/amd64 and linux/arm64.

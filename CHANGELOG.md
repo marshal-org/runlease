@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.2](https://github.com/marshal-org/runlease/compare/v0.7.1...v0.7.2) (2026-11-17)
+
+
+### Bug Fixes
+
+* **cli:** accept an https relay address and offer the public relay in configure ([#63](https://github.com/marshal-org/runlease/issues/63)) ([0a4afb3](https://github.com/marshal-org/runlease/commit/0a4afb3f7991a68531c14f75c5d7dbc09d7d4c67))
+* **cli:** name the public relay correctly, list every size, and report the real tier at login ([#60](https://github.com/marshal-org/runlease/issues/60)) ([ce7c560](https://github.com/marshal-org/runlease/commit/ce7c560a4301526698b64c3c9c7ca00482e7acff))
+
 ## [0.7.1](https://github.com/marshal-org/runlease/compare/v0.7.0...v0.7.1) (2026-11-16)
 
 

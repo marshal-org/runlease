@@ -41,6 +41,7 @@ OUT_AGY_COMMAND_SKILLS = ROOT / "antigravity" / "skills"
 OUT_DIRECTORY = ROOT / "claude-directory"
 # Copied as they are into the directory edition. Its plugin.json and README.md are hand-written.
 DIRECTORY_COPIES = ("skills", "commands", "LICENSE", ".claude-plugin/icon.png")
+DIRECTORY_HAND_WRITTEN = (".claude-plugin/plugin.json", "README.md")
 
 # What a command's argument placeholder becomes in each format.
 CLAUDE_ARGS = "`$ARGUMENTS`"
@@ -123,6 +124,8 @@ def wanted():
     plugin = ROOT / "plugin"
     for item in DIRECTORY_COPIES:
         src = plugin / item
+        if not src.exists():
+            sys.exit(f"{src}: missing, and the directory edition needs it")
         files = [src] if src.is_file() else sorted(f for f in src.rglob("*") if f.is_file())
         for f in files:
             out[OUT_DIRECTORY / f.relative_to(plugin)] = f.read_bytes()
@@ -131,12 +134,12 @@ def wanted():
 
 def existing():
     found = set()
-    bases = [OUT_SKILLS, OUT_GEMINI_COMMANDS, OUT_AGY_COMMAND_SKILLS]
-    bases += [OUT_DIRECTORY / "skills", OUT_DIRECTORY / "commands"]
-    for base in bases:
+    for base in (OUT_SKILLS, OUT_GEMINI_COMMANDS, OUT_AGY_COMMAND_SKILLS, OUT_DIRECTORY):
         if base.is_dir():
             found.update(p for p in base.rglob("*") if p.is_file())
-    return found
+    # Everything else in the directory edition must be a copy: one stray code file there
+    # and the directory refuses the submission.
+    return found - {OUT_DIRECTORY / rel for rel in DIRECTORY_HAND_WRITTEN}
 
 
 def manifest_problems():

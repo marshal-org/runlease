@@ -30,13 +30,22 @@ type ec2API interface {
 }
 
 type Provider struct {
-	ec2          ec2API
-	sts          stsAPI // nil in tests: the account line is then left out
-	region       string
+	ec2    ec2API
+	sts    stsAPI // nil in tests: the account line is then left out
+	region string
+	// zone is the availability zone asked for in place of a region
+	// ("eu-north-1a"), or empty. ResolvePlacement picks the subnet in it.
+	zone string
+	// ec2In builds a client for another region. ResolvePlacement uses it to
+	// find the regions this account may use, and to move to one of them.
+	ec2In        func(region string) ec2API
 	pollInterval time.Duration
 }
 
+// New returns a provider for region. An availability zone (eu-north-1a) is
+// accepted too: the provider works in its region.
 func New(ctx context.Context, region string) (*Provider, error) {
+	region, zone := SplitZone(region)
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
 	if err != nil {
 		return nil, fmt.Errorf("loading AWS config: %w", err)
@@ -45,11 +54,20 @@ func New(ctx context.Context, region string) (*Provider, error) {
 		ec2: ec2.NewFromConfig(cfg),
 		// Who the caller is does not depend on the region, and asking in a
 		// region the account has not enabled fails as if the sign-in were bad.
-		sts:          sts.NewFromConfig(cfg, func(o *sts.Options) { o.Region = identityRegion(region) }),
-		region:       region,
+		sts:    sts.NewFromConfig(cfg, func(o *sts.Options) { o.Region = identityRegion(region) }),
+		region: region,
+		zone:   zone,
+		ec2In: func(r string) ec2API {
+			return ec2.NewFromConfig(cfg, func(o *ec2.Options) { o.Region = r })
+		},
 		pollInterval: 5 * time.Second,
 	}, nil
 }
+
+// Region is the region this provider works in. It differs from the one New
+// was given when that was an availability zone, or when ResolvePlacement
+// moved to the one region the account may use.
+func (p *Provider) Region() string { return p.region }
 
 func (p *Provider) RequestSpot(ctx context.Context, spec provider.InstanceSpec) (*provider.InstanceHandle, error) {
 	encoded := base64.StdEncoding.EncodeToString([]byte(spec.UserData))

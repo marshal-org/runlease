@@ -94,9 +94,9 @@ func TestCheckAccessAndRegion(t *testing.T) {
 	if err := p.CheckRegion(context.Background()); err != nil {
 		t.Errorf("CheckRegion: %v", err)
 	}
-	p.zone = "us-central1"
-	if err := p.CheckRegion(context.Background()); err == nil || !strings.Contains(err.Error(), "is not a zone") {
-		t.Errorf("a region where a zone is needed: err = %v", err)
+	p.zone = "us-central9"
+	if err := p.CheckRegion(context.Background()); !errors.Is(err, provider.ErrBadRegion) {
+		t.Errorf("a region that does not exist: err = %v, want ErrBadRegion", err)
 	}
 	p.projectID = "gone"
 	if err := p.CheckAccess(context.Background()); !errors.Is(err, provider.ErrProject) {

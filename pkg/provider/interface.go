@@ -145,6 +145,42 @@ type ManagedLister interface {
 // itself failing.
 var ErrNoNetwork = errors.New("no network to launch on")
 
+// ErrBadRegion is returned (wrapped) by Placer.ResolvePlacement when the
+// region or zone asked for does not exist.
+var ErrBadRegion = errors.New("no such region or zone")
+
+// PlacementRequest is what the user said about where to launch.
+type PlacementRequest struct {
+	Network string // GCP only
+	Subnet  string
+	// AnyRegion says the region was not chosen for this launch (it is
+	// runlease's default, or the one the cloud's own setup names), so the
+	// provider may move to the one region that can be used.
+	AnyRegion bool
+	// PublicIP says whether the machine is to get a public IP, which decides
+	// the kind of subnet it needs when the provider has to pick one.
+	PublicIP bool
+}
+
+// Placement is where a launch lands once the provider has filled in what the
+// user left unsaid.
+type Placement struct {
+	Region  string // AWS region or GCP zone
+	Network string
+	Subnet  string
+	// Notes has one line for each thing the provider chose itself.
+	Notes []string
+}
+
+// Placer is implemented by providers that can work out, with read-only calls,
+// the zone and network a launch should use when they were not all named. The
+// provider launches in the returned Region from then on. A request that
+// cannot work is an error wrapping ErrBadRegion or ErrNoNetwork; any other
+// error means the check itself failed.
+type Placer interface {
+	ResolvePlacement(ctx context.Context, req PlacementRequest) (*Placement, error)
+}
+
 // ErrNoProject is returned (wrapped) by a provider that needs a project and
 // could not find which one to use.
 var ErrNoProject = errors.New("no project is set")

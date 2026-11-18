@@ -2,7 +2,7 @@
   "$schema": "https://antigravity.google/schemas/v1/plugin.json",
   "name": "runlease",
   "displayName": "Runlease",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Give your coding agent a real cloud machine when the task outgrows your laptop: long builds, code you would not run locally, test runs split across machines. Spot VMs in your own Google Cloud or AWS account that delete themselves when the lease ends. Built by the Marshal team.",
   "logo": "site/logo.svg",
   "suggestedPrompts": [

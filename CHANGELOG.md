@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/marshal-org/runlease/compare/v0.9.0...v0.10.0) (2026-11-18)
+
+
+### Features
+
+* **relay:** serve every CLI release its own agent by digest ([#78](https://github.com/marshal-org/runlease/issues/78)) ([b976a8f](https://github.com/marshal-org/runlease/commit/b976a8f25bb5d7748c68a099d8e8cbab0fd4ce8e))
+
 ## [0.9.0](https://github.com/marshal-org/runlease/compare/v0.8.0...v0.9.0) (2026-11-17)
 
 

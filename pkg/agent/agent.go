@@ -47,7 +47,7 @@ func RunOnce(cfg Config) error {
 	wsNet := relay.NewWSConn(ws)
 	defer wsNet.Close()
 
-	if err := wsSend(ws, map[string]string{"role": "instance", "token": cfg.Token}); err != nil {
+	if err := wsSend(ws, map[string]string{"role": "instance", "token": cfg.Token, "proto": relay.ProtocolString}); err != nil {
 		return fmt.Errorf("send handshake: %w", err)
 	}
 	resp, err := wsRecv(ws)

@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -75,8 +75,15 @@ func shortTok(tok string) string {
 //
 // Config holds relay server configuration.
 type Config struct {
-	AgentPath string     // path to runlease-agent binary served at GET /agent; empty disables
-	Auth      AuthConfig // Google OAuth allow-list; zero value disables auth
+	AgentPath string // path to runlease-agent binary served at GET /agent; empty disables
+	// AgentCacheDir keeps the agents of other releases, fetched from
+	// AgentReleaseURL and served at GET /agent/sha256/<hex>. Empty serves only
+	// the agent at AgentPath by digest.
+	AgentCacheDir string
+	// AgentReleaseURL is where an agent of another release is fetched from;
+	// {version} is replaced by its tag. Empty turns fetching off.
+	AgentReleaseURL string
+	Auth            AuthConfig // Google OAuth allow-list; zero value disables auth
 	// MaxSlots caps the number of live slots. Registration is refused once the
 	// cap is reached, so one caller cannot exhaust the relay's memory. Zero
 	// means no cap.
@@ -96,6 +103,7 @@ type Config struct {
 type Server struct {
 	log      *slog.Logger
 	cfg      Config
+	agents   *agentStore // nil when the relay serves no agent
 	upgrader websocket.Upgrader
 	mu       sync.Mutex
 	slots    map[string]*slot // keyed by token
@@ -131,6 +139,14 @@ func New(log *slog.Logger, cfg Config) *Server {
 		owned:    make(map[string]int),
 	}
 	s.live.Store(cfg.Tiers)
+	if cfg.AgentPath != "" || cfg.AgentCacheDir != "" {
+		st, err := newAgentStore(cfg.AgentCacheDir, cfg.AgentReleaseURL, cfg.AgentPath)
+		if err != nil {
+			log.Error("agents by digest are off", "err", err)
+		} else {
+			s.agents = st
+		}
+	}
 	return s
 }
 
@@ -151,6 +167,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/health":
 		w.WriteHeader(http.StatusOK)
 	default:
+		if strings.HasPrefix(r.URL.Path, "/agent/sha256/") {
+			s.serveAgentByDigest(w, r)
+			return
+		}
 		http.NotFound(w, r)
 	}
 }
@@ -222,9 +242,22 @@ func newWSConn(ws *websocket.Conn) net.Conn {
 //   ← {"status":"connected"}
 //   raw SSH bytes (relay bridges to a fresh yamux stream against the agent)
 
+// The wire protocol between CLI, relay and agent. A sender puts Protocol in
+// its handshake; a relay accepts MinProtocol to MaxProtocol. A handshake with
+// no protocol is version 1 (every release before the field existed). Raise
+// MaxProtocol for an additive change; raise MinProtocol only to drop old
+// clients on purpose. The value is a string so a reply stays readable by old
+// agents, which decode the handshake as map[string]string.
+const (
+	Protocol    = 1
+	MinProtocol = 1
+	MaxProtocol = 1
+)
+
 type wireMsg struct {
 	Role    string `json:"role,omitempty"`
 	Token   string `json:"token,omitempty"`
+	Proto   string `json:"proto,omitempty"`
 	Status  string `json:"status,omitempty"`
 	Message string `json:"message,omitempty"`
 }
@@ -256,6 +289,12 @@ func (s *Server) dispatch(conn net.Conn, bearer, client string) {
 
 	if err != nil {
 		writeMsg(conn, wireMsg{Status: "error", Message: "invalid handshake"}) //nolint:errcheck
+		conn.Close()
+		return
+	}
+	if p, ok := protocolOf(hs.Proto); !ok || p < MinProtocol || p > MaxProtocol {
+		writeMsg(conn, wireMsg{Status: "error", Message: fmt.Sprintf( //nolint:errcheck
+			"this relay speaks protocol %d to %d and the other side speaks %q. Upgrade runlease (a machine gets its agent from the CLI that launched it)", MinProtocol, MaxProtocol, hs.Proto)})
 		conn.Close()
 		return
 	}
@@ -563,7 +602,10 @@ func (s *Server) handleDiscovery(w http.ResponseWriter, _ *http.Request) {
 			"clientSecret": s.cfg.GoogleClientSecret,
 		}
 	}
-	doc := map[string]any{"version": s.cfg.Version, "auth": auth}
+	doc := map[string]any{"version": s.cfg.Version, "auth": auth, "protocol": map[string]int{"min": MinProtocol, "max": MaxProtocol}}
+	if s.agents != nil {
+		doc["agentByDigest"] = true
+	}
 	if name, tier := s.tiers().For(""); name != "" {
 		doc["defaultTier"] = map[string]any{
 			"name":     name,
@@ -587,17 +629,7 @@ func (s *Server) serveAgent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "agent binary not configured", http.StatusServiceUnavailable)
 		return
 	}
-	f, err := os.Open(s.cfg.AgentPath)
-	if err != nil {
-		http.Error(w, "agent binary unavailable", http.StatusInternalServerError)
-		return
-	}
-	defer f.Close()
-	info, _ := f.Stat()
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", `attachment; filename="runlease-agent"`)
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size()))
-	io.Copy(w, f) //nolint:errcheck
+	serveAgentFile(w, s.cfg.AgentPath)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -654,3 +686,15 @@ func drainClose(ch chan net.Conn) {
 	default:
 	}
 }
+
+// protocolOf reads the protocol a handshake names; "" is version 1.
+func protocolOf(s string) (int, bool) {
+	if s == "" {
+		return 1, true
+	}
+	n, err := strconv.Atoi(s)
+	return n, err == nil
+}
+
+// ProtocolString is what CLIs and agents put in the "proto" handshake field.
+var ProtocolString = strconv.Itoa(Protocol)

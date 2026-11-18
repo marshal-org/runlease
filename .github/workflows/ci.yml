@@ -50,6 +50,17 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test -count=1 ./...
+      # A relay change must not break the agents of CLIs already in use: run the
+      # latest release's agent against the relay built from this commit.
+      - name: Latest released agent works with this relay
+        run: |
+          base=https://github.com/marshal-org/runlease/releases/latest/download
+          d="$(mktemp -d)"
+          curl -fsSL -o "$d/runlease-agent-linux-amd64" "$base/runlease-agent-linux-amd64"
+          curl -fsSL -o "$d/checksums.txt" "$base/checksums.txt"
+          (cd "$d" && grep ' runlease-agent-linux-amd64$' checksums.txt | sha256sum -c -)
+          chmod +x "$d/runlease-agent-linux-amd64"
+          RUNLEASE_COMPAT_AGENT="$d/runlease-agent-linux-amd64" go test -count=1 -run TestRelay_releasedAgent -v ./pkg/relay
       # The release builds all five targets. Here we only prove the code still
       # compiles on the two operating systems the test job does not run on.
       - name: Cross-compile for macOS and Windows

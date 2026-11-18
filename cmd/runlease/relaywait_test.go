@@ -24,10 +24,20 @@ import (
 	"github.com/marshal-org/runlease/pkg/relay"
 )
 
-// relayStub answers /ready with a fixed status and /agent with a fixed body.
+// relayStub answers /ready with a fixed status and /agent with a fixed body. It
+// is an old relay: it has no /agent/sha256/ route.
 func relayStub(t *testing.T, readyStatus int, agent string) string {
+	return relayStubByDigest(t, readyStatus, agent, nil)
+}
+
+// relayStubByDigest is relayStub plus agents served by digest.
+func relayStubByDigest(t *testing.T, readyStatus int, agent string, byDigest map[string]string) string {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if body, ok := byDigest[strings.TrimPrefix(r.URL.Path, "/agent/sha256/")]; ok {
+			_, _ = w.Write([]byte(body))
+			return
+		}
 		switch r.URL.Path {
 		case "/ready":
 			w.WriteHeader(readyStatus)
@@ -110,26 +120,62 @@ func TestExplainBootFailure(t *testing.T) {
 }
 
 func TestCheckRelayAgent(t *testing.T) {
-	const agent = "agent-binary-bytes"
-	sum := sha256.Sum256([]byte(agent))
-	good := hex.EncodeToString(sum[:])
-	addr := relayStub(t, 200, agent)
+	digestOf := func(s string) string { sum := sha256.Sum256([]byte(s)); return hex.EncodeToString(sum[:]) }
+	const mine, other = "agent-of-this-cli", "agent-of-the-relay"
+	want := digestOf(mine)
+	ctx := context.Background()
 
-	if err := checkRelayAgent(context.Background(), &bytes.Buffer{}, addr, good); err != nil {
-		t.Errorf("matching digest refused: %v", err)
+	t.Run("a relay that serves this CLI's agent by digest", func(t *testing.T) {
+		addr := relayStubByDigest(t, 200, other, map[string]string{want: mine})
+		u, err := checkRelayAgent(ctx, &bytes.Buffer{}, addr, want)
+		if err != nil || !strings.HasSuffix(strings.SplitN(u, "?", 2)[0], "/agent/sha256/"+want) {
+			t.Errorf("url=%q err=%v, want the by-digest URL", u, err)
+		}
+	})
+	t.Run("an old relay whose own agent is the right one", func(t *testing.T) {
+		u, err := checkRelayAgent(ctx, &bytes.Buffer{}, relayStub(t, 200, mine), want)
+		if err != nil || !strings.HasSuffix(u, "/agent") {
+			t.Errorf("url=%q err=%v, want <relay>/agent", u, err)
+		}
+	})
+	t.Run("an old relay with another agent is refused before launch", func(t *testing.T) {
+		_, err := checkRelayAgent(ctx, &bytes.Buffer{}, relayStub(t, 200, other), want)
+		var mm *agentMismatchError
+		if !errors.As(err, &mm) || mm.got != digestOf(other) {
+			t.Errorf("err = %v, want a mismatch naming the relay's agent", err)
+		}
+	})
+	t.Run("a relay that answers a digest with other bytes is refused", func(t *testing.T) {
+		addr := relayStubByDigest(t, 200, mine, map[string]string{want: other})
+		if _, err := checkRelayAgent(ctx, &bytes.Buffer{}, addr, want); err == nil {
+			t.Error("want a refusal")
+		}
+	})
+	t.Run("a source build skips the check", func(t *testing.T) {
+		u, err := checkRelayAgent(ctx, &bytes.Buffer{}, relayStub(t, 200, other), "")
+		if err != nil || !strings.HasSuffix(u, "/agent") {
+			t.Errorf("url=%q err=%v", u, err)
+		}
+	})
+	t.Run("a relay that cannot be asked does not block the launch", func(t *testing.T) {
+		var note bytes.Buffer
+		u, err := checkRelayAgent(ctx, &note, "ws://127.0.0.1:1", want)
+		if err != nil || note.Len() == 0 || !strings.Contains(u, "/agent/sha256/"+want) {
+			t.Errorf("url=%q err=%v note=%q, want a note, no error, the by-digest URL", u, err, note.String())
+		}
+	})
+}
+
+func TestAgentByDigestURL(t *testing.T) {
+	old := version
+	defer func() { version = old }()
+	version = "v1.2.3"
+	if got := agentByDigestURL("wss://relay.example", "ab"); got != "https://relay.example/agent/sha256/ab?version=v1.2.3" {
+		t.Errorf("release build: %q", got)
 	}
-	err := checkRelayAgent(context.Background(), &bytes.Buffer{}, addr, strings.Repeat("0", 64))
-	if err == nil || !strings.Contains(err.Error(), "different releases") {
-		t.Errorf("mismatch = %v, want a refusal before launch", err)
-	}
-	// No digest to check against (a source build): nothing to compare.
-	if err := checkRelayAgent(context.Background(), &bytes.Buffer{}, addr, ""); err != nil {
-		t.Errorf("empty digest: %v", err)
-	}
-	// A relay that cannot be asked does not block the launch.
-	var note bytes.Buffer
-	if err := checkRelayAgent(context.Background(), &note, "ws://127.0.0.1:1", good); err != nil || note.Len() == 0 {
-		t.Errorf("unreachable relay: err=%v note=%q, want a note and no error", err, note.String())
+	version = "dev"
+	if got := agentByDigestURL("relay:7777", "ab"); got != "http://relay:7777/agent/sha256/ab" {
+		t.Errorf("source build: %q", got)
 	}
 }
 

@@ -107,7 +107,7 @@ type doctorDeps struct {
 	configErr   error // the config file could not be read
 	discover    func(ctx context.Context, relayAddr string) (*relayDiscovery, error)
 	account     func(ctx context.Context, relayAddr string) (*relayAccount, error)
-	relayAgent  func(ctx context.Context, relayAddr string) (string, error)
+	relayAgent  func(ctx context.Context, relayAddr, want string) (string, error)
 	timeout     time.Duration
 }
 
@@ -137,7 +137,7 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		configErr:   cfgErr,
 		discover:    fetchDiscovery,
 		account:     fetchAccount,
-		relayAgent:  relayAgentDigest,
+		relayAgent:  resolveRelayAgent,
 		timeout:     doctorCheckTimeout,
 	}
 
@@ -309,18 +309,19 @@ func doctorRelay(ctx context.Context, d doctorDeps) []doctorCheck {
 	}
 	agent := doctorCheck{ID: "relay.agent", Title: "Relay agent", Status: statusOK}
 	gctx, cancel := context.WithTimeout(ctx, d.timeout)
-	got, err := d.relayAgent(gctx, d.relayAddr)
+	_, err = d.relayAgent(gctx, d.relayAddr, d.agentDigest)
 	cancel()
-	switch mismatch := relayAgentMismatch(d.relayAddr, d.agentDigest, got); {
+	var mismatch *agentMismatchError
+	switch {
+	case errors.As(err, &mismatch):
+		agent.Status = statusFail
+		agent.Detail = fmt.Sprintf("the relay cannot serve the agent this CLI expects (expected SHA-256 %s, relay serves %s), so a machine launched now would refuse it and never connect", d.agentDigest, mismatch.got)
+		agent.Fix = "upgrade the relay, or install the runlease release that matches it: https://github.com/marshal-org/runlease/releases\n" +
+			"(or set relay.agentSha256 in the manifest to the digest of the agent you trust)"
 	case err != nil:
 		agent.Status = statusWarn
 		agent.Detail = "could not read the agent the relay serves: " + oneLine(err)
 		agent.Fix = "runlease doctor   (try again; a machine makes the same check itself at boot)"
-	case mismatch != nil:
-		agent.Status = statusFail
-		agent.Detail = fmt.Sprintf("the relay serves an agent this CLI does not expect (expected SHA-256 %s, relay serves %s), so a machine launched now would refuse it and never connect", d.agentDigest, got)
-		agent.Fix = "install the runlease release that matches the relay: https://github.com/marshal-org/runlease/releases\n" +
-			"(or set relay.agentSha256 in the manifest to the digest of the agent you trust)"
 	default:
 		agent.Detail = "the relay serves the agent this CLI expects"
 	}

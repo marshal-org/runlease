@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -20,6 +21,8 @@ var version = "dev"
 func main() {
 	addr := flag.String("addr", ":7777", "HTTP listen address")
 	agentBinary := flag.String("agent-binary", "", "path to runlease-agent binary served at GET /agent (optional)")
+	agentCacheDir := flag.String("agent-cache-dir", filepath.Join(os.TempDir(), "runlease-relay-agents"), "where agents of other releases are kept once fetched, so every CLI release finds its own agent at GET /agent/sha256/<hex>. Empty serves only --agent-binary by digest.")
+	agentReleaseURL := flag.String("agent-release-url", relay.DefaultAgentReleaseURL, "URL of a release's linux/amd64 agent; {version} is replaced by the tag the CLI names. The relay keeps a download only when its SHA-256 is the one asked for. Empty turns fetching off.")
 
 	// Auth flags — leave audience empty to disable auth (local/private relay).
 	audience := flag.String("audience", "", "Google ID token audience (e.g. https://relay.example.com). Empty disables auth.")
@@ -54,6 +57,8 @@ func main() {
 		GoogleClientSecret: *googleClientSecret,
 		Version:            version,
 		AgentPath:          *agentBinary,
+		AgentCacheDir:      *agentCacheDir,
+		AgentReleaseURL:    *agentReleaseURL,
 		MaxSlots:           *maxSlots,
 		Auth: relay.AuthConfig{
 			Audience:        *audience,

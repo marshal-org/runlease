@@ -134,7 +134,7 @@ The registry is the only local record of a machine, so these rules keep it from 
 5. The lease is a deadline on the VM's disk (`/var/lib/runlease/lease-deadline`), re-armed at each boot by `runlease-lease.service`. The boot script runs once (`/var/lib/runlease/booted`). `selfTermination` defaults to true.
 7. Waiting for the agent is bounded and explains itself (`waitForAgent`): the slot is gone (relay 404), the boot script failed (it writes `RUNLEASE_BOOT_FAILED stage=… exit=…` to the serial console, read through `provider.ConsoleReader`), or the time is up. A setup step that fails ends the log with `__RUNLEASE_SETUP_FAILED__`.
 8. Commands reach a machine through `openRelay`, which registers the slot again when the relay answers "unauthorized". Don't call `dialRelay` directly from a command.
-9. `up` compares the relay's agent with the digest the VM will check (`checkRelayAgent`) before it reserves a slot or creates anything.
+9. `up` finds where the VM will download its agent and checks the digest (`checkRelayAgent`) before it reserves a slot or creates anything.
 10. The registry is not the last word on what exists. `list` also asks the cloud for instances labelled `runlease-managed` (`provider.ManagedLister`) and reports the ones the registry does not hold. `down --leaked` deletes only those that are stopped AND past the lease on their label. It must never delete a running machine: `snooze` extends a lease on the VM without updating the label, so the label cannot prove a running machine is overdue.
 6. The daemon rescans the registry every poll, retries a failed terminate, and reads the registry again before acting on a deadline.
 
@@ -174,7 +174,9 @@ These must hold regardless of feature work:
 
 ## Deployment Story
 
-The relay serves the agent binary at `/agent`, and every new VM downloads it at boot, so **relay version == agent version** by construction. Release builds of the CLI carry the SHA-256 of the matching agent and VMs refuse anything else, so a relay must run the **release** binaries (or manifests must pin `relay.agentSha256`).
+Release builds of the CLI carry the SHA-256 of the agent from the same release, and a VM runs only that agent. The boot script downloads it from the relay **by digest** (`GET /agent/sha256/<hex>?version=<tag>`). The relay serves it from `--agent-binary` or its cache, or fetches it once from the GitHub release and keeps it if the digest matches (`pkg/relay/agents.go`). So **a CLI release never needs a relay release, and a relay release never breaks older CLIs.** A relay older than this route serves only its own agent at `/agent`; the CLI falls back to it when its digest matches.
+
+The wire protocol is versioned (`relay.Protocol`, `MinProtocol`, `MaxProtocol`). A handshake carries `"proto"` as a string (old agents decode replies as `map[string]string`); no field means 1. Keep changes additive and raise `MaxProtocol`; raise `MinProtocol` only to drop old clients on purpose. CI runs the latest released agent against the relay of every commit (`TestRelay_releasedAgent`).
 
 How to deploy, authenticate and upgrade a relay: [`docs/self-hosting-relay.md`](docs/self-hosting-relay.md).
 

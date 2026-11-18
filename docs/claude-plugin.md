@@ -48,7 +48,7 @@ To try it from a clone without installing: `claude --plugin-dir ./plugin`.
 **Typed tools.** The plugin registers `runlease mcp` as an MCP server, so Claude gets
 `runlease_up`, `runlease_exec`, `runlease_push`, `runlease_pull`, `runlease_list`,
 `runlease_snooze`, `runlease_down`, `runlease_status` and `runlease_doctor`. You can then allow
-"run a command on a leased machine" without allowing every shell command. See [mcp.md](mcp.md).
+"run a command on a leased machine" without allowing every shell command. See [mcp.md](mcp.md). The plugin starts it through `plugin/mcp/launch.js`, run with `node`, because the Claude plugin directory asks a plugin to start a file it ships.
 
 **A live view.**
 

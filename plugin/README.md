@@ -87,9 +87,16 @@ deleted unless you press a button.
 Everything goes through the `runlease` CLI on your computer. The plugin holds no credentials of
 its own, sends no telemetry and makes no network call itself.
 
-- **Runs:** the `runlease` command. As an MCP server (`runlease mcp`) for the typed tools, and
-  `runlease list --local`, `runlease snooze` and `runlease down` for the live view and its
-  buttons.
+- **Runs:** two programs. `node`, on `mcp/launch.js`, a file in this plugin whose only job is to
+  start `runlease mcp`, the server behind the typed tools. And `runlease`, the CLI you installed,
+  with exactly these commands:
+
+  | Command | When | Why |
+  |---|---|---|
+  | `runlease list --local --output json` | every 30 seconds, and after a Runlease command | reads the machine list from a file on your computer |
+  | `runlease snooze <machine> <time>` | you press `+30m`, `+1h` or `+4h` | adds time to that lease |
+  | `runlease down <machine> --yes` | you press Delete twice | deletes that machine |
+
 - **In your cloud:** when Claude or you launch a machine, the CLI calls the Google Cloud or AWS
   API with the sign-in you already have, and creates a spot VM in your account, on your bill. It
   deletes the VM when the lease ends or when you say so.
@@ -97,8 +104,24 @@ its own, sends no telemetry and makes no network call itself.
   relay you signed in to (`connect.runlease.online` by default, or your own). The relay passes
   encrypted traffic and cannot read it.
 - **Fetches:** nothing. Installing the CLI is a step you run yourself.
+- **Shows you, on your own computer:** a desktop notification when a lease is about to end
+  (the machine's name and the time left), and toasts. `Copy ssh` puts `runlease ssh <machine>`
+  on your clipboard, and `Use in prompt` writes the start of a prompt in the prompt box for you
+  to finish and send. None of this leaves your computer.
 - **Reads:** `runlease list --local` every 30 seconds by default, which reads a file on your
   computer and makes no cloud call.
+
+### What each hook does
+
+| Hook | What it does |
+|---|---|
+| `session.start` | registers the `/runlease` command, reads the machine list once and starts the 30-second refresh |
+| `command.run` (`/runlease`) | opens the pane |
+| `tool.call` | lets every call through unchanged. After a shell command that names `runlease`, or one of the typed tools, it reads the machine list again. It never blocks, changes or records a call |
+| `session.end` | if this session used Runlease and machines are still running, names them in a toast |
+| `ui.render` | draws the pane, the band above the prompt, and one line under the tool call that launched a machine |
+
+The plugin calls no other plugin and needs none.
 
 ## Settings
 

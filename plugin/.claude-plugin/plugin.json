@@ -1,6 +1,6 @@
 {
   "name": "runlease",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Give Claude Code a real cloud machine when the task outgrows your laptop: long builds, code you would not run locally, test runs split across machines. Spot VMs in your own Google Cloud or AWS account, with a live view of each lease and its cost. Every machine deletes itself when its lease ends. Built by the Marshal team.",
   "author": {
     "name": "The Marshal team",

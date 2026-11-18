@@ -167,13 +167,17 @@ def manifest_problems():
             )
         if manifest.get("name") != claude["name"]:
             problems.append(f"{label}: name {manifest.get('name')} is not {claude['name']}")
-    server = load("plugin/.mcp.json")["mcpServers"]
+    # The Claude Code plugin starts the same command through plugin/mcp/launch.js, a file
+    # it ships, as the Claude plugin directory asks. The Google formats start it directly.
+    server = {"runlease": {"command": "runlease", "args": ["mcp"]}}
+    if "spawn('runlease', ['mcp']" not in (ROOT / "plugin/mcp/launch.js").read_text(encoding="utf-8"):
+        problems.append("plugin/mcp/launch.js: does not start `runlease mcp`")
     for label, got in (
         ("mcp_config.json", load("mcp_config.json").get("mcpServers")),
         ("gemini-extension.json", gemini.get("mcpServers")),
     ):
         if got != server:
-            problems.append(f"{label}: mcpServers differs from plugin/.mcp.json")
+            problems.append(f"{label}: mcpServers is not `runlease mcp`")
     return problems
 
 

@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/marshal-org/runlease/pkg/config"
+	"github.com/marshal-org/runlease/pkg/relay"
 	"github.com/marshal-org/runlease/pkg/signin"
 )
 
@@ -313,7 +314,7 @@ func releaseRelaySlot(ctx context.Context, relayAddr, token string) error {
 		return fmt.Errorf("dial relay: %w", err)
 	}
 	defer ws.Close()
-	msg, _ := json.Marshal(map[string]string{"role": "release", "token": token})
+	msg, _ := json.Marshal(map[string]string{"role": "release", "token": token, "proto": relay.ProtocolString})
 	ws.SetWriteDeadline(time.Now().Add(10 * time.Second)) //nolint:errcheck
 	if err := ws.WriteMessage(websocket.BinaryMessage, append(msg, '\n')); err != nil {
 		return fmt.Errorf("send: %w", err)

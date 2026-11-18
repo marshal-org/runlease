@@ -1,3 +1,5 @@
+| `--agent-cache-dir` | Where agents of other releases are kept once fetched. Default: `runlease-relay-agents` in the temp directory. Empty serves only `--agent-binary` by digest. |
+| `--agent-release-url` | Where an agent of another release is fetched from; `{version}` is replaced by the tag the CLI names. Default: the GitHub release. Empty turns fetching off. |
 # Self-hosting the relay
 
 The relay is one static Go binary. It needs a public TLS endpoint and almost nothing else: it
@@ -13,8 +15,9 @@ For what the relay can and cannot see, read the [threat model](security.md).
 - A small Linux VM or container. One vCPU and 1 GB of memory is enough to start.
 - A DNS name and TLS. Put the relay behind a load balancer, Caddy, nginx or Cloudflare; the relay
   itself speaks plain HTTP and WebSocket on one port.
-- The `runlease-relay` and `runlease-agent` binaries **from the same release** as the CLI your
-  team uses.
+- The `runlease-relay` and `runlease-agent` release binaries. The relay serves every CLI
+  release its own agent (see [Agents for every CLI release](#agents-for-every-cli-release)), so
+  the CLI your team uses can be newer or older than the relay.
 
 ## Get the binaries
 
@@ -176,14 +179,34 @@ relay:
   addr: wss://relay.example.com
 ```
 
+## Agents for every CLI release
+
+Each CLI release carries the SHA-256 of the agent built with it, and a new machine runs only that
+agent. The CLI asks the relay for it by digest:
+
+```
+GET /agent/sha256/<sha256>?version=<the CLI's release tag>
+```
+
+The relay serves it from `--agent-binary` or its cache. If it has neither, it downloads that
+release's agent from `--agent-release-url`, keeps it only if the SHA-256 is the one asked for, and
+serves it from then on. A relay never has to be upgraded for a new CLI release, and an upgraded
+relay does not break older CLIs. The machine checks the digest again at boot, so a relay cannot
+hand it any other binary.
+
+With fetching off (`--agent-release-url ""`), put the agents you want to serve in
+`--agent-cache-dir`, each named by its SHA-256.
+
+CLI, relay and agent also agree on a wire protocol. The relay accepts a range of versions and
+refuses one outside it with a message that says to upgrade runlease. `runlease doctor` shows
+whether the relay can serve this CLI's agent.
+
 ## Upgrading
 
-The relay serves the agent, so **relay and agent are always upgraded together**, and they should
-match the CLI release your team runs.
+Upgrade the relay only when it needs a change. CLI releases do not need one.
 
 1. Install the new `runlease-relay` and `runlease-agent`.
 2. `systemctl restart runlease-relay`.
-3. Roll the new CLI out.
 
 Restarting the relay drops live sessions and forgets its slots, because slots live in memory.
 VMs that are already running keep their old agent.

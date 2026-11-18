@@ -59,7 +59,7 @@ variable "relay_sha256" {
 }
 
 variable "agent_binary_url" {
-  description = "https:// or gs:// URL of runlease-agent-linux-amd64. Must be the agent from the same release as the CLI people use, or their VMs will refuse it."
+  description = "https:// or gs:// URL of runlease-agent-linux-amd64. The relay serves it at /agent and by digest; agents of other CLI releases are fetched from the GitHub release on demand."
   type        = string
 }
 

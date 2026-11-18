@@ -334,6 +334,9 @@ type Params struct {
 	// download before running it, so a compromised relay cannot run code on
 	// the instance. Empty skips the check.
 	AgentSHA256 string
+	// AgentURL is where the boot script downloads the agent. Empty means the
+	// relay's own agent at <relay>/agent.
+	AgentURL string
 	// The runlease-terminate script + dedicated sudoers drop-in are always
 	// installed (manual escape hatch for the operator). Only the systemd-run
 	// auto-fire timer is gated: it requires BOTH SelfTermination=true and
@@ -364,7 +367,7 @@ type templateData struct {
 	HostPublicKeySSH string
 	RelayAddr        string
 	RelayToken       string
-	RelayAgentURL    string // derived: http://<RelayAddr>/agent
+	RelayAgentURL    string // Params.AgentURL, or http://<RelayAddr>/agent
 	AgentSHA256      string
 	Provider         string
 	SelfTermination  bool
@@ -398,7 +401,10 @@ func Build(p Params) (string, error) {
 	}
 	agentURL := ""
 	if p.RelayAddr != "" {
-		agentURL = relayHTTPBase(p.RelayAddr) + "/agent"
+		agentURL = p.AgentURL
+		if agentURL == "" {
+			agentURL = relayHTTPBase(p.RelayAddr) + "/agent"
+		}
 	}
 	data := templateData{
 		PublicKeySSH:     p.PublicKeySSH,

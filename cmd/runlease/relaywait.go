@@ -119,7 +119,7 @@ func explainBootFailure(console string) string {
 		"user":           "it could not create the login user",
 		"sshd":           "the SSH lock-down could not be confirmed, so SSH was stopped",
 		"agent-download": "it could not download the agent from the relay (no route out, or the relay is unreachable from the machine)",
-		"agent-verify":   "the agent served by the relay does not match the checksum this CLI expects (the CLI and the relay are from different releases)",
+		"agent-verify":   "the agent served by the relay does not match the checksum this CLI expects (the relay is older than the release that serves agents by digest, or it served another binary)",
 		"agent-start":    "the agent could not be started",
 		"setup":          "a setup step from the manifest failed",
 	}[m[1]]
@@ -157,53 +157,108 @@ func openRelay(ctx context.Context, errOut io.Writer, e *registry.Entry) (net.Co
 	return conn, nil
 }
 
-// checkRelayAgent compares the agent the relay serves with the digest the boot
-// script will check it against. A mismatch means the machine would boot, refuse
-// the agent, and sit unreachable and billed until its lease ran out, so it is
-// better found before anything is created. If the relay cannot be asked, the
-// launch goes on: the machine makes the same check itself.
-func checkRelayAgent(ctx context.Context, errOut io.Writer, relayAddr, want string) error {
-	if relayAddr == "" || want == "" {
-		return nil
+// releaseTag matches a release version such as v0.9.0. A source build ("dev")
+// has no release to fetch an agent from.
+var releaseTag = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
+
+// agentByDigestURL is where a machine downloads the agent with this digest. The
+// version lets a relay fetch the agent of a release it does not hold yet.
+func agentByDigestURL(relayAddr, digest string) string {
+	u := relayHTTPBase(relayAddr) + "/agent/sha256/" + digest
+	if releaseTag.MatchString(version) {
+		u += "?version=" + version
+	}
+	return u
+}
+
+// agentProbeError means the relay could not be asked. The launch may go on: a
+// machine checks the digest itself at boot.
+type agentProbeError struct{ err error }
+
+func (e *agentProbeError) Error() string { return e.err.Error() }
+func (e *agentProbeError) Unwrap() error { return e.err }
+
+// agentMismatchError means the relay cannot serve the agent this CLI expects:
+// a machine launched now would refuse what it gets and never connect.
+type agentMismatchError struct{ relayAddr, want, got string }
+
+func (e *agentMismatchError) Error() string {
+	return fmt.Sprintf("the relay at %s cannot serve the agent this CLI was built with, so a machine launched now would refuse what it gets and never connect.\n"+
+		"  expected SHA-256: %s\n  relay serves:     %s\n"+
+		"The relay is older than the release that serves agents by digest, or it cannot reach the GitHub release of this CLI. "+
+		"Upgrade the relay, use the CLI release that matches it, or set relay.agentSha256 in the manifest to the digest of the agent you trust",
+		e.relayAddr, e.want, e.got)
+}
+
+// resolveRelayAgent returns the URL a machine should download its agent from.
+// It asks for the agent by digest first, so a relay of any release can serve
+// this CLI's agent. A relay older than that route serves only its own agent at
+// /agent, which is used when it happens to be the right one.
+func resolveRelayAgent(ctx context.Context, relayAddr, want string) (string, error) {
+	legacy := relayHTTPBase(relayAddr) + "/agent"
+	if want == "" {
+		return legacy, nil
+	}
+	byDigest := agentByDigestURL(relayAddr, want)
+	got, status, err := downloadDigest(ctx, byDigest)
+	switch {
+	case err != nil:
+		return byDigest, &agentProbeError{err}
+	case status == http.StatusOK && got == want:
+		return byDigest, nil
+	case status == http.StatusOK:
+		// The relay answered for this digest with other bytes. The boot
+		// script would refuse them, so say it now.
+		return "", &agentMismatchError{relayAddr, want, got}
+	}
+	got, status, err = downloadDigest(ctx, legacy)
+	switch {
+	case err != nil:
+		return "", &agentProbeError{err}
+	case status != http.StatusOK:
+		return "", &agentProbeError{fmt.Errorf("GET /agent: %d", status)}
+	case got == want:
+		return legacy, nil
+	}
+	return "", &agentMismatchError{relayAddr, want, got}
+}
+
+// checkRelayAgent picks the agent URL for the boot script and stops a launch
+// whose machine would refuse its agent and sit unreachable and billed until
+// its lease ran out. If the relay cannot be asked, the launch goes on: the
+// machine makes the same check itself.
+func checkRelayAgent(ctx context.Context, errOut io.Writer, relayAddr, want string) (string, error) {
+	if relayAddr == "" {
+		return "", nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	got, err := relayAgentDigest(ctx, relayAddr)
-	if err != nil {
+	u, err := resolveRelayAgent(ctx, relayAddr, want)
+	var probe *agentProbeError
+	if errors.As(err, &probe) {
 		fmt.Fprintf(errOut, "note: could not check the relay's agent binary before launch (%v)\n", err)
-		return nil
+		return agentByDigestURL(relayAddr, want), nil
 	}
-	return relayAgentMismatch(relayAddr, want, got)
+	return u, err
 }
 
-// relayAgentMismatch returns the error for a relay that serves an agent other
-// than the one this CLI expects, or nil when the two digests are the same.
-func relayAgentMismatch(relayAddr, want, got string) error {
-	if got != want {
-		return fmt.Errorf("the relay at %s serves an agent this CLI does not expect, so a machine launched now would refuse to run it and never connect.\n"+
-			"  expected SHA-256: %s\n  relay serves:     %s\n"+
-			"The CLI and the relay are from different releases. Use the CLI release that matches the relay, "+
-			"or set relay.agentSha256 in the manifest to the digest of the agent you trust", relayAddr, want, got)
-	}
-	return nil
-}
-
-func relayAgentDigest(ctx context.Context, relayAddr string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", relayHTTPBase(relayAddr)+"/agent", nil)
+// downloadDigest GETs url and returns the SHA-256 of a 200 body, or the status.
+func downloadDigest(ctx context.Context, url string) (string, int, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GET /agent: %s", resp.Status)
+		return "", resp.StatusCode, nil
 	}
 	h := sha256.New()
 	if _, err := io.Copy(h, resp.Body); err != nil {
-		return "", err
+		return "", 0, err
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	return hex.EncodeToString(h.Sum(nil)), resp.StatusCode, nil
 }

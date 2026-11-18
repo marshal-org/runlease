@@ -252,7 +252,7 @@ func relayDeps() doctorDeps {
 			a.Slots.Used, a.Slots.Max = 1, 2
 			return a, nil
 		},
-		relayAgent: func(context.Context, string) (string, error) { return strings.Repeat("a", 64), nil },
+		relayAgent: func(context.Context, string, string) (string, error) { return "http://relay/agent/sha256/x", nil },
 		timeout:    50 * time.Millisecond,
 	}
 }
@@ -312,7 +312,9 @@ func TestDoctorRelay(t *testing.T) {
 		{
 			name: "the relay serves another agent",
 			change: func(d *doctorDeps) {
-				d.relayAgent = func(context.Context, string) (string, error) { return strings.Repeat("b", 64), nil }
+				d.relayAgent = func(_ context.Context, addr, want string) (string, error) {
+					return "", &agentMismatchError{addr, want, strings.Repeat("b", 64)}
+				}
 			},
 			want:   "relay.config=ok relay.reachable=ok relay.signin=ok relay.agent=fail",
 			detail: map[string]string{"relay.agent": strings.Repeat("b", 64)},
@@ -320,7 +322,9 @@ func TestDoctorRelay(t *testing.T) {
 		{
 			name: "the agent cannot be read",
 			change: func(d *doctorDeps) {
-				d.relayAgent = func(context.Context, string) (string, error) { return "", errors.New("GET /agent: 503") }
+				d.relayAgent = func(context.Context, string, string) (string, error) {
+					return "", &agentProbeError{errors.New("GET /agent: 503")}
+				}
 			},
 			want: "relay.config=ok relay.reachable=ok relay.signin=ok relay.agent=warn",
 		},
@@ -328,7 +332,7 @@ func TestDoctorRelay(t *testing.T) {
 			name: "a source build has nothing to compare",
 			change: func(d *doctorDeps) {
 				d.agentDigest = ""
-				d.relayAgent = func(context.Context, string) (string, error) { panic("must not be asked") }
+				d.relayAgent = func(context.Context, string, string) (string, error) { panic("must not be asked") }
 			},
 			want: "relay.config=ok relay.reachable=ok relay.signin=ok",
 		},

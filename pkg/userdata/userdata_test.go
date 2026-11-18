@@ -589,3 +589,16 @@ func TestSetupBlock_runs(t *testing.T) {
 		}
 	}
 }
+
+func TestBuild_agentURLFromTheCLI(t *testing.T) {
+	p := relayParams()
+	p.AgentSHA256 = strings.Repeat("0f", 32)
+	p.AgentURL = "https://relay.example.com/agent/sha256/" + p.AgentSHA256 + "?version=v1.2.3"
+	out, err := Build(p)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if !strings.Contains(out, "curl -fsSL --connect-timeout 20 --retry 3 '"+p.AgentURL+"'") {
+		t.Errorf("the boot script does not download the agent from %s", p.AgentURL)
+	}
+}

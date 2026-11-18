@@ -210,7 +210,8 @@ func runUp(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintf(cmd.ErrOrStderr(), "⚠  The agent binary served by the relay will not be verified. Set relay.agentSha256 in the manifest, or use a release build of runlease.\n")
 	}
 
-	if err := checkRelayAgent(ctx, cmd.ErrOrStderr(), m.Relay.Addr, agentDigest); err != nil {
+	agentURL, err := checkRelayAgent(ctx, cmd.ErrOrStderr(), m.Relay.Addr, agentDigest)
+	if err != nil {
 		return err
 	}
 
@@ -255,6 +256,7 @@ func runUp(cmd *cobra.Command, _ []string) error {
 
 	ud, err := userdata.Build(userdata.Params{
 		AgentSHA256:       agentDigest,
+		AgentURL:          agentURL,
 		PublicKeySSH:      cred.PublicKeySSH,
 		HostPrivateKeyPEM: cred.HostPrivateKeyPEM,
 		HostPublicKeySSH:  cred.HostPublicKeySSH,
@@ -756,7 +758,7 @@ func registerRelayToken(ctx context.Context, relayAddr, token string) error {
 	}
 	defer ws.Close()
 
-	msg, _ := json.Marshal(map[string]string{"role": "register", "token": token})
+	msg, _ := json.Marshal(map[string]string{"role": "register", "token": token, "proto": relay.ProtocolString})
 	ws.SetWriteDeadline(time.Now().Add(10 * time.Second)) //nolint:errcheck
 	if err := ws.WriteMessage(websocket.BinaryMessage, append(msg, '\n')); err != nil {
 		return fmt.Errorf("send: %w", err)
@@ -846,7 +848,7 @@ func dialRelay(addr, token string) (net.Conn, error) {
 		return nil, fmt.Errorf("dial: %w", err)
 	}
 
-	msg, _ := json.Marshal(map[string]string{"role": "client", "token": token})
+	msg, _ := json.Marshal(map[string]string{"role": "client", "token": token, "proto": relay.ProtocolString})
 	ws.SetWriteDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck
 	if err := ws.WriteMessage(websocket.BinaryMessage, append(msg, '\n')); err != nil {
 		ws.Close()

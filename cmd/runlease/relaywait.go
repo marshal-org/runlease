@@ -159,7 +159,7 @@ func openRelay(ctx context.Context, errOut io.Writer, e *registry.Entry) (net.Co
 
 // releaseTag matches a release version such as v0.9.0. A source build ("dev")
 // has no release to fetch an agent from.
-var releaseTag = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$`)
+var releaseTag = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
 
 // agentByDigestURL is where a machine downloads the agent with this digest. The
 // version lets a relay fetch the agent of a release it does not hold yet.

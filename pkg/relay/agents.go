@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,7 +31,7 @@ const (
 
 var (
 	sha256Hex      = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	releaseVersion = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$`)
+	releaseVersion = regexp.MustCompile(`^v([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})$`)
 )
 
 // agentStore serves agent binaries by their SHA-256. Each CLI release asks for
@@ -165,7 +166,7 @@ func (st *agentStore) fetch(digest, version string) (string, error) {
 		return "", fmt.Errorf("fetch agent %s: larger than %d bytes", version, maxAgentSize)
 	}
 	if got := hex.EncodeToString(h.Sum(nil)); got != digest {
-		return "", fmt.Errorf("fetch agent %s: SHA-256 is %s, not %s: %w", version, got, digest, os.ErrNotExist)
+		return "", fmt.Errorf("fetch agent %s: its SHA-256 (%s) is not the one asked for: %w", version, got, os.ErrNotExist)
 	}
 	p := filepath.Join(st.dir, digest)
 	if err := os.Rename(tmp.Name(), p); err != nil {
@@ -194,8 +195,8 @@ func (s *Server) serveAgentByDigest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "want /agent/sha256/<64 lowercase hex characters>", http.StatusBadRequest)
 		return
 	}
-	version := r.URL.Query().Get("version")
-	if version != "" && !releaseVersion.MatchString(version) {
+	version, ok := canonicalVersion(r.URL.Query().Get("version"))
+	if !ok {
 		http.Error(w, "version must be a release tag such as v1.2.3", http.StatusBadRequest)
 		return
 	}
@@ -209,7 +210,7 @@ func (s *Server) serveAgentByDigest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no agent with that SHA-256 on this relay", http.StatusNotFound)
 		return
 	case err != nil:
-		s.log.Warn("agent by digest", "digest", digest[:12], "version", version, "err", err)
+		s.log.Warn("agent by digest: fetch failed", "version", version, "err", err)
 		http.Error(w, "agent binary unavailable", http.StatusBadGateway)
 		return
 	}
@@ -232,4 +233,26 @@ func serveAgentFile(w http.ResponseWriter, path string) {
 	w.Header().Set("Content-Disposition", `attachment; filename="runlease-agent"`)
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size()))
 	io.Copy(w, f) //nolint:errcheck
+}
+
+// canonicalVersion turns a release tag from a request into one built from its
+// numbers, so nothing but digits and dots from the request reaches the fetch
+// URL or a log line. "" is a valid answer: no version, nothing to fetch.
+func canonicalVersion(v string) (string, bool) {
+	if v == "" {
+		return "", true
+	}
+	m := releaseVersion.FindStringSubmatch(v)
+	if m == nil {
+		return "", false
+	}
+	var n [3]int
+	for i := range n {
+		x, err := strconv.Atoi(m[i+1])
+		if err != nil {
+			return "", false
+		}
+		n[i] = x
+	}
+	return fmt.Sprintf("v%d.%d.%d", n[0], n[1], n[2]), true
 }

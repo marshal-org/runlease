@@ -40,6 +40,8 @@ const mod = {
   hasLaunched: false,
   // True once this session ran any runlease command.
   hasUsed: false,
+  // Counts delete questions, so an old question's timer cannot clear a newer one.
+  asked: 0,
 }
 
 const CONFIRM_MS = 6000
@@ -133,9 +135,10 @@ async function extend($: EngineInterface, name: string, addMs: number): Promise<
 /** Deletes a machine. It cannot be undone, so it takes two presses. */
 async function remove($: EngineInterface, name: string): Promise<void> {
   if ((await read($, confirmingAtom)) !== name) {
+    const question = ++mod.asked
     await update($, confirmingAtom, () => name)
     // An unanswered question goes away: a later stray press must not delete.
-    $.clock.after(CONFIRM_MS, () => void update($, confirmingAtom, asked => (asked === name ? null : asked)))
+    $.clock.after(CONFIRM_MS, () => void update($, confirmingAtom, asked => (asked === name && mod.asked === question ? null : asked)))
     return
   }
   await update($, confirmingAtom, () => null)
